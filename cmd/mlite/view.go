@@ -59,6 +59,7 @@ type vitem struct {
 	chipIcon   string
 	chipAct    int
 	chipTop    int32
+	links      []linkSpan // web addresses in the text
 	metaW      int32
 	media      string
 	rx         string
@@ -322,6 +323,7 @@ func layoutView() {
 		}
 		c.font(fnt.body)
 		it.textW, it.textH = c.measure(it.body, inner)
+		it.links = findLinks(&it)
 		contentW := it.textW
 		contentH := it.textH
 		if it.body != "" && it.textH <= fnt.lineH+2 && it.media == "" && !it.img && it.chip == "" && m.ReplyText == "" && it.textW+dp(12)+it.metaW <= inner {
@@ -516,6 +518,7 @@ func paintView(target uintptr) {
 			}
 			g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
 			g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
+			paintTextMarks(g, it, fill)
 			rxDrop := int32(0)
 			if it.rx != "" {
 				rxDrop = dp(18)
@@ -722,6 +725,14 @@ func viewClick(x, y int32) {
 	if actionClick() {
 		return
 	}
+	for i := range mv.items {
+		if it := &mv.items[i]; it.kind == itMsg {
+			if u := linkAt(it, x, y); u != "" {
+				openLink(u)
+				return
+			}
+		}
+	}
 	y += mv.scroll
 	for i := range mv.items {
 		it := &mv.items[i]
@@ -731,7 +742,7 @@ func viewClick(x, y int32) {
 				if it.yt != "" {
 					playInWindow("https://www.youtube.com/watch?v=" + it.yt)
 				} else {
-					openMedia(it.imgMsg)
+					openViewer(it.imgMsg)
 				}
 				return
 			}
@@ -790,10 +801,23 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmMouseMove:
 		x, y := lpPoint(lp)
+		if sel.drag {
+			selMove(x, y)
+			return 0
+		}
 		if !mv.sc.mouse(msg, x, y, mv.w, mv.h) {
 			viewHover(x, y)
 		}
 		return 0
+	case wmSetCursor:
+		if lp&0xFFFF == 1 && wp == hwnd { // over the client area
+			var pt point
+			pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+			pScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+			if viewCursor(pt.x, pt.y) {
+				return 1
+			}
+		}
 	case wmMouseLeave:
 		if keepHover { // checks drive the pointer with messages; the real one is elsewhere
 			return 0
@@ -852,10 +876,15 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		pSetFocus.Call(hwnd)
 		if x, y := lpPoint(lp); mv.sc.mouse(msg, x, y, mv.w, mv.h) {
 			return 0
+		} else if mv.hotAct < 0 {
+			selDown(x, y)
 		}
 		return 0
 	case wmLButtonUp:
 		if x, y := lpPoint(lp); mv.sc.mouse(msg, x, y, mv.w, mv.h) {
+			return 0
+		}
+		if selUp() {
 			return 0
 		}
 		viewClick(int32(int16(lp)), int32(int16(lp>>16)))

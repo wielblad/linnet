@@ -8,9 +8,12 @@ package main
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
+
+	"github.com/rs/zerolog/log"
 
 	"lazyfmess/internal/store"
 )
@@ -107,7 +110,13 @@ func ytMessage(id string) store.Message {
 		MediaURL: "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg"}
 }
 
+var dryOpen = os.Getenv("MLITE_DRYOPEN") != ""
+
 func shellOpen(file, args string) bool {
+	if dryOpen { // checks: note what would be opened instead of opening it
+		log.Warn().Str("file", file).Str("args", args).Msg("would open")
+		return true
+	}
 	var a uintptr
 	if args != "" {
 		a = uintptr(unsafe.Pointer(u16(args)))

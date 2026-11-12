@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
+
+	"github.com/rs/zerolog/log"
 
 	"lazyfmess/internal/store"
 )
@@ -143,6 +146,10 @@ func messageMenu(m store.Message, x, y int32) {
 	case m.Pending:
 		add(menu, mfString, idMsgCopy, "Kopiuj tekst")
 	default:
+		if selIn(m.ID) {
+			add(menu, mfString, idMsgCopySel, "Kopiuj zaznaczenie")
+			add(menu, mfSeparator, 0, "")
+		}
 		add(menu, mfString, idMsgReply, "Odpowiedz")
 		sub, _, _ := pCreatePopupMenu.Call()
 		own := ownReaction(m)
@@ -193,6 +200,8 @@ func messageAction(id int) {
 		setCompose(cmEdit, m)
 	case id == idMsgCopy:
 		copyText(m.Text)
+	case id == idMsgCopySel:
+		copyText(selText())
 	case id == idMsgUnsend:
 		text := "Usunąć tę wiadomość u wszystkich?\n\nZniknie także u rozmówców. Tego nie da się cofnąć."
 		r, _, _ := pMessageBoxW.Call(hMain, uintptr(unsafe.Pointer(u16(text))), uintptr(unsafe.Pointer(u16("Usuwanie wiadomości"))), 0x4|0x30|0x100) // Yes/No, warning, No is default
@@ -280,7 +289,17 @@ func copyText(s string) {
 		return
 	}
 	t := syscall.StringToUTF16(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\n", "\r\n"))
-	if r, _, _ := pOpenClipboard.Call(hMain); r == 0 {
+	opened := false
+	for try := 0; try < 10 && !opened; try++ { // another program may hold the clipboard for a moment
+		if r, _, _ := pOpenClipboard.Call(hMain); r != 0 {
+			opened = true
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !opened {
+		log.Warn().Msg("copy: the clipboard is held by another program")
+		be.notice("Nie udało się skopiować: schowek jest zajęty przez inny program.")
 		return
 	}
 	defer pCloseClipboard.Call()

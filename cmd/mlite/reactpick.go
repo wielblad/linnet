@@ -16,9 +16,12 @@ const (
 	gReply = ""
 	gMore  = ""
 
+	gCopy  = "\uE8C8"
+
 	actReact = 0
 	actReply = 1
 	actMore  = 2
+	actCopy  = 3
 
 	wmCaptureChanged = 0x0215
 )
@@ -39,6 +42,16 @@ var (
 func hoverable(it *vitem) bool {
 	return it.kind == itMsg && !it.m.Unsent && !it.m.Pending && it.m.Error == ""
 }
+
+// itemActions lists the actions of a message in the order they are drawn from the bubble.
+func itemActions(it *vitem) []int {
+	if it.m.Text != "" && it.body != "" {
+		return []int{actReact, actReply, actCopy, actMore}
+	}
+	return []int{actReact, actReply, actMore}
+}
+
+var actGlyph = map[int]string{actReact: gReact, actReply: gReply, actCopy: gCopy, actMore: gMore}
 
 // actRect is where action k of an item is drawn, in view coordinates.
 func actRect(it *vitem, k int32) rect {
@@ -61,9 +74,9 @@ func viewHover(x, y int32) {
 				continue
 			}
 			item = i
-			for k := int32(0); k < 3; k++ {
-				if r := actRect(it, k); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
-					act = int(k)
+			for k, a := range itemActions(it) {
+				if r := actRect(it, int32(k)); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+					act = a
 				}
 			}
 			break
@@ -81,10 +94,9 @@ func paintActions(g gfx, c canvas, shapes bool) {
 		return
 	}
 	it := &mv.items[mv.hover]
-	glyphs := [3]string{gReact, gReply, gMore}
-	for k := int32(0); k < 3; k++ {
-		r := actRect(it, k)
-		hot := int(k) == mv.hotAct
+	for k, a := range itemActions(it) {
+		r := actRect(it, int32(k))
+		hot := a == mv.hotAct
 		if shapes {
 			if hot {
 				g.ellipse(r.left, r.top, r.right-r.left, r.bottom-r.top, mix(pal.fg, pal.layer, 12))
@@ -96,7 +108,7 @@ func paintActions(g gfx, c canvas, shapes bool) {
 			col = pal.fg
 		}
 		c.font(fnt.icon)
-		c.text(glyphs[k], r, col, dtCenter|dtVCenter|dtSingleLine)
+		c.text(actGlyph[a], r, col, dtCenter|dtVCenter|dtSingleLine)
 	}
 }
 
@@ -106,13 +118,21 @@ func actionClick() bool {
 		return false
 	}
 	it := &mv.items[mv.hover]
-	r := actRect(it, int32(mv.hotAct))
+	r := actRect(it, 0)
+	for k, a := range itemActions(it) {
+		if a == mv.hotAct {
+			r = actRect(it, int32(k))
+		}
+	}
 	menuMsg, menuHas = it.m, true
 	switch mv.hotAct {
 	case actReact:
 		showPicker(it.m, (r.left+r.right)/2, r.top)
 	case actReply:
 		messageAction(idMsgReply)
+	case actCopy:
+		copyText(it.m.Text)
+		be.notice("Skopiowano wiadomość.")
 	case actMore:
 		messageMenu(it.m, r.left, r.bottom)
 	}

@@ -180,6 +180,7 @@ func main() {
 	}
 	registerClass("MliteMain", wndProc)
 	registerClass("MliteView", viewProc)
+	registerClass("MliteViewer", viewerProc)
 	registerClass("MliteList", listWndProc)
 	registerClass("MliteReact", pickerProc)
 	registerClass("MliteLogin", loginProc)
@@ -237,6 +238,9 @@ func handleKey(m *msgT) bool {
 		if m.lParam&(1<<30) == 0 {
 			doSend()
 		}
+		return true
+	case ctrl && m.wParam == 'C' && m.hwnd == hView && selText() != "":
+		copyText(selText())
 		return true
 	case ctrl && m.wParam == 'V' && m.hwnd == hInput:
 		if pasteAttachment() {
@@ -451,6 +455,13 @@ func layout() {
 		return
 	}
 	show(lg.hwnd, false)
+	if vw.hwnd != 0 { // a picture shown large covers everything else
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hSet} {
+			show(c, false)
+		}
+		moveTo(vw.hwnd, rect{0, 0, w, h})
+		return
+	}
 	settings := nav == navSettings
 	hasSel := selectedID != 0
 	// A narrow window shows one column: the list with the navigation along the bottom,
@@ -1273,6 +1284,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmAppMedia:
 		mediaArrived()
+		viewerRefresh()
 		return 0
 	case wmAppQuit: // the installer or uninstaller asks a running copy to end
 		quitting = true
@@ -1327,6 +1339,7 @@ func closeWindow() {
 		pDestroyWindow.Call(hMain)
 		return
 	}
+	closeViewer()
 	pShowWindow.Call(hMain, swHide)
 	dwRelease() // nothing is drawn while hidden; give the text engine's memory back
 	debug.FreeOSMemory()
@@ -1478,6 +1491,8 @@ func commitRow(idx int, focusInput bool) {
 }
 
 func selectThread(t store.Thread, focusInput bool) {
+	closeViewer()
+	selClear()
 	first := selectedID == 0
 	if t.ID != selectedID && compose.mode != cmNone {
 		if compose.mode == cmEdit {
