@@ -1,0 +1,22 @@
+# Built programs
+/build/
+*.exe
+
+# Kept on this computer only: the portable Go, its module folder and build cache,
+# test data and backups. Never commit: may hold account data.
+/.local/
+
+# Account data and logs, wherever they end up
+cookies.json
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Local assistant skills and editor leftovers
+/.claude/
+.direnv/
+
+# Screenshots: some show real conversations, so they stay on this computer only
+/zrzuty/
+.impeccable/config.local.json
