@@ -315,6 +315,79 @@ func TestEditAndUnsend(t *testing.T) {
 	}
 }
 
+func TestLinkPreviewFields(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.EnsureThread(ctx, 1); err != nil {
+		t.Fatalf("EnsureThread: %v", err)
+	}
+	plain := Message{ID: "m1", ThreadID: 1, SenderID: 1, Text: "look", Timestamp: time.UnixMilli(1)}
+	linked := plain
+	linked.LinkURL, linked.LinkTitle = "https://example.com/a", "Example"
+	linked.LinkImage, linked.LinkRef = "https://cdn.example.com/a.jpg", `{"type":"image","path":"/v/t1"}`
+	retitled := plain
+	retitled.LinkTitle = "Example, updated"
+	check := func(name string, got, want Message) {
+		t.Helper()
+		if got.LinkURL != want.LinkURL || got.LinkTitle != want.LinkTitle || got.LinkImage != want.LinkImage || got.LinkRef != want.LinkRef {
+			t.Fatalf("%s: link url %q title %q image %q ref %q", name, got.LinkURL, got.LinkTitle, got.LinkImage, got.LinkRef)
+		}
+		if got.MediaKind != "" || got.MediaURL != "" || got.MediaRef != "" {
+			t.Fatalf("%s: link data leaked into media fields: %+v", name, got)
+		}
+	}
+	afterRetitle := linked
+	afterRetitle.LinkTitle = retitled.LinkTitle
+	steps := []struct {
+		name  string
+		apply func() error
+		want  Message
+	}{
+		{"insert without link", func() error { return s.UpsertMessage(ctx, plain) }, plain},
+		{"link arrives", func() error { return s.UpsertMessage(ctx, linked) }, linked},
+		{"empty upsert keeps link", func() error { return s.UpsertMessage(ctx, plain) }, linked},
+		{"one field replaced", func() error { return s.UpsertMessage(ctx, retitled) }, afterRetitle},
+		{"unsend clears link", func() error { return s.UnsendMessage(ctx, "m1") }, plain},
+		{"resync after unsend stays clear", func() error { return s.UpsertMessage(ctx, linked) }, plain},
+	}
+	for _, step := range steps {
+		if err := step.apply(); err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
+		msgs, err := s.ListMessages(ctx, 1)
+		if err != nil || len(msgs) != 1 {
+			t.Fatalf("%s: ListMessages: %+v err=%v", step.name, msgs, err)
+		}
+		check(step.name, msgs[0], step.want)
+	}
+
+	// The oldest message carries the link too, and the data survives reopening the file,
+	// which runs the column migration a second time.
+	second := linked
+	second.ID, second.Timestamp = "m0", time.UnixMilli(0)
+	if err := s.UpsertMessage(ctx, second); err != nil {
+		t.Fatalf("UpsertMessage: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	s, err = Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s.Close()
+	oldest, err := s.OldestMessage(ctx, 1)
+	if err != nil || oldest.ID != "m0" {
+		t.Fatalf("OldestMessage: %+v err=%v", oldest, err)
+	}
+	check("oldest after reopen", oldest, linked)
+}
+
 func TestInTxCommitsOrRollsBack(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

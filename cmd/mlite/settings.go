@@ -22,6 +22,9 @@ type config struct {
 	// Heads are the conversations pinned to the desktop, with their positions.
 	Heads       []headCfg `json:"heads"`
 	HeadPreview bool      `json:"head_preview"`
+	// Quiet are the conversations this program does not notify about (its own switch,
+	// separate from muting in Messenger).
+	Quiet []int64 `json:"quiet"`
 }
 
 var (

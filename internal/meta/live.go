@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"go.mau.fi/mautrix-meta/pkg/messagix/table"
-	"go.mau.fi/whatsmeow/proto/waConsumerApplication"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 
@@ -67,18 +66,11 @@ func (c *Client) onE2EEEvent(ctx context.Context, evt any) {
 }
 
 func decodeLiveMessage(evt *events.FBMessage) (liveMessage, bool) {
-	consumer, ok := evt.Message.(*waConsumerApplication.ConsumerApplication)
+	body, ok := encryptedContent(evt.Message, nil)
 	if !ok {
 		return liveMessage{}, false
 	}
-	text, ok := consumerText(consumer)
-	if !ok {
-		return liveMessage{}, false
-	}
-	att, hasMedia := encryptedMedia(consumer, nil)
-	if hasMedia {
-		text = att.Caption // the attachment itself is shown, not a placeholder word
-	}
+	att, link := body.Att, body.Link
 	threadID, err := strconv.ParseInt(evt.Info.Chat.User, 10, 64)
 	if err != nil {
 		return liveMessage{}, false
@@ -96,7 +88,7 @@ func decodeLiveMessage(evt *events.FBMessage) (liveMessage, bool) {
 			ID:        evt.Info.ID,
 			ThreadID:  threadID,
 			SenderID:  senderID,
-			Text:      text,
+			Text:      body.Text,
 			Timestamp: evt.Info.Timestamp,
 			ReplyToID: evt.FBApplication.GetMetadata().GetQuotedMessage().GetStanzaID(),
 			MediaKind:       att.Kind,
@@ -104,6 +96,9 @@ func decodeLiveMessage(evt *events.FBMessage) (liveMessage, bool) {
 			MediaName:       att.Name,
 			MediaRef:        att.Ref,
 			MediaDurationMs: att.DurationMs,
+			LinkURL:         link.URL,
+			LinkTitle:       link.Title,
+			LinkRef:         link.Ref,
 		},
 		threadType: threadType,
 		fromMe:     evt.Info.IsFromMe,

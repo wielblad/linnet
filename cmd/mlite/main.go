@@ -106,6 +106,7 @@ var (
 		bar                                                     rect // reply or edit bar above the text field
 		narrow, chat                                            bool // one-column layout, and whether it shows the conversation
 		hx                                                      int32
+		hbInfo, hbSearch                                        rect // buttons at the right end of the conversation header
 		back, navBar                                            rect
 		stripText                                               string
 	}
@@ -181,6 +182,7 @@ func main() {
 	registerClass("MliteMain", wndProc)
 	registerClass("MliteView", viewProc)
 	registerClass("MliteViewer", viewerProc)
+	registerClass("MlitePanel", panelProc)
 	registerClass("MliteList", listWndProc)
 	registerClass("MliteReact", pickerProc)
 	registerClass("MliteLogin", loginProc)
@@ -246,6 +248,16 @@ func handleKey(m *msgT) bool {
 		if pasteAttachment() {
 			return true
 		}
+	case ctrl && m.wParam == 'F' && selectedID != 0 && nav != navSettings && !lg.active:
+		if pn.open && pn.search {
+			pSetFocus.Call(pn.edit)
+		} else {
+			showPanel(true)
+		}
+		return true
+	case m.hwnd == pn.edit && m.wParam == vkEscape:
+		closePanel()
+		return true
 	case ctrl && m.wParam == 'K':
 		if nav == navSettings {
 			setNav(navChats)
@@ -300,6 +312,22 @@ func handleKey(m *msgT) bool {
 	return false
 }
 
+// headerButton tells which button of the conversation header a point is on: 1 search,
+// 2 information, 0 none.
+func headerButton(x, y int32) int {
+	if _, ok := threadByID(selectedID); !ok || nav == navSettings || lg.active || (lay.narrow && !lay.chat) {
+		return 0
+	}
+	for k, b := range []rect{lay.hbSearch, lay.hbInfo} {
+		if x >= b.left && x < b.right && y >= b.top && y < b.bottom {
+			return k + 1
+		}
+	}
+	return 0
+}
+
+var hotHdr int // header button under the pointer: 1 search, 2 information
+
 func fatal(msg string) {
 	pMessageBoxW.Call(0, uintptr(unsafe.Pointer(u16(msg))), uintptr(unsafe.Pointer(u16(appName))), 0x10)
 	os.Exit(1)
@@ -341,6 +369,7 @@ func createMainWindow(visible bool) {
 	pEnableWindow.Call(hSend, 0)
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
+	initPanel()
 	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach} {
 		oldBtnProc = subclass(h, btnProc)
 	}
@@ -420,6 +449,7 @@ func applyTheme() {
 	}
 	sendMsg(hSearch, wmSetFont, fnt.body, 1)
 	sendMsg(hInput, wmSetFont, fnt.body, 1)
+	sendMsg(pn.edit, wmSetFont, fnt.body, 1)
 	sendMsg(hList, lbSetItemHeight, 0, rowHeight())
 	setCue()
 }
@@ -471,6 +501,13 @@ func layout() {
 	lay.narrow, lay.chat = narrow, chat
 	showPane := !settings && !chat
 	showContent := !settings && (!narrow || chat)
+	full := w
+	pn.side = pn.open && hasSel && showContent && !narrow && w >= dp(1040)
+	pn.cover = pn.open && hasSel && showContent && !pn.side
+	if pn.side {
+		w -= panelWidth()
+		lay.w = w
+	}
 
 	railW, paneW := dp(72), dp(296)
 	withFont(fnt.small, func(c canvas) {
@@ -550,6 +587,8 @@ func layout() {
 		compose.closeHit = rect{lay.bar.right - dp(32), lay.bar.top, lay.bar.right, lay.bar.bottom}
 	}
 	lay.header = rect{cx, 0, w, hdrH}
+	lay.hbInfo = rect{w - dp(10) - dp(36), (hdrH - dp(36)) / 2, w - dp(10), (hdrH + dp(36)) / 2}
+	lay.hbSearch = rect{lay.hbInfo.left - dp(4) - dp(36), lay.hbInfo.top, lay.hbInfo.left - dp(4), lay.hbInfo.bottom}
 	lay.hx, lay.back = 0, rect{}
 	if chat {
 		lay.hx, lay.back = dp(34), rect{0, 0, dp(46), hdrH}
@@ -583,16 +622,24 @@ func layout() {
 	moveTo(hSend, rect{w - dp(12) - dp(36), h - dp(10) - dp(36), w - dp(12), h - dp(10)})
 	moveTo(hAttach, rect{cx + dp(10), h - dp(10) - dp(36), cx + dp(46), h - dp(10)})
 	moveTo(hSet, rect{railW, 0, w, h - barH})
+	switch {
+	case pn.side:
+		moveTo(pn.hwnd, rect{w, 0, full, h})
+	case pn.cover:
+		moveTo(pn.hwnd, rect{cx, 0, full, h})
+	}
 
 	for _, nb := range hNav {
 		show(nb, !chat)
 	}
 	show(hSearch, showPane)
 	show(hList, showPane)
-	show(hView, showContent)
-	show(hInput, showContent && hasSel)
-	show(hSend, showContent && hasSel)
-	show(hAttach, showContent && hasSel)
+	show(hView, showContent && !pn.cover)
+	show(hInput, showContent && hasSel && !pn.cover)
+	show(hSend, showContent && hasSel && !pn.cover)
+	show(hAttach, showContent && hasSel && !pn.cover)
+	show(pn.hwnd, pn.side || pn.cover)
+	show(pn.edit, (pn.side || pn.cover) && pn.search)
 	show(hSet, settings)
 	invalidate(hMain)
 }
@@ -683,6 +730,15 @@ func paintMain(target uintptr) {
 				}
 			}
 			hdrPhoto = threadAvatar(g, t, lay.header.left+hx+dp(14), (lay.header.bottom-dp(36))/2, dp(36), pal.card)
+			for k, b := range []rect{lay.hbSearch, lay.hbInfo} {
+				on := pn.open && pn.search == (k == 0)
+				switch {
+				case on:
+					g.round(b.left, b.top, b.right-b.left, b.bottom-b.top, dp(4), dp(4), dp(4), dp(4), mix(pal.accent, pal.card, 22))
+				case hotHdr == k+1:
+					g.round(b.left, b.top, b.right-b.left, b.bottom-b.top, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 9))
+				}
+			}
 		}
 		if lay.stripText != "" {
 			s := lay.strip
@@ -744,15 +800,18 @@ func paintMain(target uintptr) {
 					sub = real + " · " + sub
 				}
 			}
+			c.font(fnt.icon)
+			c.text(gSearch, lay.hbSearch, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+			c.text(gInfo, lay.hbInfo, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 			x := lay.header.left + hx + dp(62)
 			c.font(fnt.head)
 			if sub == "" {
-				c.text(threadTitle(t), rect{x, 0, lay.w - dp(16), hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(threadTitle(t), rect{x, 0, lay.hbSearch.left - dp(8), hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 			} else {
 				top := (hh - sp(38)) / 2
-				c.text(threadTitle(t), rect{x, top, lay.w - dp(16), top + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(threadTitle(t), rect{x, top, lay.hbSearch.left - dp(8), top + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 				c.font(fnt.small)
-				c.text(sub, rect{x, top + sp(20), lay.w - dp(16), top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(sub, rect{x, top + sp(20), lay.hbSearch.left - dp(8), top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 			}
 		}
 	}
@@ -859,7 +918,7 @@ func drawRow(d *drawItem) {
 	row := rows[d.itemID]
 	people := nav == navPeople
 	now := time.Now()
-	muted := row.person == nil && row.t.Muted(now)
+	muted := row.person == nil && (row.t.Muted(now) || quietThread(row.t.ID))
 	buf := newBuffer(d.hDC, w, h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, w, h}, pal.mica)
@@ -1271,6 +1330,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			goBack()
+		} else if k := headerButton(x, y); k != 0 {
+			showPanel(k == 1)
 		}
 		return 0
 	case wmAppLogin:
@@ -1285,6 +1346,24 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmAppMedia:
 		mediaArrived()
 		viewerRefresh()
+		if pn.open {
+			invalidate(pn.hwnd)
+		}
+		return 0
+	case wmMouseMove:
+		if k := headerButton(int32(int16(lp)), int32(int16(lp>>16))); k != hotHdr {
+			hotHdr = k
+			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.header)), 0)
+			if k != 0 {
+				trackLeave(hMain)
+			}
+		}
+		return 0
+	case wmMouseLeave:
+		if hotHdr != 0 {
+			hotHdr = 0
+			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.header)), 0)
+		}
 		return 0
 	case wmAppQuit: // the installer or uninstaller asks a running copy to end
 		quitting = true
@@ -1614,7 +1693,7 @@ func refresh() {
 		t := &threads[i]
 		stamp := t.UpdatedAt.UnixMilli()
 		prev, seen := prevUpdated[t.ID]
-		if be.armed.Load() && (!seen || stamp > prev) && t.Unread() && !t.Muted(now) && !(fg && t.ID == selectedID) && notify == nil {
+		if be.armed.Load() && (!seen || stamp > prev) && t.Unread() && !t.Muted(now) && !quietThread(t.ID) && !(fg && t.ID == selectedID) && notify == nil {
 			notify = t
 		}
 		prevUpdated[t.ID] = stamp

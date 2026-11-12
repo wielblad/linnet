@@ -192,7 +192,7 @@ func headsSync(announce bool) {
 			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread) })
 			pShowWindow.Call(h.hwnd, swShowNA)
 		}
-		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND {
+		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) {
 			showPeek(h, title, oneLine(previewText(t.LastPreview), 110))
 		}
 		if unread == 0 {

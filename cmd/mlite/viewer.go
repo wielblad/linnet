@@ -66,7 +66,7 @@ func openViewer(m store.Message) {
 	vw.idx = 0
 	for i := range mv.items {
 		it := &mv.items[i]
-		if it.kind == itMsg && it.img && it.yt == "" {
+		if it.kind == itMsg && it.img && !it.preview {
 			if it.imgMsg.ID == m.ID {
 				vw.idx = len(vw.list)
 			}

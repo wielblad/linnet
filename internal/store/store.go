@@ -47,7 +47,16 @@ type Message struct {
 	MediaName       string
 	MediaDurationMs int64
 	// MediaRef describes an attachment of an encrypted chat, which has no address to fetch.
-	MediaRef        string
+	MediaRef string
+	// The Link fields describe the preview attached to a message that contains a link. They
+	// are separate from the Media fields, which mean "this message has an attachment".
+	// LinkURL is the target address, with Facebook's redirect unwrapped. The picture is
+	// LinkImage (an address, chats that are not encrypted) or LinkRef (an encrypted chat,
+	// in the same form as MediaRef).
+	LinkURL         string
+	LinkTitle       string
+	LinkImage       string
+	LinkRef         string
 	ReplyToID       string
 	ReplyText       string
 	ReplySenderID   int64
@@ -196,6 +205,10 @@ CREATE INDEX IF NOT EXISTS messages_thread_ts ON messages(thread_id, timestamp_m
 		`ALTER TABLE messages ADD COLUMN edited INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE messages ADD COLUMN unsent INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE messages ADD COLUMN media_ref TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN link_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN link_title TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN link_image TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN link_ref TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.q.ExecContext(ctx, stmt); err != nil {
 			if !isDuplicateColumn(err) {
@@ -277,7 +290,8 @@ func (s *Store) OldestMessage(ctx context.Context, threadID int64) (Message, err
 	var pending int
 	err := s.q.QueryRowContext(ctx, `
 SELECT id, thread_id, sender_id, text, timestamp_ms, pending, error,
-	media_kind, media_url, media_mime, media_name, media_duration_ms
+	media_kind, media_url, media_mime, media_name, media_duration_ms,
+	link_url, link_title, link_image, link_ref
 FROM messages
 WHERE thread_id = ?
 ORDER BY timestamp_ms ASC, id ASC
@@ -285,6 +299,7 @@ LIMIT 1
 `, threadID).Scan(
 		&m.ID, &m.ThreadID, &m.SenderID, &m.Text, &ms, &pending, &m.Error,
 		&m.MediaKind, &m.MediaURL, &m.MediaMime, &m.MediaName, &m.MediaDurationMs,
+		&m.LinkURL, &m.LinkTitle, &m.LinkImage, &m.LinkRef,
 	)
 	if err == sql.ErrNoRows {
 		return Message{}, sql.ErrNoRows
@@ -315,14 +330,18 @@ ON CONFLICT(id) DO UPDATE SET
 	return nil
 }
 
+// UpsertMessage keeps the attachment and link data stored earlier when the new row carries
+// none: the same message often arrives again without them. A message that was unsent loses
+// its link preview together with its text.
 func (s *Store) UpsertMessage(ctx context.Context, m Message) error {
 	_, err := s.q.ExecContext(ctx, `
 INSERT INTO messages (
 	id, thread_id, sender_id, text, timestamp_ms, pending, error,
 	media_kind, media_url, media_mime, media_name, media_duration_ms,
-	reply_to_id, reply_text, reply_sender_id, edited, unsent, media_ref
+	reply_to_id, reply_text, reply_sender_id, edited, unsent, media_ref,
+	link_url, link_title, link_image, link_ref
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
 	thread_id=excluded.thread_id,
 	sender_id=excluded.sender_id,
@@ -340,10 +359,15 @@ ON CONFLICT(id) DO UPDATE SET
 	reply_to_id=CASE WHEN excluded.reply_to_id = '' THEN messages.reply_to_id ELSE excluded.reply_to_id END,
 	reply_text=CASE WHEN excluded.reply_text = '' THEN messages.reply_text ELSE excluded.reply_text END,
 	reply_sender_id=CASE WHEN excluded.reply_sender_id = 0 THEN messages.reply_sender_id ELSE excluded.reply_sender_id END,
-	media_ref=CASE WHEN excluded.media_ref = '' THEN messages.media_ref ELSE excluded.media_ref END
+	media_ref=CASE WHEN excluded.media_ref = '' THEN messages.media_ref ELSE excluded.media_ref END,
+	link_url=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_url = '' THEN messages.link_url ELSE excluded.link_url END,
+	link_title=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_title = '' THEN messages.link_title ELSE excluded.link_title END,
+	link_image=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_image = '' THEN messages.link_image ELSE excluded.link_image END,
+	link_ref=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_ref = '' THEN messages.link_ref ELSE excluded.link_ref END
 `, m.ID, m.ThreadID, m.SenderID, m.Text, m.Timestamp.UnixMilli(), boolInt(m.Pending), m.Error,
 		m.MediaKind, m.MediaURL, m.MediaMime, m.MediaName, m.MediaDurationMs,
-		m.ReplyToID, m.ReplyText, m.ReplySenderID, boolInt(m.Edited), boolInt(m.Unsent), m.MediaRef)
+		m.ReplyToID, m.ReplyText, m.ReplySenderID, boolInt(m.Edited), boolInt(m.Unsent), m.MediaRef,
+		m.LinkURL, m.LinkTitle, m.LinkImage, m.LinkRef)
 	if err != nil {
 		return fmt.Errorf("upsert message: %w", err)
 	}
@@ -403,7 +427,8 @@ SELECT m.id, m.thread_id, m.sender_id, COALESCE(c.name, ''), m.text, m.timestamp
 	m.reply_to_id,
 	CASE WHEN m.reply_text != '' THEN m.reply_text ELSE COALESCE(r.text, '') END,
 	CASE WHEN m.reply_sender_id != 0 THEN m.reply_sender_id ELSE COALESCE(r.sender_id, 0) END,
-	COALESCE(rc.name, ''), m.edited, m.unsent, m.media_ref
+	COALESCE(rc.name, ''), m.edited, m.unsent, m.media_ref,
+	m.link_url, m.link_title, m.link_image, m.link_ref
 FROM messages m
 LEFT JOIN contacts c ON c.id = m.sender_id
 LEFT JOIN messages r ON m.reply_to_id != '' AND r.id = m.reply_to_id
@@ -424,6 +449,7 @@ ORDER BY m.timestamp_ms ASC, m.id ASC
 			&m.ID, &m.ThreadID, &m.SenderID, &m.SenderName, &m.Text, &ms, &pending, &m.Error,
 			&m.MediaKind, &m.MediaURL, &m.MediaMime, &m.MediaName, &m.MediaDurationMs,
 			&m.ReplyToID, &m.ReplyText, &m.ReplySenderID, &m.ReplySenderName, &m.Edited, &m.Unsent, &m.MediaRef,
+			&m.LinkURL, &m.LinkTitle, &m.LinkImage, &m.LinkRef,
 		); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
@@ -475,7 +501,8 @@ func (s *Store) EditMessage(ctx context.Context, id, text string) error {
 
 func (s *Store) UnsendMessage(ctx context.Context, id string) error {
 	_, err := s.q.ExecContext(ctx, `
-UPDATE messages SET unsent = 1, text = '', media_kind = '', media_url = '', media_mime = '', media_name = '', media_duration_ms = 0
+UPDATE messages SET unsent = 1, text = '', media_kind = '', media_url = '', media_mime = '', media_name = '', media_duration_ms = 0,
+	link_url = '', link_title = '', link_image = '', link_ref = ''
 WHERE id = ?
 `, id)
 	if err != nil {

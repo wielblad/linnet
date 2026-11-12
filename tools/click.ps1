@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 public class CK {
   [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageW")] public static extern IntPtr SendText(IntPtr h, uint m, IntPtr w, string l);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hh, bool r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
@@ -98,6 +99,7 @@ try {
     if ($step -match "^(\w+):(.*)$") { $verb = $matches[1]; $arg = $matches[2] }
     switch ($verb) {
       "wait" { Start-Sleep -Milliseconds ([int]$arg) }
+      "type" { $pan = [CK]::FindWindowEx($h, [IntPtr]::Zero, "MlitePanel", [NullString]::Value); $ed = [CK]::FindWindowEx($pan, [IntPtr]::Zero, "EDIT", [NullString]::Value); [CK]::SendText($ed, 0x00C2, [IntPtr]1, $arg) | Out-Null; Start-Sleep -Milliseconds 400 }
       "clip" { "schowek [{0}]: {1}" -f $arg, [Windows.Forms.Clipboard]::GetText() }
       "shot" { Shot (Join-Path (Split-Path $Out) "$arg.png") }
       "key" { $a = $arg -split "@"; Key ([Convert]::ToInt32($a[0], 16)) $false $a[1] }

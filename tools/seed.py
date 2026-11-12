@@ -190,11 +190,17 @@ msg(106, ME, 46 * MIN, "", id="att-voice", media_kind="audio", media_mime="audio
     media_url="https://pictures.invalid/m/voice.m4a", media_duration_ms=12000)
 msg(106, 106, 44 * MIN, "Tu masz regulamin wyjazdu.", id="att-file", media_kind="file", media_mime="application/pdf",
     media_name="regulamin-wyjazdu.pdf", media_url="https://pictures.invalid/m/doc.pdf")
-msg(106, ME, 42 * MIN, "A to z Facebooka https://www.facebook.com/reel/1234567890 :D")
-msg(106, 106, 40 * MIN, "Mapa trasy: https://mapy.example.org/trasa/tatry-2026 <3")
+msg(106, ME, 42 * MIN, "A to z Facebooka https://www.facebook.com/reel/1234567890 :D", id="reel",
+    link_url="https://www.facebook.com/reel/1234567890", link_title="Zachód słońca nad Morskim Okiem",
+    link_image="https://pictures.invalid/p/reel.jpg")
+msg(106, 106, 40 * MIN, "Mapa trasy: https://mapy.example.org/trasa/tatry-2026 <3", id="mapa",
+    link_url="https://mapy.example.org/trasa/tatry-2026", link_title="Trasa: Dolina Pięciu Stawów – Zawrat",
+    link_image="https://pictures.invalid/p/mapa.jpg")
 c.execute("update threads set last_preview=?, updated_at_ms=?, last_read_ms=? where id=106",
           ("Mapa trasy: https://mapy.example.org/trasa/tatry-2026 <3", now - 40 * MIN, now))
 scene(320, 180, 2).save(os.path.join(mdir, "%016x.jpg" % fnv64(b"yt-dQw4w9WgXcQ")), "JPEG", quality=88)
+scene(360, 640, 1).save(os.path.join(mdir, "%016x.jpg" % fnv64(b"lnk-reel")), "JPEG", quality=88)
+scene(600, 315, 0).save(os.path.join(mdir, "%016x.jpg" % fnv64(b"lnk-mapa")), "JPEG", quality=88)
 msg(106, 106, 38 * MIN, "", id="img-sticker", media_kind="image", media_mime="image/webp", media_name="sticker",
     media_url="https://pictures.invalid/m/sticker.webp")
 scene(360, 360, 3).save(os.path.join(mdir, "%016x.webp" % fnv64(b"img-sticker")), "WEBP", quality=85)

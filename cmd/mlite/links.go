@@ -104,6 +104,20 @@ func playableLink(raw string) bool {
 	return false
 }
 
+// linkOf is the address a message links to: the first one written in it, else the one
+// Messenger attached (a share without text).
+func linkOf(m store.Message) string {
+	if u := firstURL(m.Text); u != "" {
+		return u
+	}
+	return firstURL(m.LinkURL)
+}
+
+// linkMessage stands in for the preview picture of a link in the picture cache.
+func linkMessage(m store.Message) store.Message {
+	return store.Message{ID: "lnk-" + m.ID, MediaKind: "image", MediaMime: "image/jpeg", MediaURL: m.LinkImage, MediaRef: m.LinkRef}
+}
+
 // ytMessage stands in for the preview picture of a YouTube video in the picture cache.
 func ytMessage(id string) store.Message {
 	return store.Message{ID: "yt-" + id, MediaKind: "image", MediaMime: "image/jpeg",

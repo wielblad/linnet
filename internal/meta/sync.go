@@ -295,17 +295,25 @@ func upsertWrapped(ctx context.Context, s *store.Store, msg *table.WrappedMessag
 		return err
 	}
 	kind, url, mime, name, durationMs := mediaFromWrapped(msg)
+	link := linkFromWrapped(msg)
+	text := msg.Text
+	if text == "" {
+		text = link.URL // a share without words is still shown
+	}
 	return s.UpsertMessage(ctx, store.Message{
 		ID:              msg.MessageId,
 		ThreadID:        key,
 		SenderID:        msg.SenderId,
-		Text:            msg.Text,
+		Text:            text,
 		Timestamp:       time.UnixMilli(msg.TimestampMs),
 		MediaKind:       kind,
 		MediaURL:        url,
 		MediaMime:       mime,
 		MediaName:       name,
 		MediaDurationMs: durationMs,
+		LinkURL:         link.URL,
+		LinkTitle:       link.Title,
+		LinkImage:       link.Image,
 		ReplyToID:       msg.ReplySourceId,
 		ReplyText:       msg.ReplyMessageText,
 		ReplySenderID:   msg.ReplyToUserId,

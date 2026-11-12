@@ -82,9 +82,23 @@ func encryptedMedia(msg *waConsumerApplication.ConsumerApplication, paths map[st
 	default:
 		return encryptedAttachment{}, false
 	}
+	ref, ok := mediaRefJSON(transport, refType, paths)
+	if !ok {
+		return encryptedAttachment{}, false
+	}
+	out.Ref, out.Mime = ref, transport.GetAncillary().GetMimetype()
+	if out.Name == "" {
+		out.Name = out.Kind
+	}
+	return out, true
+}
+
+// mediaRefJSON builds the stored reference of one encrypted file. paths is as in
+// encryptedMedia: a fresh download path, when there is one, replaces the path in the message.
+func mediaRefJSON(transport *waMediaTransport.WAMediaTransport, refType string, paths map[string]string) (string, bool) {
 	integral := transport.GetIntegral()
 	if integral == nil {
-		return encryptedAttachment{}, false
+		return "", false
 	}
 	path := integral.GetDirectPath()
 	if fresh := paths[transport.GetAncillary().GetObjectID()]; fresh != "" {
@@ -92,7 +106,7 @@ func encryptedMedia(msg *waConsumerApplication.ConsumerApplication, paths map[st
 	}
 	path = downloadPath(path)
 	if path == "" || len(integral.GetMediaKey()) == 0 {
-		return encryptedAttachment{}, false
+		return "", false
 	}
 	raw, err := json.Marshal(MediaRef{
 		Type:      refType,
@@ -102,13 +116,9 @@ func encryptedMedia(msg *waConsumerApplication.ConsumerApplication, paths map[st
 		EncSHA256: integral.GetFileEncSHA256(),
 	})
 	if err != nil {
-		return encryptedAttachment{}, false
+		return "", false
 	}
-	out.Ref, out.Mime = string(raw), transport.GetAncillary().GetMimetype()
-	if out.Name == "" {
-		out.Name = out.Kind
-	}
-	return out, true
+	return string(raw), true
 }
 
 // downloadPath reduces a full address to the path-and-query form the download expects.

@@ -53,7 +53,8 @@ type vitem struct {
 	imgW, imgH int32
 	imgTop     int32 // offset of the picture from the top of the bubble
 	imgMsg     store.Message // what the picture is fetched for: the message, or a video preview
-	yt         string        // YouTube video shown as a preview picture
+	preview    bool          // the picture stands for a link, not for a photo
+	play       bool          // the link is a video: it opens in a small window
 	link       string        // first web address in the text
 	chip       string        // line that opens an attachment or the link
 	chipIcon   string
@@ -86,6 +87,7 @@ var mv struct {
 	focus    bool
 	sc       scroller
 	hover    int // index of the message under the pointer, -1 when none
+	flash    string // message marked for a moment after a jump from the search
 	hotAct   int // which of its actions is under the pointer
 }
 
@@ -163,6 +165,7 @@ func oneLine(s string, max int) string {
 
 // loadView reads the selected thread from the store and lays it out when something changed.
 func loadView(force bool) {
+	defer panelSync()
 	if !mv.has {
 		if len(mv.items) > 0 || force {
 			mv.items, mv.total, mv.scroll, mv.key = nil, 0, 0, 0
@@ -281,14 +284,37 @@ func layoutView() {
 			it.imgW, it.imgH, it.imgReady = mediaBox(m, inner)
 		} else if hasAttachment(m) { // video, recording, file: a line that fetches and opens it
 			it.chip, it.chipIcon, it.chipAct, it.media = attachmentLabel(m), attachmentIcon(m), chipFile, ""
-		} else if u := firstURL(m.Text); u != "" && !m.Unsent {
+		} else if u := linkOf(m); u != "" && !m.Unsent {
+			// A link: the picture Messenger attached to it (for YouTube the video's own
+			// preview picture when there is none), and a line with the title that opens it.
 			it.link = u
-			if id := youtubeID(u); id != "" {
-				it.yt, it.img, it.imgMsg = id, true, ytMessage(id)
+			id := youtubeID(u)
+			it.play = id != "" || playableLink(u)
+			switch {
+			case m.LinkImage != "" || m.LinkRef != "":
+				it.imgMsg = linkMessage(m)
+			case id != "":
+				it.imgMsg = ytMessage(id)
+			}
+			if it.imgMsg.ID != "" {
 				it.imgW, it.imgH, it.imgReady = mediaBox(it.imgMsg, inner)
-			} else if playableLink(u) {
+				if max := dp(220); it.imgH > max { // a preview stays smaller than a photo
+					it.imgW, it.imgH = it.imgW*max/it.imgH, max
+				}
+				// a preview that cannot be fetched is left out rather than shown as a failed photo
+				it.img = it.imgReady || md.busy[it.imgMsg.ID] || id != ""
+				it.preview = it.img
+			}
+			title := oneLine(m.LinkTitle, 90)
+			switch {
+			case title != "" && it.play:
+				it.chip, it.chipIcon, it.chipAct = title+" · "+linkHost(u), gPlay, chipPlay
+			case title != "":
+				it.chip, it.chipIcon, it.chipAct = title+" · "+linkHost(u), gLink, chipLink
+			case id != "" && it.img: // the picture with the play sign says it all
+			case it.play:
 				it.chip, it.chipIcon, it.chipAct = "Odtwórz w okienku · "+linkHost(u), gPlay, chipPlay
-			} else {
+			default:
 				it.chip, it.chipIcon, it.chipAct = "Otwórz "+linkHost(u), gLink, chipLink
 			}
 		}
@@ -516,6 +542,9 @@ func paintView(target uintptr) {
 					bl = r
 				}
 			}
+			if mv.flash != "" && it.m.ID == mv.flash { // found by the search: a frame for a moment
+				g.round(it.bx-dp(3), by-dp(3), it.bw+dp(6), it.bh+dp(6), tl+dp(3), tr+dp(3), br+dp(3), bl+dp(3), pal.accent)
+			}
 			g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
 			g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
 			paintTextMarks(g, it, fill)
@@ -546,7 +575,7 @@ func paintView(target uintptr) {
 				}
 				if th != 0 {
 					g.image(th, it.bx+padL, cy, it.imgW, it.imgH)
-					if it.yt != "" { // a dark disc for the play sign
+					if it.preview && it.play { // a dark disc for the play sign
 						g.ellipseA(it.bx+padL+it.imgW/2-dp(22), cy+it.imgH/2-dp(22), dp(44), dp(44), 0xB0000000)
 					}
 				} else {
@@ -619,7 +648,7 @@ func paintView(target uintptr) {
 				if !it.imgReady {
 					c.font(fnt.small)
 					c.text(mediaNote(it.imgMsg), rect{x0 + dp(8), cy, x0 + it.imgW - dp(8), cy + it.imgH}, pal.fg2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
-					} else if it.yt != "" {
+					} else if it.preview && it.play {
 						c.font(fnt.iconLg)
 						c.text(gPlay, rect{x0, cy, x0 + it.imgW, cy + it.imgH}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
 					}
@@ -739,8 +768,8 @@ func viewClick(x, y int32) {
 		if it.kind == itMsg && it.img {
 			ix, iy := it.bx+dp(12), it.y+it.top+it.imgTop
 			if x >= ix && x < ix+it.imgW && y >= iy && y < iy+it.imgH {
-				if it.yt != "" {
-					playInWindow("https://www.youtube.com/watch?v=" + it.yt)
+				if it.preview {
+					openLink(it.link)
 				} else {
 					openViewer(it.imgMsg)
 				}
@@ -826,6 +855,12 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		viewHover(-1, -1)
 		return 0
 	case wmTimer:
+		if wp == timerFlash {
+			pKillTimer.Call(hwnd, timerFlash)
+			mv.flash = ""
+			invalidate(hwnd)
+			return 0
+		}
 		if mv.sc.timer(wp) {
 			return 0
 		}

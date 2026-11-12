@@ -353,6 +353,9 @@ func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, 
 			MediaName:       plain.MediaName,
 			MediaRef:        plain.MediaRef,
 			MediaDurationMs: plain.DurationMs,
+			LinkURL:         plain.LinkURL,
+			LinkTitle:       plain.LinkTitle,
+			LinkRef:         plain.LinkRef,
 		}); err != nil {
 			return err
 		}
@@ -384,6 +387,8 @@ type plainArchiveMessage struct {
 
 	MediaKind, MediaMime, MediaRef, MediaName string
 	DurationMs                               int64
+
+	LinkURL, LinkTitle, LinkRef string
 }
 
 func archivePlainMessage(msg *securehistory.DecryptedMessage) (plainArchiveMessage, bool) {
@@ -398,31 +403,32 @@ func archivePlainMessage(msg *securehistory.DecryptedMessage) (plainArchiveMessa
 	if err != nil {
 		return plainArchiveMessage{}, false
 	}
-	consumer := archiveConsumer(msg.Message.Message)
-	text, ok := consumerText(consumer)
-	if !ok {
-		return plainArchiveMessage{}, false
-	}
+	// Archived files are fetched from fresh paths delivered next to the message; the picture
+	// of a link preview is looked up there the same way as an attachment.
 	paths := make(map[string]string, len(msg.Attachments))
 	for _, att := range msg.Attachments {
 		if att.ObjectID != "" && att.URL != "" {
 			paths[att.ObjectID] = att.URL
 		}
 	}
-	att, hasMedia := encryptedMedia(consumer, paths)
-	if hasMedia {
-		text = att.Caption
+	body, ok := encryptedContent(archiveContent(msg.Message.Message), paths)
+	if !ok {
+		return plainArchiveMessage{}, false
 	}
+	att, link := body.Att, body.Link
 	return plainArchiveMessage{
 		ID:          meta.GetMessageID(),
 		SenderID:    senderID,
-		Text:        text,
+		Text:        body.Text,
 		TimestampMS: msg.Message.TimestampMS,
 		MediaKind:   att.Kind,
 		MediaMime:   att.Mime,
 		MediaRef:    att.Ref,
 		MediaName:   att.Name,
 		DurationMs:  att.DurationMs,
+		LinkURL:     link.URL,
+		LinkTitle:   link.Title,
+		LinkRef:     link.Ref,
 	}, true
 }
 
@@ -442,8 +448,9 @@ func archiveMessageText(message *waArmadilloBackupMessage.BackupMessage) (string
 	return consumerText(decoded.GetConsumerApplication())
 }
 
-// archiveConsumer unpacks the chat message stored inside an archived record.
-func archiveConsumer(message *waArmadilloBackupMessage.BackupMessage) *waConsumerApplication.ConsumerApplication {
+// archiveContent unpacks what is stored inside an archived record: a chat message
+// (ConsumerApplication) or a share (Armadillo), as taken by encryptedContent.
+func archiveContent(message *waArmadilloBackupMessage.BackupMessage) any {
 	payload, ok := message.GetPayload().(*waArmadilloBackupMessage.BackupMessage_EncryptedTransportMessage)
 	if !ok {
 		return nil
@@ -456,7 +463,7 @@ func archiveConsumer(message *waArmadilloBackupMessage.BackupMessage) *waConsume
 	if err != nil {
 		return nil
 	}
-	return decoded.GetConsumerApplication()
+	return decoded.Message
 }
 
 func consumerText(msg *waConsumerApplication.ConsumerApplication) (string, bool) {
