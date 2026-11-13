@@ -19,6 +19,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"lazyfmess/internal/toast"
 	"lazyfmess/internal/update"
 )
 
@@ -199,6 +200,9 @@ func updateCheck(quiet bool) {
 			note += " " + n
 		}
 		updateSet(upReady, note)
+		if quiet { // found by the program itself, not asked for: say so where it will be seen
+			updateToast(m.Version, oneLine(m.Notes, 120))
+		}
 	case !quiet:
 		updateSet(upCurrent, "")
 	}
@@ -248,6 +252,34 @@ func updateFetch() {
 		return
 	}
 	// The installer asks this program to end; should it not, the state stays visible.
+}
+
+var updateToasted string // the version a notification was already shown for in this run
+
+// updateToast tells about a newer release with a Windows notification, once for a version
+// while the program runs. A click on it leads to the row of the settings with the button
+// that installs it. "Nie przeszkadzać" keeps it away; the band in the window stays.
+func updateToast(version, notes string) {
+	upd.mu.Lock()
+	again := updateToasted == version
+	updateToasted = version
+	upd.mu.Unlock()
+	if again || cfg.DND {
+		return
+	}
+	title := "Jest nowsza wersja " + version // Windows writes the name of the program above it
+	body := "Kliknij, aby przejść do aktualizacji."
+	if notes != "" {
+		body = notes + " " + body
+	}
+	if toastOn {
+		err := toast.Show(toast.Notification{Title: title, Body: body, Tag: "aktualizacja", Group: "program", Args: "update:0", Silent: true})
+		if err == nil {
+			return
+		}
+		log.Warn().Err(err).Msg("show the notification about an update")
+	}
+	balloon(appName+": "+title, "Otwórz Ustawienia → Aktualizacje, aby ją zainstalować.")
 }
 
 // updateStart looks for a newer release a short while after the program starts, and then

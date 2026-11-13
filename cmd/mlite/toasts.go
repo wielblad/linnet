@@ -97,6 +97,11 @@ func toastArrived() {
 		select {
 		case a := <-toastQueue:
 			verb, raw, _ := strings.Cut(a.Args, ":")
+			if verb == "update" { // the notification about a newer release: to the button that installs it
+				showMain()
+				goToUpdates()
+				continue
+			}
 			id, err := strconv.ParseInt(raw, 10, 64)
 			if err != nil {
 				continue
@@ -130,6 +135,7 @@ func toastQuit() {
 	if toastOn {
 		toastOn = false
 		toast.Remove("", "rozmowy")
+		toast.Remove("", "program")
 		toast.Stop()
 	}
 }

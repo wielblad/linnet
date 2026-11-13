@@ -1,0 +1,129 @@
+﻿# Checks the notification about a newer release: an older build installed as "Linnet Test"
+# finds the published release by itself and tells about it. (Made from update_github.ps1.)
+# Checks the update path against the real published release: installs a build whose version
+# is lower than the published one under the name "Linnet Test", then lets it find, fetch and
+# install the release from GitHub. The real installation is not touched.
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File tools\update_github.ps1
+$ErrorActionPreference = "Stop"
+$root = Split-Path $PSScriptRoot
+$name = "Linnet Test"
+$slug = "linnet-test"
+$dir = Join-Path $env:LOCALAPPDATA "Programs\$name"
+$data = Join-Path $env:APPDATA $name
+$shots = Join-Path $root ".local\shots"
+$sh = "C:\Program Files\Git\bin\sh.exe"
+
+Add-Type -ReferencedAssemblies System.Drawing @"
+using System;
+using System.Runtime.InteropServices;
+public class UG {
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hh, bool r);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
+  [DllImport("user32.dll")] public static extern bool ScreenToClient(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr ChildWindowFromPointEx(IntPtr h, POINT p, uint f);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string t);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  public struct RECT { public int L, T, R, B; }
+  public struct POINT { public int X, Y; }
+}
+"@
+[UG]::SetProcessDPIAware() | Out-Null
+
+function Clean {
+  Get-Process $slug -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep -Milliseconds 800
+  Remove-Item $dir, $data -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$name.lnk") -Force -ErrorAction SilentlyContinue
+  Remove-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LinnetTest" -Recurse -Force -ErrorAction SilentlyContinue
+}
+function MainWindow($procId) {
+  $w = [IntPtr]::Zero
+  for ($i = 0; $i -lt 300; $i++) {
+    $w = [UG]::FindWindowEx([IntPtr]::Zero, $w, "MliteMain", [NullString]::Value)
+    if ($w -eq [IntPtr]::Zero) { return [IntPtr]::Zero }
+    $wpid = 0; [UG]::GetWindowThreadProcessId($w, [ref]$wpid) | Out-Null
+    if ($wpid -eq $procId) { return $w }
+  }
+  return [IntPtr]::Zero
+}
+function Click($h, $x, $y) {
+  $r = New-Object UG+RECT; [UG]::GetWindowRect($h, [ref]$r) | Out-Null
+  $win = $h
+  for ($d = 0; $d -lt 4; $d++) {
+    $pt = New-Object UG+POINT; $pt.X = $r.L + $x; $pt.Y = $r.T + $y
+    [UG]::ScreenToClient($win, [ref]$pt) | Out-Null
+    $child = [UG]::ChildWindowFromPointEx($win, $pt, 1)
+    if ($child -eq [IntPtr]::Zero -or $child -eq $win) { break }
+    $win = $child
+  }
+  $pt = New-Object UG+POINT; $pt.X = $r.L + $x; $pt.Y = $r.T + $y
+  [UG]::ScreenToClient($win, [ref]$pt) | Out-Null
+  $lp = [IntPtr](($pt.Y -shl 16) -bor ($pt.X -band 0xFFFF))
+  [UG]::PostMessage($win, 0x0200, [IntPtr]::Zero, $lp) | Out-Null; Start-Sleep -Milliseconds 150
+  [UG]::PostMessage($win, 0x0201, [IntPtr]1, $lp) | Out-Null
+  [UG]::PostMessage($win, 0x0202, [IntPtr]::Zero, $lp) | Out-Null
+  Start-Sleep -Milliseconds 500
+}
+function Shot($h, $file) {
+  $r = New-Object UG+RECT; [UG]::GetWindowRect($h, [ref]$r) | Out-Null
+  if ($r.R - $r.L -lt 10) { "zrzut {0}: okna juz nie ma" -f $file; return }
+  $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T)
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $dc = $g.GetHdc(); [UG]::PrintWindow($h, $dc, 2) | Out-Null; $g.ReleaseHdc($dc); $g.Dispose()
+  $bmp.Save((Join-Path $shots $file), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+}
+function FindButton($bmp) {
+  for ($y = $bmp.Height - 30; $y -gt 60; $y -= 2) {
+    $run = 0
+    for ($x = 560; $x -lt $bmp.Width - 40; $x++) {
+      $c = $bmp.GetPixel($x, $y)
+      $up = $bmp.GetPixel($x, $y - 10)   # a button is tall; the outline of a focused row is a thin line
+      if ($c.B -gt 140 -and $c.B - $c.R -gt 60 -and $up.B -gt 140 -and $up.B - $up.R -gt 60) {
+        $run++
+        if ($run -ge 60) { return @(($x - 30), $y) }
+      } else { $run = 0 }
+    }
+  }
+  return $null
+}
+function Version { (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\LinnetTest" -ErrorAction SilentlyContinue).DisplayVersion }
+
+Clean
+# a build older than what is published, so the published release is the newer one
+$install = Join-Path $root "cmd\mlite\install.go"
+$orig = [IO.File]::ReadAllText($install)
+try {
+  [IO.File]::WriteAllText($install, ($orig -replace 'appVersion = "[^"]+"', 'appVersion = "0.0.9"'), (New-Object Text.UTF8Encoding $false))
+  & $sh "$root/tools/build.sh" | Out-Null
+  Copy-Item (Join-Path $root "build\Linnet-Setup.exe") (Join-Path $env:TEMP "Linnet-Setup-009.exe") -Force
+} finally {
+  [IO.File]::WriteAllText($install, $orig, (New-Object Text.UTF8Encoding $false))
+}
+& $sh "$root/tools/build.sh" | Out-Null
+"zbudowano wersje 0.0.9 do instalacji; opublikowana jest {0}" -f ((Get-Content (Join-Path $root "latest.json") -Raw | ConvertFrom-Json).version)
+
+$published = (Get-Content (Join-Path $root "latest.json") -Raw | ConvertFrom-Json).version
+$i = Start-Process -FilePath (Join-Path $env:TEMP "Linnet-Setup-009.exe") -ArgumentList @("-install", "-quiet", "-name", "`"$name`"") -PassThru -Wait
+"instalacja 0.0.9: kod {0}, wersja: {1}" -f $i.ExitCode, (Version)
+
+$p = Start-Process -FilePath (Join-Path $dir "$slug.exe") -ArgumentList @("-name", "`"$name`"", "-offline", "-self", "999") -PassThru
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+"czekam, az program sam sprawdzi aktualizacje (90 s po starcie)..."
+Start-Sleep -Seconds 88
+$scr = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+foreach ($k in 1..8) {   # the notification stays a few seconds: several looks around the moment
+  $bmp = New-Object System.Drawing.Bitmap 620, 420
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.CopyFromScreen(($scr.Right - 620), ($scr.Bottom - 420), 0, 0, $bmp.Size)
+  $g.Dispose(); $bmp.Save((Join-Path $shots "aktualizacja-powiadomienie-$k.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+  Start-Sleep -Milliseconds 1500
+}
+"zrzuty prawego dolnego rogu ekranu zapisane"
+Get-ChildItem $data -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName | Select-Object -Last 6 }
+if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+Start-Sleep -Seconds 2
+Clean
+"instalacja testowa usunieta"
