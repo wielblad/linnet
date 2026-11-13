@@ -29,6 +29,9 @@ type config struct {
 	VideoSession bool `json:"video_session"`
 	// Sound plays the Windows message sound with a notification.
 	Sound bool `json:"sound"`
+	// SoundFile is which sound that is: a file of the Windows sounds, a path to one of your
+	// own, or empty for whatever the system sets for a message.
+	SoundFile string `json:"sound_file"`
 }
 
 var (
@@ -109,8 +112,9 @@ func buildSettings() {
 		{kind: srHeader, title: "Powiadomienia"},
 		{kind: srToggle, title: "Powiadomienia Windows", desc: "Nowa wiadomość pojawia się w rogu ekranu.",
 			get: func() bool { return cfg.Toasts }, set: func(v bool) { cfg.Toasts = v }},
-		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Systemowy dźwięk wiadomości razem z powiadomieniem.",
+		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Krótki dźwięk razem z powiadomieniem.",
 			get: func() bool { return cfg.Sound }, set: func(v bool) { cfg.Sound = v }},
+		{kind: srAction, title: soundRowTitle, live: soundLine, label: soundButton, action: soundPick},
 		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
 			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
 			{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
