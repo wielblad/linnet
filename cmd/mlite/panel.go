@@ -89,7 +89,7 @@ func drawHeaderBtn(d *drawItem) {
 		}
 	}
 	switch {
-	case pn.open && pn.search == search: // the panel it opened is showing
+	case pn.open && pn.search == search && d.ctlID != idApp && d.ctlID != idClose: // the panel it opened is showing
 		fill = mix(pal.accent, pal.card, 22)
 	case d.itemState&odsSelected != 0:
 		fill = mix(pal.fg, pal.card, 14)
@@ -105,6 +105,8 @@ func drawHeaderBtn(d *drawItem) {
 	switch {
 	case d.ctlID == idClose:
 		glyph = gClose
+	case d.ctlID == idApp:
+		glyph = gOpenApp
 	case search:
 		glyph = gSearch
 	}

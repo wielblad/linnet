@@ -430,6 +430,7 @@ func createMainWindow(visible bool) {
 	hFind = createWindow(0, "BUTTON", "Szukaj w rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idFind)
 	hInfo = createWindow(0, "BUTTON", "Informacje o rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idInfo)
 	hClose = createWindow(0, "BUTTON", "Zamknij panel", wsChild|wsTabStop|bsOwnerDraw, hMain, idClose)
+	hApp = createWindow(0, "BUTTON", "Otwórz w oknie programu", wsChild|wsTabStop|bsOwnerDraw, hMain, idApp)
 	hSet = createWindow(0, "MliteSettings", "Ustawienia", wsChild|wsVScroll|wsTabStop, hMain, 0)
 	initLogin()
 	sv.hwnd = hSet
@@ -438,7 +439,7 @@ func createMainWindow(visible bool) {
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
 	initPanel()
-	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo, hClose} {
+	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo, hClose, hApp} {
 		oldBtnProc = subclass(h, btnProc)
 	}
 	applyTheme()
@@ -547,14 +548,14 @@ func layout() {
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
 	if dlg.hwnd != 0 && dlg.host == hMain { // a question covers everything; the window as it was is drawn dimmed behind it
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet, pn.hwnd, lg.hwnd} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet, pn.hwnd, lg.hwnd} {
 			show(c, false)
 		}
 		moveTo(dlg.hwnd, rect{0, 0, w, h})
 		return
 	}
 	if lg.active { // the sign-in screen covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
 		moveTo(lg.hwnd, rect{0, 0, w, h})
@@ -564,7 +565,7 @@ func layout() {
 	}
 	show(lg.hwnd, false)
 	if vw.hwnd != 0 && vw.host == hMain { // a picture shown large covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
 		moveTo(vw.hwnd, rect{0, 0, w, h})
@@ -713,6 +714,7 @@ func layout() {
 	moveTo(hFind, lay.hbSearch)
 	moveTo(hInfo, lay.hbInfo)
 	moveTo(hClose, lay.hbInfo)
+	moveTo(hApp, lay.hbSearch)
 	moveTo(hSet, rect{railW, 0, w, h - barH})
 	switch {
 	case pn.side:
@@ -733,6 +735,8 @@ func layout() {
 	show(hFind, showContent && hasSel && !pn.cover && !compact.on)
 	show(hInfo, showContent && hasSel && !pn.cover && !compact.on)
 	show(hClose, showContent && hasSel && compact.on)
+	show(hApp, showContent && hasSel && compact.on)
+	invalidate(hApp)
 	invalidate(hFind)
 	invalidate(hInfo)
 	invalidate(hClose)
@@ -1293,8 +1297,21 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	}
 	if msg == wmNcHitTest && compact.on {
 		// The panel belongs to its head: it is moved by the head and by nothing else, so
-		// every point of it is content — no title bar to drag, no edges to pull.
-		return htClient
+		// there is no title bar to drag. The edges away from the head change its size.
+		if vw.hwnd != 0 || dlg.hwnd != 0 {
+			return htClient
+		}
+		return edgeHit(hwnd, lp, mainSide(), true, false)
+	}
+	if msg == wmExitSizeMove && compact.on { // the size the panel was dragged to is kept
+		panelSized(hwnd)
+		if h := heads[compact.forID]; h != nil {
+			panelFollow(h)
+		}
+		return 0
+	}
+	if msg == wmWindowPosChanged { // shown, hidden, moved, brought forward: the heads keep off the window
+		headsZ()
 	}
 	if compact.on {
 		// The panel has no frame of its own. Whatever happens to the styles, the system
@@ -1342,7 +1359,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			drawSend(d)
 		case d.ctlID == idAttach:
 			drawAttach(d)
-		case d.ctlID == idFind || d.ctlID == idInfo || d.ctlID == idClose:
+		case d.ctlID == idFind || d.ctlID == idInfo || d.ctlID == idClose || d.ctlID == idApp:
 			drawHeaderBtn(d)
 		case d.ctlID == idList:
 			drawRow(d)
@@ -1355,7 +1372,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmCtlColorLB:
 		return brMica
 	case 0x0135: // WM_CTLCOLORBTN: what a button is erased with before it is drawn
-		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo || lp == hClose {
+		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo || lp == hClose || lp == hApp {
 			return brCard
 		}
 		return brMica
@@ -1378,6 +1395,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			showPanel(id == idFind)
 		case id == idClose && code == 0:
 			hideOverlay()
+		case id == idApp && code == 0:
+			openInApp(selectedID, "")
 		case id == idAttach && code == 0:
 			pickFile()
 		case id == idSend && code == 0:
@@ -1408,6 +1427,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			headPhase++
 			headsSync(false)
 			headDotsTimer()
+		case timerHeadsZ:
+			headsZ()
 		case timerOpen:
 			pKillTimer.Call(hMain, timerOpen)
 			if t, ok := threadByID(selectedID); ok {

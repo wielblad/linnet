@@ -3,8 +3,9 @@
 package main
 
 // Extra conversations open beside the heads. "Kolumny" and "Dok" show several conversations
-// at once: the first is the panel of the overlay itself and each further one is a pane of
-// its own, a window with a header, a view of the conversation and a field to write in.
+// at once, each in a pane of its own: a window with a header, a view of the conversation
+// and a field to write in. The panes of the heads of one group stand in one row beside the
+// group; a head on its own has a row of its own.
 //
 // A pane does what the panel does with a conversation. The code is the same code: the view,
 // what the field is for (a reply, an edit, a file), the menu and the reactions of a message,
@@ -25,8 +26,6 @@ import (
 const (
 	headModeCols = "cols"
 	headModeDock = "dock"
-
-	maxPanes = 2 // beside the panel of the overlay: three conversations in all
 )
 
 type pane struct {
@@ -43,7 +42,10 @@ type pane struct {
 	closeR, minR      rect
 	sendR, fieldR     rect
 	attachR, barR     rect
-	hot               int // which of its buttons is under the pointer
+	appR              rect  // the button to the ordinary window of the program
+	side              int32 // where its row stands: 1 to the right of the heads, -1 to the left
+	last              bool  // the one furthest from the heads: its outer edge changes the size
+	hot               int   // which of its buttons is under the pointer
 	active            bool
 }
 
@@ -54,6 +56,7 @@ const (
 	pbtAttach
 	pbtSend
 	pbtBarClose
+	pbtApp
 )
 
 var (
@@ -155,14 +158,8 @@ func paneOpen(id int64) {
 	if !ok {
 		return
 	}
-	if len(panes) >= maxPanes {
-		oldest := panes[0]
-		for _, p := range panes {
-			if p.used < oldest.used {
-				oldest = p
-			}
-		}
-		paneClose(oldest)
+	for len(panes) >= paneLimit() {
+		paneClose(paneOldest())
 	}
 	p := &pane{id: id, thread: t, bank: &viewBank{}, lines: 1, empty: true}
 	p.bank.pane = p
@@ -194,6 +191,17 @@ func paneOpen(id int64) {
 	be.openThread(t, true)
 	paneFront(p)
 	headsSync(false)
+}
+
+// paneOldest is the pane that has gone unused the longest.
+func paneOldest() *pane {
+	oldest := panes[0]
+	for _, p := range panes {
+		if p.used < oldest.used {
+			oldest = p
+		}
+	}
+	return oldest
 }
 
 // paneInputProc draws the hint that fields of several lines do not offer themselves, the
@@ -377,58 +385,108 @@ func paneShown(id int64) bool {
 	return fg == p.hwnd
 }
 
-// panesPlace puts the panes in their places: after the panel of the overlay when it is up,
-// each one further from the head than the one before.
+// panesPlace puts the panes in their places: a row for every group of heads, and for every
+// head on its own, each pane further from the heads than the one before. A row stands on
+// the side of its heads that has room and stays there while the heads are dragged.
 func panesPlace() {
 	if len(panes) == 0 {
+		for k := range rowSide {
+			delete(rowSide, k)
+		}
 		return
 	}
-	mainUp := false
-	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && vis != 0 {
-		mainUp = true
-	}
-	h := heads[compact.forID] // where the row began, also once the panel is put away
-	if h == nil {
-		for _, p := range panes {
-			if heads[p.id] != nil {
-				h = heads[p.id]
-				break
-			}
-		}
-	}
-	var hr, work rect
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
-	if h != nil {
-		pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
-	} else { // no head to stand by: the lower right corner of the screen
-		hr = rect{work.right - headSize() - dp(16), work.bottom - headSize() - dp(120), work.right - dp(16), work.bottom - dp(120)}
-	}
-	x, y, w, ht := panelPlaceAt(hr)
-	dir, gap := int32(-1), int32(0)
-	if x > hr.left {
-		dir = 1
-	}
-	if cfg.HeadMode == headModeDock {
+	work := workArea()
+	w, ht := panelSize()
+	dock := cfg.HeadMode == headModeDock
+	gap := int32(0)
+	if dock {
 		gap = dp(8)
 	}
-	slot := int32(0)
-	if mainUp {
-		slot = 1
-	}
+	rows, order := map[int64][]*pane{}, []int64{}
 	for _, p := range panes {
-		px, py, ph := x+dir*slot*(w+gap), y, ht
-		if px+w > work.right-dp(4) {
-			px = work.right - dp(4) - w
+		k := entityKey(p.id)
+		if rows[k] == nil {
+			order = append(order, k)
 		}
-		if px < work.left+dp(4) {
-			px = work.left + dp(4)
+		rows[k] = append(rows[k], p)
+	}
+	for k := range rowSide {
+		if rows[k] == nil {
+			delete(rowSide, k)
 		}
-		if p.min {
-			ph = paneHeaderH()
-			py = y + ht - ph
+	}
+	var placed []rect // the panes of rows placed so far: no row stands on another
+	for _, k := range order {
+		row := rows[k]
+		er, ok := entityRect(row[0].id)
+		if !ok { // its head was unpinned: the lower right corner of the screen
+			er = rect{work.right - headSize() - dp(16), work.bottom - headSize() - dp(120), work.right - dp(16), work.bottom - dp(120)}
 		}
-		pSetWindowPos.Call(p.hwnd, 0, uintptr(px), uintptr(py), uintptr(w), uintptr(ph), swpNoZOrder|swpNoActivate)
-		slot++
+		need := int32(len(row))*(w+gap) - gap
+		roomR, roomL := work.right-dp(4)-(er.right+dp(10)), er.left-dp(10)-(work.left+dp(4))
+		side := rowSide[k]
+		if side == 0 {
+			side = -1
+			if roomR > roomL {
+				side = 1
+			}
+		}
+		switch { // no room on that side any more, and room on the other
+		case side > 0 && roomR < need && roomL >= need:
+			side = -1
+		case side < 0 && roomL < need && roomR >= need:
+			side = 1
+		}
+		rowSide[k] = side
+		y := er.top - dp(120)
+		if dock {
+			y = work.bottom - dp(8) - ht
+		}
+		if y+ht > work.bottom-dp(8) {
+			y = work.bottom - dp(8) - ht
+		}
+		if y < work.top+dp(8) {
+			y = work.top + dp(8)
+		}
+		for i, p := range row {
+			px := er.right + dp(10) + int32(i)*(w+gap)
+			if side < 0 {
+				px = er.left - dp(10) - w - int32(i)*(w+gap)
+			}
+			// Heads that are not tied together still stand close to each other: a pane that
+			// would land on the pane of another row goes further out, past it.
+			for try := 0; try < 8; try++ {
+				hit := false
+				for _, q := range placed {
+					if px < q.right && px+w > q.left && y < q.bottom && y+ht > q.top {
+						hit = true
+						y = q.top // and stands level with it: one line of windows, not stairs
+						if side > 0 {
+							px = q.right + gap
+						} else {
+							px = q.left - gap - w
+						}
+					}
+				}
+				if !hit {
+					break
+				}
+			}
+			if px+w > work.right-dp(4) {
+				px = work.right - dp(4) - w
+			}
+			if px < work.left+dp(4) {
+				px = work.left + dp(4)
+			}
+			placed = append(placed, rect{px, y, px + w, y + ht})
+			py, ph := y, ht
+			if p.min {
+				ph = paneHeaderH()
+				py = y + ht - ph
+			}
+			p.side, p.last = side, i == len(row)-1
+			pSetWindowPos.Call(p.hwnd, 0, uintptr(px), uintptr(py), uintptr(w), uintptr(ph), swpNoZOrder|swpNoActivate)
+		}
 	}
 }
 
@@ -463,6 +521,11 @@ func paneLayout(p *pane) {
 	if cfg.HeadMode == headModeDock {
 		p.minR = rect{p.closeR.left - dp(4) - dp(36), p.closeR.top, p.closeR.left - dp(4), p.closeR.bottom}
 	}
+	next := p.closeR
+	if p.minR.right > p.minR.left {
+		next = p.minR
+	}
+	p.appR = rect{next.left - dp(4) - dp(36), next.top, next.left - dp(4), next.bottom}
 	if cover := paneCovered(p); cover != 0 && !p.min {
 		show(p.view, false)
 		show(p.input, false)
@@ -531,6 +594,8 @@ func panePaint(p *pane, target uintptr) {
 		hotBack(p.closeR)
 	case pbtMin:
 		hotBack(p.minR)
+	case pbtApp:
+		hotBack(p.appR)
 	}
 	if body {
 		c.fill(rect{0, p.h - p.compH, p.w, p.h}, pal.card)
@@ -577,6 +642,8 @@ func panePaint(p *pane, target uintptr) {
 	}
 	c.font(fnt.icon)
 	c.text(gClose, p.closeR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	c.text(gOpenApp, p.appR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	right = p.appR.left - dp(8)
 	sub := ""
 	switch {
 	case isGroup(t):
@@ -637,6 +704,8 @@ func paneHit(p *pane, x, y int32) int {
 		return pbtClose
 	case in(p.minR):
 		return pbtMin
+	case in(p.appR):
+		return pbtApp
 	case !paneOpenBody(p):
 		return pbtNone
 	case in(p.attachR):
@@ -664,7 +733,22 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			return 0 // the whole pane is its content; the frame stays only for its edge
 		}
 	case wmNcHitTest:
-		return htClient
+		// A pane belongs to its head and is moved by the head alone. Its size is another
+		// matter: the edges away from the heads can be pulled.
+		if p.min || paneCovered(p) != 0 {
+			return htClient
+		}
+		return edgeHit(hwnd, lp, p.side, p.last, cfg.HeadMode == headModeDock)
+	case wmGetMinMaxInfo:
+		if !p.min {
+			mm := (*minMaxInfo)(unsafe.Pointer(lp))
+			mm.minTrack = point{dp(300), dp(360)}
+		}
+		return 0
+	case wmExitSizeMove: // the size it was dragged to is the size of them all from now on
+		panelSized(hwnd)
+		panesPlace()
+		return 0
 	case wmNcPaint:
 		return 0
 	case wmNcActivate:
@@ -725,6 +809,12 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			panesPlace()
 		case p.min && y < paneHeaderH(): // the folded pane opens again from its header
 			paneFront(p)
+		case hit == pbtApp:
+			openInApp(p.id, getText(p.input))
+		case hit == pbtNone && y < paneHeaderH(): // twice on the header: as tall as the screen, and back
+			if headerClick(hwnd) {
+				panesPlace()
+			}
 		case hit == pbtAttach:
 			pickFile()
 		case hit == pbtSend:

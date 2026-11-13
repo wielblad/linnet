@@ -55,7 +55,10 @@ func pickHeadMode() {
 		headTabs.ids, headTabs.drafts = nil, nil
 	}
 	saveConfig()
-	panesCloseAll() // each way has its own windows; the panel stays and takes its new shape
+	panesCloseAll()                // each way has its own windows; the panel stays and takes its new shape
+	if multiMode() && compact.on { // Kolumny and Dok have no panel: back to the ordinary window
+		showMain()
+	}
 	overlayRound()
 	if h := heads[compact.forID]; h != nil {
 		panelFollow(h)

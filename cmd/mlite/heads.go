@@ -49,19 +49,21 @@ const (
 )
 
 type headCfg struct {
-	ID int64 `json:"id"`
-	X  int32 `json:"x"`
-	Y  int32 `json:"y"`
+	Group int   `json:"group,omitempty"` // the group the head is tied into, 0 for none
+	ID    int64 `json:"id"`
+	X     int32 `json:"x"`
+	Y     int32 `json:"y"`
 }
 
 type head struct {
-	id               int64
-	hwnd, peek       uintptr
-	key              uint64
-	unread           int
-	down, dragging   bool
-	startX, startY   int32 // pointer when the button went down
-	originX, originY int32 // window position at that moment
+	target, under, hidden, shift bool // would be tied to; behind the program's window; inside a folded group; Shift was down
+	id                           int64
+	hwnd, peek                   uintptr
+	key                          uint64
+	unread                       int
+	down, dragging               bool
+	startX, startY               int32 // pointer when the button went down
+	originX, originY             int32 // window position at that moment
 }
 
 type bitmapInfoHeader struct {
@@ -80,7 +82,7 @@ var (
 	unreadBy  = map[int64]int{}
 )
 
-func headSize() int32 { return dp(64) }
+func headSize() int32 { return dp(headPx()) }
 
 func isPinned(id int64) bool {
 	for _, h := range cfg.Heads {
@@ -111,8 +113,10 @@ func unpinHead(id int64) {
 			break
 		}
 	}
+	groupsLayout()
 	saveConfig()
 	headsSync(false)
+	headsApply()
 }
 
 // layer puts a drawing with transparency on a layered window.
@@ -164,22 +168,32 @@ func (g gfx) ellipseA(x, y, w, h int32, argb uint32) {
 
 // paintHead draws one head: soft shadow, picture or initials, unread badge, and in the
 // lower corner what the other person is doing: writing, or having read what was sent.
-func paintHead(g gfx, id int64, title string, unread, mark, phase int) {
+func paintHead(g gfx, id int64, title string, unread, mark, phase int, stack, target bool) {
 	s := headSize()
-	d := dp(52)
-	ax, ay := (s-d)/2, s-d-dp(4)
+	d := hs(52)
+	ax, ay := (s-d)/2, s-d-hs(4)
+	if stack { // a folded group: the heads behind this one show at its edge
+		g.ellipseA(ax+hs(5), ay-hs(3), d, d, 0xFF303E58)
+		g.ellipseA(ax+hs(3), ay-hs(1), d, d, 0xFF46587A)
+	}
+	if target { // the dragged head would be tied to this one
+		g.ellipseA(ax-hs(3), ay-hs(3), d+2*hs(3), d+2*hs(3), 0xFF76ADFF)
+	}
 	g.ellipseA(ax-1, ay+dp(1), d+2, d+dp(3), 0x30000000)
 	g.ellipseA(ax, ay+dp(1), d, d+dp(1), 0x40000000)
 	if !g.avatar(id, ax, ay, d) {
-		g.label(initials(title), ax, ay, d, d, dp(19), true, pal.fg)
+		g.label(initials(title), ax, ay, d, d, hs(19), true, pal.fg)
 	}
 	if unread > 0 {
 		text := countLabel(unread)
-		bh := dp(22)
-		bw := bh + int32(len(text)-1)*dp(7)
+		bh, px := hs(22), hs(13)
+		if bh < dp(18) { // the count stays readable on a small head
+			bh, px = dp(18), dp(11)
+		}
+		bw := bh + int32(len(text)-1)*bh*7/22
 		bx := s - bw - dp(1)
 		g.pill(bx, dp(2), bw, bh, headBadge)
-		g.label(text, bx, dp(1), bw, bh, dp(13), true, 0xFFFFFF)
+		g.label(text, bx, dp(1), bw, bh, px, true, 0xFFFFFF)
 	}
 	paintHeadMark(g, mark, phase)
 }
@@ -201,18 +215,24 @@ func paintHeadMark(g gfx, mark, phase int) {
 	if mark == markNone {
 		return
 	}
-	s, d := headSize(), dp(22)
+	s, d := headSize(), hs(22)
+	if d < dp(18) {
+		d = dp(18)
+	}
 	x, y := s-d-dp(1), s-d-dp(1)
 	cx, cy := x+d/2, y+d/2
 	if mark == markTyping {
 		g.ellipse(x, y, d, d, headTyping)
-		r := dp(2)
+		r := d * 2 / 22
+		if r < 1 {
+			r = 1
+		}
 		for k := int32(0); k < 3; k++ {
 			alpha := uint32(0x66)
 			if int32(phase%3) == k {
 				alpha = 0xFF
 			}
-			g.ellipseA(cx+(k-1)*dp(5)-r, cy-r, 2*r, 2*r, alpha<<24|0xFFFFFF)
+			g.ellipseA(cx+(k-1)*d*5/22-r, cy-r, 2*r, 2*r, alpha<<24|0xFFFFFF)
 		}
 		return
 	}
@@ -332,6 +352,7 @@ func headSeenBy(id int64) bool {
 // headsSync creates, removes and redraws the heads so they match the pinned list and the unread counts.
 // announce allows the short look at a new message.
 func headsSync(announce bool) {
+	groupsLayout() // the heads of a group follow its first one, whatever was read from the settings
 	want := map[int64]bool{}
 	for _, hc := range cfg.Heads {
 		want[hc.ID] = true
@@ -351,18 +372,35 @@ func headsSync(announce bool) {
 			title = threadTitle(t)
 		}
 		unread := unreadBy[hc.ID]
+		hidden, stack := headHidden(hc.ID), false
+		if g := groupOf(hc.ID); g != nil && g.Fold && !hidden { // the one head a folded group shows counts for all
+			stack, unread = true, 0
+			for _, m := range groupMembers(g.ID) {
+				unread += unreadBy[m]
+			}
+		}
+		if hidden != h.hidden {
+			h.hidden, h.key = hidden, 0
+			if hidden {
+				pShowWindow.Call(h.hwnd, swHide)
+			}
+		}
 		mark, phase := headMark(hc.ID), 0
 		if mark == markTyping {
 			phase = headPhase
 		}
 		sum := fnv.New64a()
-		fmt.Fprintf(sum, "%s|%d|%v|%06x|%d|%v|%d|%d", title, unread, avatarImage(hc.ID, dp(52)) != 0, pal.accent, dpi, pal.dark, mark, phase)
-		if key := sum.Sum64(); key != h.key {
+		fmt.Fprintf(sum, "%s|%d|%v|%06x|%d|%v|%d|%d|%v|%v|%d", title, unread, avatarImage(hc.ID, hs(52)) != 0, pal.accent, dpi, pal.dark, mark, phase, stack, h.target, headPx())
+		if key := sum.Sum64(); key != h.key && !hidden {
 			h.key = key
-			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread, mark, phase) })
+			target := h.target
+			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread, mark, phase, stack, target) })
 			pShowWindow.Call(h.hwnd, swShowNA)
 		}
-		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
+		if hidden { // its own count, so that a new message of its own is noticed
+			unread = unreadBy[hc.ID]
+		}
+		if announce && known && unread > h.unread && !h.under && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
 			showPeek(h, title, oneLine(previewText(t.LastPreview), 260), firstURL(t.LastPreview))
 		}
 		if unread == 0 {
@@ -406,10 +444,8 @@ func showPeek(h *head, title, text, link string) {
 	p := &peekData{title: title, text: emojify(text), link: link}
 	p.measure()
 	w, ht := p.w, p.h
+	// The bubble takes clicks: one on it opens the conversation beside its head.
 	ex := uint32(wsExLayered | wsExTopmost | wsExToolWindow | wsExNoActivate)
-	if link == "" {
-		ex |= wsExTransparent // nothing to press: clicks go through to what is underneath
-	}
 	h.peek = createWindow(ex, "MlitePeek", "Nowa wiadomość", wsPopup, 0, 0)
 	if h.peek == 0 {
 		return
@@ -419,7 +455,13 @@ func showPeek(h *head, title, text, link string) {
 	pSetWindowRgn.Call(h.peek, rgn, 0)
 	peeks[h.peek] = p
 	var r, work rect
-	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
+	anchor := h.hwnd
+	if g := groupOf(h.id); g != nil && headHidden(h.id) { // inside a folded group: beside the head that shows
+		if first := heads[groupMembers(g.ID)[0]]; first != nil {
+			anchor = first.hwnd
+		}
+	}
+	pGetWindowRect.Call(anchor, uintptr(unsafe.Pointer(&r)))
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
 	x := r.left - w - dp(8)
 	if (r.left+r.right)/2 < (work.left+work.right)/2 {
@@ -458,37 +500,37 @@ var compact struct {
 	side    int32 // which side of the head the panel took when it opened: -1 left, 1 right
 }
 
-// panelPlace is where the panel of the overlay belongs beside a head: on the side of the
-// head that has room, and on the screen the head is on.
+// panelPlace is where the panel of the overlay belongs beside a head: beside the whole
+// group the head is in, on the side that has room, and level with the head itself.
 func panelPlace(h *head) (x, y, w, ht int32) {
 	var hr rect
-	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
-	return panelPlaceAt(hr)
-}
-
-// panelPlaceAt is the same for a head that is about to be at that place: while it is
-// dragged, both windows are moved together and the old place is of no use.
-func panelPlaceAt(hr rect) (x, y, w, ht int32) {
-	w, ht = dp(380), dp(580)
-	dock := cfg.HeadMode == headModeDock
-	if dock { // a row of smaller panes along the bottom of the screen
-		w, ht = dp(340), dp(470)
+	if hc := headCfgOf(h.id); hc != nil {
+		hr = rect{hc.X, hc.Y, hc.X + headSize(), hc.Y + headSize()}
+	} else {
+		pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
 	}
-	var work rect
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	er, ok := entityRect(h.id)
+	if !ok {
+		er = hr
+	}
+	if headHidden(h.id) {
+		hr = er
+	}
+	w, ht = panelSize()
+	work := workArea()
 	// The side is settled when the panel opens and kept while it is open: a panel that
 	// jumped from one side of the head to the other mid-drag looked like a fault.
 	if compact.side == 0 {
 		compact.side = -1
-		if (hr.left+hr.right)/2 < (work.left+work.right)/2 {
+		if (er.left+er.right)/2 < (work.left+work.right)/2 {
 			compact.side = 1
 		}
 	}
 	place := func(side int32) int32 {
 		if side > 0 {
-			return hr.right + dp(10)
+			return er.right + dp(10)
 		}
-		return hr.left - w - dp(10)
+		return er.left - w - dp(10)
 	}
 	x = place(compact.side)
 	if x+w > work.right-dp(4) || x < work.left+dp(4) { // no room on that side any more
@@ -503,9 +545,6 @@ func panelPlaceAt(hr rect) (x, y, w, ht int32) {
 		x = work.left + dp(4)
 	}
 	y = hr.top - dp(120)
-	if dock {
-		y = work.bottom - dp(8) - ht
-	}
 	if y+ht > work.bottom-dp(8) {
 		y = work.bottom - dp(8) - ht
 	}
@@ -548,39 +587,6 @@ func panelFollow(h *head) {
 	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), swpNoZOrder|swpNoActivate)
 }
 
-// moveWithPanel carries the head to a new place, and its open panel with it. Both windows
-// are moved in one go: moved one after the other they lag behind each other, and the
-// picture of the panel is torn while it travels.
-func moveWithPanel(h *head, x, y int32) {
-	open := compact.on && compact.forID == h.id
-	if open {
-		if vis, _, _ := pIsWindowVisible.Call(hMain); vis == 0 {
-			open = false
-		}
-	}
-	if !open {
-		pSetWindowPos.Call(h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
-		return
-	}
-	var hr rect
-	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
-	hr = rect{x, y, x + (hr.right - hr.left), y + (hr.bottom - hr.top)}
-	px, py, pw, ph := panelPlaceAt(hr)
-	batch, _, _ := pBeginDeferWindowPos.Call(2)
-	if batch == 0 { // no room for a batch: one after the other, as before
-		pSetWindowPos.Call(h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
-		pSetWindowPos.Call(hMain, 0, uintptr(px), uintptr(py), uintptr(pw), uintptr(ph), swpNoZOrder|swpNoActivate)
-		return
-	}
-	batch, _, _ = pDeferWindowPos.Call(batch, h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
-	if batch != 0 {
-		batch, _, _ = pDeferWindowPos.Call(batch, hMain, 0, uintptr(px), uintptr(py), uintptr(pw), uintptr(ph), swpNoZOrder|swpNoActivate)
-	}
-	if batch != 0 {
-		pEndDeferWindowPos.Call(batch)
-	}
-}
-
 // openHead shows the conversation in a small window beside the head; a second click puts it away.
 func openHead(h *head) {
 	t, ok := threadByID(h.id)
@@ -591,9 +597,8 @@ func openHead(h *head) {
 	hidePeek(h)
 	vis, _, _ := pIsWindowVisible.Call(hMain)
 	if multiMode() {
-		// Several conversations at once. The head of one that is open puts it away, as the
-		// head of the panel does; a folded one is opened again. While the panel is up, the
-		// head of another conversation opens it beside the panel.
+		// Kolumny and Dok: every conversation is a window of its own, in the row of the
+		// group its head is in. The head of an open one puts it away, a folded one opens again.
 		if p := paneFor(h.id); p != nil {
 			if p.min {
 				paneFront(p)
@@ -603,11 +608,8 @@ func openHead(h *head) {
 			}
 			return
 		}
-		if compact.on && vis != 0 && compact.forID != h.id {
-			paneOpen(h.id)
-			return
-		}
-		defer panesPlace()
+		paneOpen(h.id)
+		return
 	}
 	if tabsMode() && compact.on && vis != 0 {
 		// The panel is up: the head adds its conversation as a tab, or goes to it. The panel
@@ -660,7 +662,7 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		var r rect
 		pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
 		pGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
-		h.down, h.dragging = true, false
+		h.down, h.dragging, h.shift = true, false, keyDown(vkShift)
 		h.startX, h.startY, h.originX, h.originY = pt.x, pt.y, r.left, r.top
 		pSetCapture.Call(hwnd)
 		return 0
@@ -674,10 +676,31 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if !h.dragging && (dx > dp(4) || dx < -dp(4) || dy > dp(4) || dy < -dp(4)) {
 			h.dragging = true
 			hidePeek(h)
+			if h.shift && groupOf(h.id) != nil { // Shift takes this one head out of its group
+				groupLeave(h.id)
+				headsRedraw()
+			}
+			if hc := headCfgOf(h.id); hc != nil {
+				h.originX, h.originY = hc.X, hc.Y
+			}
 		}
 		if h.dragging {
-			moveWithPanel(h, h.originX+dx, h.originY+dy) // the panel is anchored to the head
-			panesPlace()
+			// The head moves with its group, and what stands beside them moves along.
+			entityMove(h.id, h.originX+dx, h.originY+dy)
+			to := int64(0)
+			if groupOf(h.id) == nil {
+				to = nearestHead(h.id)
+			}
+			changed := false
+			for id, o := range heads {
+				if t := id == to; o.target != t {
+					o.target, changed = t, true
+				}
+			}
+			headsApply()
+			if changed {
+				headsSync(false)
+			}
 		}
 		return 0
 	case wmLButtonUp:
@@ -686,34 +709,23 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		h.down = false
 		pReleaseCapture.Call()
-		if h.dragging {
-			var r rect
-			pGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
-			for i := range cfg.Heads {
-				if cfg.Heads[i].ID == h.id {
-					cfg.Heads[i].X, cfg.Heads[i].Y = r.left, r.top
-				}
-			}
+		switch g := groupOf(h.id); {
+		case h.dragging:
+			headDragged(h)
+		case g != nil && g.Fold: // a folded group opens out
+			g.Fold = false
+			groupsLayout()
+			entitySettle(h.id)
 			saveConfig()
-		} else {
+			headsRedraw()
+			headsApply()
+			headsZ()
+		default:
 			openHead(h)
 		}
 		return 0
 	case wmRButtonUp:
-		menu, _, _ := pCreatePopupMenu.Call()
-		pAppendMenuW.Call(menu, mfString, idHeadOpen, uintptr(unsafe.Pointer(u16("Otwórz rozmowę"))))
-		pAppendMenuW.Call(menu, mfString, idHeadUnpin, uintptr(unsafe.Pointer(u16("Odepnij główkę"))))
-		var pt point
-		pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
-		pSetForegroundWindow.Call(hMain)
-		cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, hMain, 0)
-		pDestroyMenu.Call(menu)
-		switch cmd {
-		case idHeadOpen:
-			openHead(h)
-		case idHeadUnpin:
-			unpinHead(h.id)
-		}
+		headMenu(h)
 		return 0
 	case wmTimer:
 		pKillTimer.Call(hwnd, wp)
@@ -757,16 +769,32 @@ func peekProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmSetCursor:
-		if p := peeks[hwnd]; p != nil && p.hot {
+		if p := peeks[hwnd]; p != nil && lp&0xFFFF == 1 { // all of it can be pressed
 			cur, _, _ := pLoadCursorW.Call(0, idcHand)
 			pSetCursor.Call(cur)
 			return 1
 		}
 	case wmLButtonUp:
-		if p := peeks[hwnd]; p != nil && p.link != "" {
+		if p := peeks[hwnd]; p != nil {
 			x, y := lpPoint(lp)
-			if r := p.linkRect(); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+			if r := p.linkRect(); p.link != "" && x >= r.left && x < r.right && y >= r.top && y < r.bottom {
 				peekOpen(hwnd)
+				return 0
+			}
+			for _, h := range heads { // anywhere else: the conversation opens beside its head
+				if h.peek != hwnd {
+					continue
+				}
+				hidePeek(h)
+				if g := groupOf(h.id); g != nil && g.Fold {
+					g.Fold = false
+					groupsLayout()
+					saveConfig()
+					headsRedraw()
+					headsApply()
+				}
+				openHeadFor(h)
+				break
 			}
 		}
 		return 0
@@ -814,7 +842,7 @@ func dumpHeads(dir string) {
 		if bmp == 0 {
 			continue
 		}
-		paintHead(g, hc.ID, threadTitle(t), unreadBy[hc.ID], headMark(hc.ID), 0)
+		paintHead(g, hc.ID, threadTitle(t), unreadBy[hc.ID], headMark(hc.ID), 0, false, false)
 		g.free()
 		name := filepath.Join(dir, fmt.Sprintf("head-%d.png", hc.ID))
 		pGdipSaveImageToFile.Call(bmp, uintptr(unsafe.Pointer(u16(name))), uintptr(unsafe.Pointer(&png)), 0)

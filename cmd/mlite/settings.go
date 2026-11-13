@@ -39,6 +39,18 @@ type config struct {
 	Theme string `json:"theme"`
 	// HeadMode is how conversations opened from heads are shown: "" one at a time, "tabs".
 	HeadMode string `json:"head_mode"`
+	// HeadSize is the size of the heads at 100%: 48, 64 or 80; 0 means 64.
+	HeadSize int `json:"head_size,omitempty"`
+	// HeadPanes is how many conversations Kolumny and Dok keep open at once: 3 or 4; 0 means 3.
+	HeadPanes int `json:"head_panes,omitempty"`
+	// Groups are the groups heads are tied into; a head names its group in its own entry.
+	Groups []groupCfg `json:"groups,omitempty"`
+	// The size the windows of conversations beside the heads were dragged to, at 100%; the
+	// dock keeps its own. 0 means the size they have always had.
+	PanelW int32 `json:"panel_w,omitempty"`
+	PanelH int32 `json:"panel_h,omitempty"`
+	DockW  int32 `json:"dock_w,omitempty"`
+	DockH  int32 `json:"dock_h,omitempty"`
 }
 
 var (
@@ -136,7 +148,10 @@ func buildSettings() {
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},
 		{kind: srAction, title: "Rozmowy przy główkach", desc: "Jedna naraz: kolejna główka podmienia rozmowę. Zakładki: rozmowy na pasku u góry panelu. Kolumny: do trzech rozmów obok siebie. Dok: do trzech mniejszych okien u dołu ekranu.",
 			label: headModeLabel, action: pickHeadMode, whole: true},
-		{kind: srInfo, title: "Rozmowę przypniesz jako główkę prawym przyciskiem na liście rozmów."},
+		{kind: srAction, title: "Rozmiar główek", label: headSizeLabel, action: pickHeadSize, whole: true},
+		{kind: srAction, title: "Rozmów naraz", desc: "Ile rozmów trzymają otwartych Kolumny i Dok. Kolejna zamyka tę najdawniej używaną.",
+			label: headPanesLabel, action: pickHeadPanes, whole: true},
+		{kind: srInfo, title: "Rozmowę przypniesz jako główkę prawym przyciskiem na liście rozmów. Główkę upuszczoną przy innej główce program z nią spina; Shift przy przeciąganiu ją wyjmuje."},
 		{kind: srHeader, title: "Uruchamianie i tło"},
 		{kind: srToggle, title: "Uruchamiaj razem z Windows", get: autostartOn, set: setAutostart},
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",
