@@ -37,6 +37,8 @@ type config struct {
 	Tone string `json:"tone"`
 	// Theme is "" to follow Windows, "light" or "dark".
 	Theme string `json:"theme"`
+	// HeadMode is how conversations opened from heads are shown: "" one at a time, "tabs".
+	HeadMode string `json:"head_mode"`
 }
 
 var (
@@ -132,6 +134,8 @@ func buildSettings() {
 		{kind: srHeader, title: "Główki rozmów"},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},
+		{kind: srAction, title: "Rozmowy przy główkach", desc: "Jedna naraz: kolejna główka podmienia rozmowę. Zakładki: otwarte rozmowy zostają na pasku u góry panelu.",
+			label: headModeLabel, action: pickHeadMode, whole: true},
 		{kind: srInfo, title: "Rozmowę przypniesz jako główkę prawym przyciskiem na liście rozmów."},
 		{kind: srHeader, title: "Uruchamianie i tło"},
 		{kind: srToggle, title: "Uruchamiaj razem z Windows", get: autostartOn, set: setAutostart},

@@ -113,6 +113,7 @@ var (
 		stripClick                                              bool // the bar leads to the settings
 		top                                                     int32 // what the band about a new version takes from the top
 		band, bandGo, bandX                                     rect
+		tabs                                                    rect // the strip of tabs in the panel of a head
 	}
 )
 
@@ -298,11 +299,22 @@ func handleKey(m *msgT) bool {
 	case m.hwnd == hInput && m.wParam == vkEscape && compose.mode != cmNone:
 		cancelCompose()
 		return true
+	case compact.on && m.wParam == vkEscape && dlg.hwnd == 0 && vw.hwnd == 0 && !pn.open:
+		if tabsShown() && len(headTabs.ids) > 1 {
+			tabClose(selectedID)
+		} else {
+			hideOverlay()
+		}
+		return true
+	case compact.on && ctrl && m.wParam == 0x09 && tabsShown(): // Ctrl+Tab: the next tab, with Shift the one before
+		step := 1
+		if keyDown(vkShift) {
+			step = -1
+		}
+		tabNext(step)
+		return true
 	case lay.chat && m.wParam == vkEscape && (m.hwnd == hInput || m.hwnd == hView):
 		goBack()
-		return true
-	case compact.on && m.wParam == vkEscape: // from the list of the panel: put the overlay away
-		closeWindow()
 		return true
 	case m.hwnd == hSearch && m.wParam == vkEscape:
 		if query != "" {
@@ -575,6 +587,11 @@ func layout() {
 		lay.top = dp(38)
 		lay.band = rect{0, 0, w, lay.top}
 	}
+	lay.tabs = rect{}
+	if tabsShown() { // the conversations opened from heads, as tabs along the top of the panel
+		lay.tabs = rect{0, lay.top, w, lay.top + dp(36)}
+		lay.top += dp(36)
+	}
 	lay.rail = rect{0, lay.top, railW, h}
 	lay.pane = rect{paneLeft, lay.top, paneLeft + paneW, h - barH}
 	lay.content = rect{paneLeft + paneW, lay.top, w, h}
@@ -731,6 +748,7 @@ func paintMain(target uintptr) {
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, lay.w, lay.h}, pal.mica)
 	paintBand(c, buf.hdc)
+	paintTabs(c, buf.hdc)
 	settings := nav == navSettings
 	showPane := !settings && !lay.chat
 	showContent := !settings && (!lay.narrow || lay.chat)
@@ -1423,6 +1441,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		x, y := int32(int16(lp)), int32(int16(lp>>16))
 		if onBand(x, y) {
 			bandClick(x, y)
+		} else if tabsClick(x, y) {
 		} else if h := compose.closeHit; compose.mode != cmNone && x >= h.left && x < h.right && y >= h.top && y < h.bottom {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {

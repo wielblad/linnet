@@ -284,7 +284,7 @@ func headMark(id int64) int {
 	case "seen":
 		return markSeen
 	}
-	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && compact.forID == id && vis != 0 {
+	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && vis != 0 && (compact.forID == id || (tabsMode() && tabIndex(id) >= 0)) {
 		return markNone
 	}
 	if until, ok := typingUntil[id]; ok {
@@ -579,9 +579,25 @@ func openHead(h *head) {
 		return
 	}
 	hidePeek(h)
-	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && compact.forID == h.id && vis != 0 {
+	vis, _, _ := pIsWindowVisible.Call(hMain)
+	if tabsMode() && compact.on && vis != 0 {
+		// The panel is up: the head adds its conversation as a tab, or goes to it. The panel
+		// stays where it is; a click on the head of the conversation being read puts it away.
+		if selectedID == h.id {
+			hideOverlay()
+			return
+		}
+		tabAdd(h.id)
+		tabSwitch(h.id)
+		headsSync(false)
+		return
+	}
+	if compact.on && compact.forID == h.id && vis != 0 {
 		hideOverlay()
 		return
+	}
+	if tabsMode() {
+		tabAdd(h.id)
 	}
 	if !compact.on {
 		compact.restore = windowToRestore()
@@ -596,6 +612,10 @@ func openHead(h *head) {
 	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), 0x0004|0x0040)
 	pSetForegroundWindow.Call(hMain)
 	refresh()
+	if tabsMode() {
+		tabSwitch(h.id)
+		return
+	}
 	selectThread(t, true)
 }
 
