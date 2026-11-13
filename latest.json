@@ -1,8 +1,8 @@
 {
-  "version": "0.8",
+  "version": "0.8.1",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
   "size": 29775872,
-  "sha256": "11a22873473027790632494ba7fa1e0e3740edf46fc2a4ab62211482eefb01db",
-  "signature": "a6HB/M5fPvPmPZ1O9vK6izHqxFuNF4fHjnNvQ5lYYhRZW5SLxn9Brwzws0a/Wa/HZHFnUKNnIlbjKUlZ5C84Dg==",
-  "notes": "Główki można spinać w grupy, a każda grupa ma własny rząd okien rozmów. Rozmiar główek i okien do wyboru, zdjęcia i filmy na pełnym ekranie, wyszukiwanie w każdej rozmowie, klikalny dymek, przycisk przejścia do okna programu, powiadomienie Windows o aktualizacji i poprawione doczytywanie historii rozmów szyfrowanych."
+  "sha256": "a655af5100cebf76a9d03120c222d6c2d6fe8ba0fc93908833a63cb8feda827c",
+  "signature": "1g60LnAUaOS+nUnEZ0SN0xfr9VO+8YlIA8WyZB895rXFbMr+D+Im4PfkpQGNRIg+Vp+dct7NF4wHCsvWSNRYAA==",
+  "notes": "Program sprawdza, czy jest nowsza wersja, co 15 minut zamiast co 6 godzin. Poza tym to samo co 0.8: grupy główek z własnymi oknami rozmów, rozmiary główek i okien, zdjęcia i filmy na pełnym ekranie, wyszukiwanie w każdej rozmowie, powiadomienie Windows o aktualizacji."
 }

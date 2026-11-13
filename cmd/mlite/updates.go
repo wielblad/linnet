@@ -254,6 +254,11 @@ func updateFetch() {
 	// The installer asks this program to end; should it not, the state stays visible.
 }
 
+// updateEvery is how often the program looks for a newer release while it runs: often
+// enough that a release reaches people within minutes. The look is one small file, and a
+// release is told about once, so looking often costs nothing and repeats nothing.
+const updateEvery = 15 * time.Minute
+
 var updateToasted string // the version a notification was already shown for in this run
 
 // updateToast tells about a newer release with a Windows notification, once for a version
@@ -283,7 +288,7 @@ func updateToast(version, notes string) {
 }
 
 // updateStart looks for a newer release a short while after the program starts, and then
-// once a day while it runs.
+// every quarter of an hour while it runs.
 func updateStart() {
 	if !updatesOn() {
 		return
@@ -299,7 +304,7 @@ func updateStart() {
 			select {
 			case <-be.ctx.Done():
 				return
-			case <-time.After(6 * time.Hour): // a release should reach people the same day
+			case <-time.After(updateEvery):
 			}
 		}
 	}()
