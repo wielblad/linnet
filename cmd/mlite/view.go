@@ -280,15 +280,28 @@ func layoutView() {
 	newDone := !mv.hasNew
 	// where each other participant stopped reading: the index of the last message they have seen
 	readersAt := map[int][]int64{}
+	lastSent := map[int64]time.Time{} // when each participant last wrote here
+	for i := range mv.msgs {
+		if id := mv.msgs[i].SenderID; id != 0 {
+			lastSent[id] = mv.msgs[i].Timestamp
+		}
+	}
 	for _, r := range mv.receipts {
+		// Writing a message means having seen what came before it, even when Messenger
+		// sends no read mark for it; without this the mark stays above someone's own
+		// messages, as if they had not seen them.
+		seen := r.Read
+		if t, ok := lastSent[r.ContactID]; ok && t.After(seen) {
+			seen = t
+		}
 		last := -1
 		for i := range mv.msgs {
-			if mv.msgs[i].Timestamp.After(r.Read) {
+			if mv.msgs[i].Timestamp.After(seen) {
 				break
 			}
 			last = i
 		}
-		if last >= 0 && mv.msgs[last].SenderID != r.ContactID {
+		if last >= 0 {
 			readersAt[last] = append(readersAt[last], r.ContactID)
 		}
 	}

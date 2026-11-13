@@ -267,7 +267,7 @@ func updateStart() {
 			select {
 			case <-be.ctx.Done():
 				return
-			case <-time.After(24 * time.Hour):
+			case <-time.After(6 * time.Hour): // a release should reach people the same day
 			}
 		}
 	}()
