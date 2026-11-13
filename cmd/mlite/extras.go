@@ -265,22 +265,22 @@ var (
 
 // attachFile puts a file above the text field, ready to send.
 func attachFile(path string) bool {
-	if _, ok := threadByID(selectedID); !ok {
+	if _, ok := threadByID(hostThreadID()); !ok {
 		return false
 	}
 	if info, err := os.Stat(path); err != nil || info.IsDir() {
 		return false
 	}
 	if compose.mode == cmEdit {
-		setText(hInput, "")
+		setText(hostInput(), "")
 	}
 	if compose.mode == cmFile && compose.file != path {
 		dropPasted(compose.file)
 	}
 	compose.mode, compose.file = cmFile, path
-	inputChanged()
-	layout()
-	pSetFocus.Call(hInput)
+	hostInputChanged()
+	hostLayout()
+	pSetFocus.Call(hostInput())
 	return true
 }
 

@@ -108,12 +108,15 @@ type viewState struct {
 // works on mv and sel, which point into the bank of the view a message is being handled
 // for: the window's own, unless a view of another conversation says otherwise.
 type viewBank struct {
-	mv  viewState
-	sel selState
+	mv      viewState
+	sel     selState
+	compose composeState // what the text field under this view is for
+	pane    *pane        // the pane the view is in; nil for the window's own
 }
 
 var (
 	mainBank    viewBank
+	curBank     = &mainBank
 	mv          = &mainBank.mv
 	bankByView  = map[uintptr]*viewBank{}
 	pendingBank *viewBank // the bank of a view that is being created and has no handle yet
@@ -121,14 +124,14 @@ var (
 
 // enterBank makes a bank the one the view code works on and gives back the way out.
 func enterBank(b *viewBank) func() {
-	pm, ps := mv, sel
-	mv, sel = &b.mv, &b.sel
-	return func() { mv, sel = pm, ps }
+	prev := curBank
+	curBank, mv, sel, compose = b, &b.mv, &b.sel, &b.compose
+	return func() { curBank, mv, sel, compose = prev, &prev.mv, &prev.sel, &prev.compose }
 }
 
 // inPane reports whether the view being handled belongs to an extra conversation rather
-// than to the window: such a view reads and scrolls, and leaves the rest to the window.
-func inPane() bool { return mv != &mainBank.mv }
+// than to the window.
+func inPane() bool { return curBank != &mainBank }
 
 func isGroup(t store.Thread) bool { return !table.ThreadType(t.ThreadType).IsOneToOne() }
 func isE2EE(t store.Thread) bool  { return table.ThreadType(t.ThreadType).IsWhatsApp() }
@@ -1031,7 +1034,7 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	if b == nil {
 		b = &mainBank
 	}
-	if &b.mv != mv {
+	if b != curBank {
 		defer enterBank(b)()
 	}
 	switch msg {
@@ -1200,6 +1203,15 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 func registerClass(name string, proc func(uintptr, uint32, uintptr, uintptr) uintptr) {
 	hinst, _, _ := pGetModuleHandleW.Call(0)
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
+	inner := proc
+	if name != "MliteView" {
+		proc = func(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+			if curBank != &mainBank {
+				defer enterBank(&mainBank)()
+			}
+			return inner(hwnd, msg, wp, lp)
+		}
+	}
 	wc := wndClassEx{lpfnWndProc: syscall.NewCallback(proc), hInstance: hinst, hCursor: cursor, lpszClassName: u16(name)}
 	wc.cbSize = uint32(unsafe.Sizeof(wc))
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))

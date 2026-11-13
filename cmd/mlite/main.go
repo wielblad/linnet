@@ -254,25 +254,35 @@ func main() {
 // handleKey takes the keys that the dialog manager would otherwise swallow or misroute.
 func handleKey(m *msgT) bool {
 	ctrl := keyDown(vkControl)
-	if p := paneOf(m.hwnd); p != nil { // a pane beside the heads has few keys of its own
+	if p := paneOf(m.hwnd); p != nil { // a pane beside the heads: the keys of a conversation, for its own
+		defer enterBank(p.bank)()
 		switch {
-		case m.hwnd == p.input && m.wParam == vkReturn:
+		case m.hwnd == p.input && m.wParam == vkReturn && !keyDown(vkShift) && !ctrl:
 			if m.lParam&(1<<30) == 0 {
 				paneSend(p)
 			}
+			return true
+		case ctrl && m.wParam == 'V' && m.hwnd == p.input:
+			return pasteAttachment()
+		case pick.hwnd != 0 && m.wParam == vkEscape:
+			closePicker()
+			return true
+		case m.hwnd == p.input && m.wParam == vkEscape && compose.mode != cmNone:
+			cancelCompose()
 			return true
 		case m.wParam == vkEscape:
 			paneClose(p)
 			return true
 		case ctrl && m.wParam == 'C' && m.hwnd == p.view:
-			done := enterBank(p.bank)
 			if s := selText(); s != "" {
 				copyText(s)
 				viewToast("Skopiowano zaznaczenie")
 			}
-			done()
 			return true
 		}
+		return false
+	}
+	if paneHost(m.hwnd) != nil { // a question or a large picture inside a pane has its own keys
 		return false
 	}
 	switch {
@@ -536,7 +546,7 @@ func layout() {
 	pGetClientRect.Call(hMain, uintptr(unsafe.Pointer(&rc)))
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
-	if dlg.hwnd != 0 { // a question covers everything; the window as it was is drawn dimmed behind it
+	if dlg.hwnd != 0 && dlg.host == hMain { // a question covers everything; the window as it was is drawn dimmed behind it
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet, pn.hwnd, lg.hwnd} {
 			show(c, false)
 		}
@@ -553,7 +563,7 @@ func layout() {
 		return
 	}
 	show(lg.hwnd, false)
-	if vw.hwnd != 0 { // a picture shown large covers everything else
+	if vw.hwnd != 0 && vw.host == hMain { // a picture shown large covers everything else
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet} {
 			show(c, false)
 		}
@@ -1791,8 +1801,8 @@ func selectThread(t store.Thread, focusInput bool) {
 }
 
 func doSend() {
-	text := strings.TrimSpace(strings.ReplaceAll(getText(hInput), "\r\n", "\n"))
-	t, ok := threadByID(selectedID)
+	text := strings.TrimSpace(strings.ReplaceAll(getText(hostInput()), "\r\n", "\n"))
+	t, ok := threadByID(hostThreadID())
 	if !ok || (text == "" && compose.mode != cmFile) {
 		return
 	}
@@ -1819,10 +1829,10 @@ func doSend() {
 	}
 	wasComposing := compose.mode != cmNone
 	compose.mode = cmNone
-	setText(hInput, "")
-	inputChanged()
+	setText(hostInput(), "")
+	hostInputChanged()
 	if wasComposing {
-		layout()
+		hostLayout()
 	}
 	mv.hasNew = false
 }

@@ -27,6 +27,8 @@ var (
 		field                   uintptr // the field for it, 0 when the question is yes-or-no
 		fieldR, labelR          rect
 		onText                  func(string)
+		host                    uintptr   // the window the question covers: the program's, or a pane
+		bank                    *viewBank // the view it was asked from
 	}
 )
 
@@ -56,8 +58,9 @@ func openDialog(title, text, ok string, danger bool, then func(), label string, 
 	dlg.title, dlg.text, dlg.ok, dlg.cancel, dlg.danger, dlg.then = title, text, ok, "Anuluj", danger, then
 	dlg.label, dlg.onText, dlg.fieldR, dlg.labelR = label, onText, rect{}, rect{}
 	dlg.focus, dlg.hot = 0, -1
+	dlg.host, dlg.bank = hostWnd(), curBank
 	dlg.snap, dlg.sw, dlg.sh = snapshotMain()
-	dlg.hwnd = createWindow(0, "MliteDialog", title, wsChild|wsVisible|wsTabStop, hMain, 0)
+	dlg.hwnd = createWindow(0, "MliteDialog", title, wsChild|wsVisible|wsTabStop, dlg.host, 0)
 	if label != "" {
 		style := uint32(wsChild | wsVisible | wsTabStop | esAutoHScroll)
 		if secret {
@@ -67,7 +70,7 @@ func openDialog(title, text, ok string, danger bool, then func(), label string, 
 		sendMsg(dlg.field, wmSetFont, fnt.body, 1)
 		dlg.focus = 1 // the action: Enter in the field answers the question
 	}
-	layout()
+	hostLayout()
 	if dlg.field != 0 {
 		pSetFocus.Call(dlg.field)
 		return
@@ -79,7 +82,13 @@ func closeDialog(run bool) {
 	if dlg.hwnd == 0 {
 		return
 	}
-	h, then, onText := dlg.hwnd, dlg.then, dlg.onText
+	h, then, onText, b := dlg.hwnd, dlg.then, dlg.onText, dlg.bank
+	if b == nil {
+		b = &mainBank
+	}
+	if b != curBank { // back in the conversation the question was asked from
+		defer enterBank(b)()
+	}
 	typed := ""
 	if dlg.field != 0 {
 		typed = getText(dlg.field)
@@ -92,8 +101,8 @@ func closeDialog(run bool) {
 		dlg.snap = 0
 	}
 	pDestroyWindow.Call(h)
-	layout()
-	pSetFocus.Call(hView)
+	hostLayout()
+	pSetFocus.Call(mv.hwnd)
 	if run && then != nil {
 		then()
 	}
@@ -105,22 +114,22 @@ func closeDialog(run bool) {
 // snapshotMain copies what the main window shows into a picture.
 func snapshotMain() (uintptr, int32, int32) {
 	var rc rect
-	pGetClientRect.Call(hMain, uintptr(unsafe.Pointer(&rc)))
+	pGetClientRect.Call(dlg.host, uintptr(unsafe.Pointer(&rc)))
 	w, h := rc.right, rc.bottom
 	if w < 1 || h < 1 {
 		return 0, 0, 0
 	}
-	screen, _, _ := pGetDC.Call(hMain)
+	screen, _, _ := pGetDC.Call(dlg.host)
 	mem, _, _ := pCreateCompatibleDC.Call(screen)
 	bmp, _, _ := pCreateCompatibleBmp.Call(screen, uintptr(w), uintptr(h))
 	old, _, _ := pSelectObject.Call(mem, bmp)
-	pPrintWindow.Call(hMain, mem, 3) // the client area with everything in it
+	pPrintWindow.Call(dlg.host, mem, 3) // the client area with everything in it
 	pSelectObject.Call(mem, old)
 	var img uintptr
 	pGdipFromHBITMAP.Call(bmp, 0, uintptr(unsafe.Pointer(&img)))
 	pDeleteObject.Call(bmp)
 	pDeleteDC.Call(mem)
-	pReleaseDC.Call(hMain, screen)
+	pReleaseDC.Call(dlg.host, screen)
 	return img, w, h
 }
 

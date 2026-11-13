@@ -3,17 +3,20 @@
 package main
 
 // Extra conversations open beside the heads. "Kolumny" and "Dok" show several conversations
-// at once: the first is the panel of the overlay itself, with everything the window can do,
-// and each further one is a pane of its own: a header, a view of the conversation and a
-// field to write in. A pane reads, scrolls, loads older messages and sends text; replying to
-// a message, attachments and the large picture stay with the first conversation.
+// at once: the first is the panel of the overlay itself and each further one is a pane of
+// its own, a window with a header, a view of the conversation and a field to write in.
+//
+// A pane does what the panel does with a conversation. The code is the same code: the view,
+// what the field is for (a reply, an edit, a file), the menu and the reactions of a message,
+// the large picture and the questions all work on the bank of the view they were asked from
+// and on its host, which is the window or a pane.
 //
 // Columns stand side by side with no gap, the same height, growing away from the head. The
 // dock is a row of equal panes along the bottom of the screen, each of which can be folded
 // down to its header.
 
 import (
-	"strings"
+	"syscall"
 	"unsafe"
 
 	"lazyfmess/internal/store"
@@ -34,14 +37,31 @@ type pane struct {
 	min               bool // folded down to its header (the dock)
 	used              int
 	w, h              int32
+	lines             int   // lines of text the field shows
+	compH             int32 // height of everything under the view
+	empty             bool  // nothing typed: the field shows its hint
 	closeR, minR      rect
 	sendR, fieldR     rect
+	attachR, barR     rect
+	hot               int // which of its buttons is under the pointer
 	active            bool
 }
 
+const (
+	pbtNone = iota
+	pbtClose
+	pbtMin
+	pbtAttach
+	pbtSend
+	pbtBarClose
+)
+
 var (
-	panes     []*pane
-	paneClock int
+	panes       []*pane
+	paneClock   int
+	paneInputCB uintptr
+
+	pGetAncestor = user32.NewProc("GetAncestor")
 )
 
 func multiMode() bool { return cfg.HeadMode == headModeCols || cfg.HeadMode == headModeDock }
@@ -63,6 +83,61 @@ func paneOf(hwnd uintptr) *pane {
 		}
 	}
 	return nil
+}
+
+// paneHost finds the pane a window is somewhere inside of: also a question or a picture
+// shown large in it.
+func paneHost(hwnd uintptr) *pane {
+	if len(panes) == 0 || hwnd == 0 {
+		return nil
+	}
+	root, _, _ := pGetAncestor.Call(hwnd, 2) // GA_ROOT
+	for _, p := range panes {
+		if p.hwnd == root {
+			return p
+		}
+	}
+	return nil
+}
+
+// ---- the host of the conversation being handled: the window, or a pane
+
+func hostWnd() uintptr {
+	if p := curBank.pane; p != nil {
+		return p.hwnd
+	}
+	return hMain
+}
+
+func hostInput() uintptr {
+	if p := curBank.pane; p != nil {
+		return p.input
+	}
+	return hInput
+}
+
+func hostThreadID() int64 {
+	if p := curBank.pane; p != nil {
+		return p.id
+	}
+	return selectedID
+}
+
+func hostLayout() {
+	if p := curBank.pane; p != nil {
+		paneLayout(p)
+		invalidate(p.hwnd)
+		return
+	}
+	layout()
+}
+
+func hostInputChanged() {
+	if p := curBank.pane; p != nil {
+		paneInputChanged(p)
+		return
+	}
+	inputChanged()
 }
 
 // paneHeaderH is the height of the header of the panel, so that a row of conversations
@@ -89,7 +164,8 @@ func paneOpen(id int64) {
 		}
 		paneClose(oldest)
 	}
-	p := &pane{id: id, thread: t, bank: &viewBank{}}
+	p := &pane{id: id, thread: t, bank: &viewBank{}, lines: 1, empty: true}
+	p.bank.pane = p
 	p.hwnd = createWindow(wsExToolWindow|wsExTopmost, "MlitePane", threadTitle(t), wsPopup|wsThickFrame|wsClipChildren, 0, 0)
 	if p.hwnd == 0 {
 		return
@@ -105,9 +181,12 @@ func paneOpen(id int64) {
 	b.mv.sc = scroller{hwnd: p.view, pos: &b.mv.scroll, total: func() int32 { return b.mv.total }, page: func() int32 { return b.mv.h }, changed: viewScrolled}
 	b.mv.thread, b.mv.has = t, true
 	b.mv.hasNew, b.mv.newAfter = t.Unread(), t.LastRead
-	p.input = createWindow(0, "EDIT", "", wsChild|wsVisible|wsTabStop|esAutoHScroll, p.hwnd, 1)
+	p.input = createWindow(0, "EDIT", "", wsChild|wsVisible|wsTabStop|esMultiline|esAutoVScroll|esWantReturn, p.hwnd, 1)
 	sendMsg(p.input, wmSetFont, fnt.body, 1)
-	sendMsg(p.input, emSetCueBanner, 1, uintptr(unsafe.Pointer(u16("Napisz wiadomość…"))))
+	if paneInputCB == 0 {
+		paneInputCB = syscall.NewCallback(paneInputProc)
+	}
+	pSetWindowLongPtrW.Call(p.input, ^uintptr(3), paneInputCB) // GWLP_WNDPROC
 	paneFrame(p)
 	panesPlace()
 	pShowWindow.Call(p.hwnd, swShow)
@@ -115,6 +194,53 @@ func paneOpen(id int64) {
 	be.openThread(t, true)
 	paneFront(p)
 	headsSync(false)
+}
+
+// paneInputProc draws the hint that fields of several lines do not offer themselves, the
+// way the field of the window does.
+func paneInputProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	r, _, _ := pCallWindowProcW.Call(oldInputProc, hwnd, uintptr(msg), wp, lp)
+	p := paneOf(hwnd)
+	if p == nil || !p.empty {
+		return r
+	}
+	if msg == wmPaint {
+		var rc rect
+		sendMsg(hwnd, emGetRect, 0, uintptr(unsafe.Pointer(&rc)))
+		hdc, _, _ := pGetDC.Call(hwnd)
+		old, _, _ := pSelectObject.Call(hdc, fnt.body)
+		canvas{hdc}.gdiText("Napisz wiadomość…", rc, pal.fg2, dtSingleLine)
+		pSelectObject.Call(hdc, old)
+		pReleaseDC.Call(hwnd, hdc)
+	}
+	if msg == wmSetFocus || msg == wmKillFocus {
+		pInvalidateRect.Call(hwnd, 0, 1)
+	}
+	return r
+}
+
+// paneInputChanged keeps the height of the field, its hint and the send button in step
+// with what is typed.
+func paneInputChanged(p *pane) {
+	n, _, _ := pGetWindowTextLengthW.Call(p.input)
+	if empty := n == 0; empty != p.empty {
+		p.empty = empty
+		pInvalidateRect.Call(p.input, 0, 1)
+	}
+	lines := int(sendMsg(p.input, emGetLineCount, 0, 0))
+	if lines < 1 {
+		lines = 1
+	}
+	if lines > maxInputLines {
+		lines = maxInputLines
+	}
+	if lines != p.lines {
+		p.lines = lines
+		paneLayout(p)
+		sendMsg(p.input, emLineScroll, 0, ^uintptr(999))
+		sendMsg(p.input, emScrollCaret, 0, 0)
+	}
+	invalidate(p.hwnd)
 }
 
 // paneFrame gives the pane the edge the panel of the overlay has: rounded in the dock,
@@ -141,6 +267,19 @@ func paneFront(p *pane) {
 }
 
 func paneClose(p *pane) {
+	// what was open inside the pane goes first
+	if pick.hwnd != 0 && pick.bank == p.bank {
+		closePicker()
+	}
+	if vw.hwnd != 0 && vw.host == p.hwnd {
+		closeViewer()
+	}
+	if dlg.hwnd != 0 && dlg.host == p.hwnd {
+		closeDialog(false)
+	}
+	if p.bank.compose.mode == cmFile {
+		dropPasted(p.bank.compose.file)
+	}
 	for i, q := range panes {
 		if q == p {
 			panes = append(panes[:i], panes[i+1:]...)
@@ -224,6 +363,7 @@ func panesInvalidate() {
 		paneFrame(p)
 		invalidate(p.hwnd)
 		invalidate(p.view)
+		invalidate(p.input)
 	}
 }
 
@@ -292,59 +432,109 @@ func panesPlace() {
 	}
 }
 
-// paneSend sends what is in the field of a pane.
+// paneSend sends what the field of a pane holds: a message, a reply, an edit or a file,
+// whatever the field is for. It runs with the bank of the pane entered.
 func paneSend(p *pane) {
-	text := strings.TrimSpace(getText(p.input))
-	if text == "" {
-		return
-	}
-	if be.current() == nil {
-		done := enterBank(p.bank)
+	if be.current() == nil { // said in the pane itself, not in the panel of another conversation
 		viewToast("Brak połączenia. Wiadomość nie została wysłana.")
-		done()
 		return
 	}
-	if be.send(p.thread, text, store.Message{}) {
-		setText(p.input, "")
-		invalidate(p.hwnd)
+	doSend()
+}
+
+// paneCovered gives the question or the large picture that covers the pane, 0 for none.
+func paneCovered(p *pane) uintptr {
+	switch {
+	case dlg.hwnd != 0 && dlg.host == p.hwnd:
+		return dlg.hwnd
+	case vw.hwnd != 0 && vw.host == p.hwnd:
+		return vw.hwnd
 	}
+	return 0
 }
 
 func paneLayout(p *pane) {
-	hh, comp := paneHeaderH(), dp(56)
+	if curBank != p.bank {
+		defer enterBank(p.bank)()
+	}
+	hh := paneHeaderH()
 	p.closeR = rect{p.w - dp(10) - dp(36), (hh - dp(36)) / 2, p.w - dp(10), (hh + dp(36)) / 2}
 	p.minR = rect{}
 	if cfg.HeadMode == headModeDock {
 		p.minR = rect{p.closeR.left - dp(4) - dp(36), p.closeR.top, p.closeR.left - dp(4), p.closeR.bottom}
 	}
-	if p.min || p.h <= hh+comp {
+	if cover := paneCovered(p); cover != 0 && !p.min {
+		show(p.view, false)
+		show(p.input, false)
+		moveTo(cover, rect{0, 0, p.w, p.h})
+		return
+	}
+	inH := int32(p.lines) * lay.editH
+	fieldH := inH + dp(16)
+	if fieldH < dp(36) {
+		fieldH = dp(36)
+	}
+	p.compH = fieldH + dp(20)
+	p.barR = rect{}
+	if compose.mode != cmNone { // what the field is for, above it
+		barH := sp(36)
+		if composeThumb() != 0 {
+			barH = composeThumbSide() + dp(8)
+		}
+		p.compH += barH + dp(6)
+		p.barR = rect{dp(12), p.h - p.compH + dp(8), p.w - dp(12), p.h - p.compH + dp(8) + barH}
+		compose.closeHit = rect{p.barR.right - dp(32), p.barR.top, p.barR.right, p.barR.bottom}
+	}
+	if !paneOpenBody(p) {
 		show(p.view, false)
 		show(p.input, false)
 		return
 	}
 	show(p.view, true)
 	show(p.input, true)
-	moveTo(p.view, rect{0, hh + 1, p.w, p.h - comp - 1})
-	fh := dp(36)
-	p.sendR = rect{p.w - dp(12) - dp(36), p.h - comp + (comp-dp(36))/2, p.w - dp(12), p.h - comp + (comp+dp(36))/2}
-	p.fieldR = rect{dp(12), p.h - comp + (comp-fh)/2, p.sendR.left - dp(8), p.h - comp + (comp+fh)/2}
-	f := p.fieldR
-	moveTo(p.input, rect{f.left + dp(10), f.top + (fh-lay.editH)/2, f.right - dp(10), f.top + (fh-lay.editH)/2 + lay.editH})
+	moveTo(p.view, rect{0, hh + 1, p.w, p.h - p.compH - 1})
+	p.attachR = rect{dp(10), p.h - dp(10) - dp(36), dp(46), p.h - dp(10)}
+	p.sendR = rect{p.w - dp(12) - dp(36), p.h - dp(10) - dp(36), p.w - dp(12), p.h - dp(10)}
+	p.fieldR = rect{dp(12) + dp(40), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
+	it := p.fieldR.top + (fieldH-inH)/2
+	moveTo(p.input, rect{p.fieldR.left + dp(10), it, p.fieldR.right - dp(8), it + inH})
+}
+
+// paneOpenBody reports whether the pane shows its conversation, not only its header.
+func paneOpenBody(p *pane) bool {
+	return !p.min && p.h > paneHeaderH()+p.compH+dp(40) && paneCovered(p) == 0
+}
+
+func paneCanSend(p *pane) bool {
+	return !p.empty || p.bank.compose.mode == cmFile
 }
 
 func panePaint(p *pane, target uintptr) {
+	if curBank != p.bank {
+		defer enterBank(p.bank)()
+	}
 	buf := newBuffer(target, p.w, p.h)
 	c := canvas{buf.hdc}
-	hh, comp := paneHeaderH(), dp(56)
+	hh := paneHeaderH()
+	body := paneOpenBody(p)
 	c.fill(rect{0, 0, p.w, p.h}, pal.layer)
 	c.fill(rect{0, 0, p.w, hh}, pal.card)
 	c.fill(rect{0, hh, p.w, hh + 1}, pal.line)
 	t := p.thread
 	g := newGfx(buf.hdc)
-	face := threadAvatar(g, t, dp(12), (hh-dp(32))/2, dp(32), pal.card)
-	if !p.min && p.h > hh+comp {
-		c.fill(rect{0, p.h - comp, p.w, p.h}, pal.card)
-		c.fill(rect{0, p.h - comp - 1, p.w, p.h - comp}, pal.line)
+	face := threadAvatar(g, t, dp(14), (hh-dp(36))/2, dp(36), pal.card)
+	hotBack := func(r rect) {
+		g.round(r.left, r.top, r.right-r.left, r.bottom-r.top, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 9))
+	}
+	switch p.hot {
+	case pbtClose:
+		hotBack(p.closeR)
+	case pbtMin:
+		hotBack(p.minR)
+	}
+	if body {
+		c.fill(rect{0, p.h - p.compH, p.w, p.h}, pal.card)
+		c.fill(rect{0, p.h - p.compH - 1, p.w, p.h - p.compH}, pal.line)
 		f := p.fieldR
 		focus, _, _ := pGetFocus.Call()
 		edge, inset := mix(pal.fg2, pal.line, 65), int32(1)
@@ -355,21 +545,35 @@ func panePaint(p *pane, target uintptr) {
 		g.round(f.left, f.top, f.right-f.left, f.bottom-f.top, rr, rr, rr, rr, edge)
 		g.round(f.left+inset, f.top+inset, f.right-f.left-2*inset, f.bottom-f.top-2*inset, rr-inset, rr-inset, rr-inset, rr-inset, pal.card)
 		s, fill := p.sendR, pal.accent
-		if strings.TrimSpace(getText(p.input)) == "" {
+		switch {
+		case !paneCanSend(p):
 			fill = mix(pal.fg, pal.card, 8)
+		case p.hot == pbtSend:
+			fill = pal.accentHover
 		}
 		g.round(s.left, s.top, s.right-s.left, s.bottom-s.top, rr, rr, rr, rr, fill)
+		if p.hot == pbtAttach {
+			hotBack(p.attachR)
+		}
+		if compose.mode != cmNone {
+			b := p.barR
+			g.pill(b.left, b.top+dp(2), dp(3), b.bottom-b.top-dp(4), pal.accent)
+			if img := composeThumb(); img != 0 {
+				side := composeThumbSide()
+				g.image(img, b.left+dp(12), (b.top+b.bottom-side)/2, side, side)
+			}
+		}
 	}
 	g.free()
 	if !face {
 		c.font(fnt.avSm)
-		c.text(initials(threadTitle(t)), rect{dp(12), (hh - dp(32)) / 2, dp(44), (hh + dp(32)) / 2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+		c.text(initials(threadTitle(t)), rect{dp(14), (hh - dp(36)) / 2, dp(50), (hh + dp(36)) / 2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	}
 	right := p.closeR.left - dp(8)
 	if p.minR.right > p.minR.left {
 		right = p.minR.left - dp(8)
 		c.font(fnt.head)
-		c.text("–", p.minR, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
+		c.text("–", p.minR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	}
 	c.font(fnt.icon)
 	c.text(gClose, p.closeR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
@@ -380,7 +584,7 @@ func panePaint(p *pane, target uintptr) {
 	case isE2EE(t):
 		sub = "Rozmowa szyfrowana"
 	}
-	x := dp(54)
+	x := dp(60)
 	c.font(fnt.head)
 	if sub == "" || p.min {
 		c.text(threadTitle(t), rect{x, 0, right, hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
@@ -390,15 +594,59 @@ func panePaint(p *pane, target uintptr) {
 		c.font(fnt.small)
 		c.text(sub, rect{x, top + sp(20), right, top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 	}
-	if !p.min && p.h > hh+comp {
+	if body {
 		ink := pal.onAccent
-		if strings.TrimSpace(getText(p.input)) == "" {
+		if !paneCanSend(p) {
 			ink = pal.fg2
 		}
 		c.font(fnt.icon)
 		c.text(gSend, p.sendR, ink, dtCenter|dtVCenter|dtSingleLine)
+		ink = pal.fg2
+		if p.hot == pbtAttach {
+			ink = pal.fg
+		}
+		c.text(gAttach, p.attachR, ink, dtCenter|dtVCenter|dtSingleLine)
+		if compose.mode != cmNone {
+			b := p.barR
+			title, excerpt := composeLabels()
+			mid := (b.top + b.bottom) / 2
+			tx := b.left + dp(12)
+			if composeThumb() != 0 {
+				tx += composeThumbSide() + dp(12)
+			}
+			c.font(fnt.smallSemi)
+			c.text(title, rect{tx, mid - sp(17), b.right - dp(40), mid}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+			c.font(fnt.small)
+			c.text(excerpt, rect{tx, mid, b.right - dp(40), mid + sp(17)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+			c.font(fnt.iconSm)
+			ink = pal.fg2
+			if p.hot == pbtBarClose {
+				ink = pal.fg
+			}
+			c.text(gClose, compose.closeHit, ink, dtCenter|dtVCenter|dtSingleLine)
+		}
 	}
 	buf.flush(0, 0)
+}
+
+// paneHit names the button of a pane under a point.
+func paneHit(p *pane, x, y int32) int {
+	in := func(r rect) bool { return r.right > r.left && x >= r.left && x < r.right && y >= r.top && y < r.bottom }
+	switch {
+	case in(p.closeR):
+		return pbtClose
+	case in(p.minR):
+		return pbtMin
+	case !paneOpenBody(p):
+		return pbtNone
+	case in(p.attachR):
+		return pbtAttach
+	case in(p.sendR):
+		return pbtSend
+	case p.bank.compose.mode != cmNone && in(p.bank.compose.closeHit):
+		return pbtBarClose
+	}
+	return pbtNone
 }
 
 func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
@@ -407,7 +655,9 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wp, lp)
 		return r
 	}
-	in := func(r rect, x, y int32) bool { return r.right > r.left && x >= r.left && x < r.right && y >= r.top && y < r.bottom }
+	if curBank != p.bank {
+		defer enterBank(p.bank)()
+	}
 	switch msg {
 	case wmNcCalcSize:
 		if wp != 0 {
@@ -440,7 +690,9 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if p.active {
 			paneClock++
 			p.used = paneClock
-			if !p.min {
+			if cover := paneCovered(p); cover != 0 {
+				pSetFocus.Call(cover)
+			} else if !p.min {
 				pSetFocus.Call(p.input)
 				if t, ok := threadByID(p.id); ok && t.Unread() {
 					be.openThread(t, true)
@@ -449,19 +701,37 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			headsSync(false)
 		}
 		return 0
+	case wmMouseMove:
+		x, y := lpPoint(lp)
+		if hot := paneHit(p, x, y); hot != p.hot {
+			p.hot = hot
+			invalidate(hwnd)
+			trackLeave(hwnd) // told when the pointer leaves, so the mark does not stay
+		}
+		return 0
+	case wmMouseLeave:
+		if p.hot != pbtNone {
+			p.hot = pbtNone
+			invalidate(hwnd)
+		}
+		return 0
 	case wmLButtonUp:
-		x, y := int32(int16(lp)), int32(int16(lp>>16))
-		switch {
-		case in(p.closeR, x, y):
+		x, y := lpPoint(lp)
+		switch hit := paneHit(p, x, y); {
+		case hit == pbtClose:
 			paneClose(p)
-		case in(p.minR, x, y):
+		case hit == pbtMin:
 			p.min = !p.min
 			panesPlace()
 		case p.min && y < paneHeaderH(): // the folded pane opens again from its header
 			paneFront(p)
-		case in(p.sendR, x, y):
+		case hit == pbtAttach:
+			pickFile()
+		case hit == pbtSend:
 			paneSend(p)
-		case in(p.fieldR, x, y):
+		case hit == pbtBarClose:
+			cancelCompose()
+		case x >= p.fieldR.left && x < p.fieldR.right && y >= p.fieldR.top && y < p.fieldR.bottom:
 			pSetFocus.Call(p.input)
 		}
 		return 0
@@ -470,7 +740,10 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		pSetBkColor.Call(wp, cref(pal.card))
 		return brCard
 	case wmCommand:
-		if code := (wp >> 16) & 0xFFFF; code == enSetFocus || code == enKillFocus || code == enChange {
+		switch code := (wp >> 16) & 0xFFFF; code {
+		case enChange:
+			paneInputChanged(p)
+		case enSetFocus, enKillFocus:
 			invalidate(hwnd)
 		}
 		return 0

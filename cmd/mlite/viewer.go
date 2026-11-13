@@ -62,7 +62,9 @@ var (
 		note   string
 		btn    [vbCount]rect
 		pic    rect
-		video  string // address played in the embedded browser; "" while pictures are shown
+		host   uintptr   // the window it covers: the program's, or a pane
+		bank   *viewBank // the view it was opened from
+		video  string    // address played in the embedded browser; "" while pictures are shown
 		web    *webview.View
 		webMsg string // what the player area says until the browser covers it
 	}
@@ -70,11 +72,7 @@ var (
 
 // openViewer shows the picture of a message large, inside the window.
 func openViewer(m store.Message) {
-	if inPane() { // the large picture covers the window, which an extra conversation is not in
-		viewToast("Zdjęcie otworzysz w pierwszej rozmowie")
-		return
-	}
-	if vw.video != "" {
+	if vw.video != "" || (vw.hwnd != 0 && vw.host != hostWnd()) {
 		closeViewer()
 	}
 	vw.list = vw.list[:0]
@@ -93,10 +91,11 @@ func openViewer(m store.Message) {
 	}
 	vw.hot, vw.note = -1, ""
 	if vw.hwnd == 0 {
-		vw.hwnd = createWindow(0, "MliteViewer", "Podgląd zdjęcia", wsChild|wsVisible|wsTabStop|wsClipChildren, hMain, 0)
+		vw.host, vw.bank = hostWnd(), curBank
+		vw.hwnd = createWindow(0, "MliteViewer", "Podgląd zdjęcia", wsChild|wsVisible|wsTabStop|wsClipChildren, vw.host, 0)
 	}
 	viewerLoad()
-	layout()
+	hostLayout()
 	pSetFocus.Call(vw.hwnd)
 }
 
@@ -115,8 +114,14 @@ func closeViewer() {
 	viewerDrop()
 	vw.list = nil
 	pDestroyWindow.Call(h)
-	layout()
-	pSetFocus.Call(hView)
+	b := vw.bank // back to the conversation it covered
+	if b == nil {
+		b = &mainBank
+	}
+	done := enterBank(b)
+	hostLayout()
+	pSetFocus.Call(mv.hwnd)
+	done()
 }
 
 func viewerDrop() {
@@ -372,7 +377,7 @@ func viewerSave() {
 	copy(buf, syscall.StringToUTF16(name))
 	filter := utf16.Encode([]rune("Zdjęcie (*" + ext + ")\x00*" + ext + "\x00Wszystkie pliki\x00*.*\x00\x00"))
 	defExt := syscall.StringToUTF16(strings.TrimPrefix(ext, "."))
-	ofn := openFileName{owner: hMain, filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
+	ofn := openFileName{owner: vw.host, filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
 		title: u16("Zapisz zdjęcie"), defExt: &defExt[0], flags: 0x00080000 | 0x00000800 | 0x00000008 | 0x00000002}
 	ofn.structSize = uint32(unsafe.Sizeof(ofn))
 	dst := ""
@@ -398,6 +403,9 @@ func viewerSave() {
 }
 
 func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if vw.hwnd == hwnd && vw.bank != nil && vw.bank != curBank {
+		defer enterBank(vw.bank)()
+	}
 	switch msg {
 	case wmEraseBkgnd:
 		return 1
@@ -479,7 +487,7 @@ func openVideo(u string) {
 	if err != nil || pu.Scheme != "https" || strings.ContainsAny(u, "\" ") {
 		return
 	}
-	if dryOpen || !webview.Available() || inPane() {
+	if dryOpen || !webview.Available() {
 		playExternal(u)
 		return
 	}
@@ -500,8 +508,9 @@ func openVideo(u string) {
 	closeViewer()
 	vw.video, vw.webMsg = u, "Ładowanie odtwarzacza…"
 	vw.list, vw.hot, vw.note = nil, -1, ""
-	vw.hwnd = createWindow(0, "MliteViewer", "Odtwarzacz", wsChild|wsVisible|wsTabStop|wsClipChildren, hMain, 0)
-	layout()
+	vw.host, vw.bank = hostWnd(), curBank
+	vw.hwnd = createWindow(0, "MliteViewer", "Odtwarzacz", wsChild|wsVisible|wsTabStop|wsClipChildren, vw.host, 0)
+	hostLayout()
 	pSetFocus.Call(vw.hwnd)
 	failed := func(err error) {
 		log.Warn().Err(err).Msg("video player")

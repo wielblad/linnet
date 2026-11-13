@@ -57,16 +57,19 @@ var (
 	pGlobalUnlock     = kernel32.NewProc("GlobalUnlock")
 	pGetProcAddress   = kernel32.NewProc("GetProcAddress")
 
-	// compose is what the text field is currently for.
-	compose struct {
-		mode     int
-		msg      store.Message
-		file     string // the file waiting to be sent
-		closeHit rect
-	}
+	// compose is what the text field is currently for: the field of the window, or of the
+	// pane whose bank is entered.
+	compose = &mainBank.compose
 	menuMsg store.Message // the message the last menu was opened for
 	menuHas bool
 )
+
+type composeState struct {
+	mode     int
+	msg      store.Message
+	file     string // the file waiting to be sent
+	closeHit rect
+}
 
 // allowDarkMenus lets pop-up menus follow the dark app mode. Windows offers this only through
 // unnamed entries of uxtheme.dll; when they are missing the menus simply stay light.
@@ -107,9 +110,6 @@ func messageAt(x, y int32) (store.Message, bool) {
 // viewMenu opens the menu of a message: under the pointer, or for the newest visible message
 // when it was asked for from the keyboard.
 func viewMenu(x, y int32, keyboard bool) {
-	if inPane() {
-		return
-	}
 	var m store.Message
 	ok := false
 	if keyboard {
@@ -181,8 +181,9 @@ func messageMenu(m store.Message, x, y int32) {
 	}
 	pt := point{x, y}
 	pClientToScreen.Call(mv.hwnd, uintptr(unsafe.Pointer(&pt)))
-	pSetForegroundWindow.Call(hMain)
-	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, hMain, 0)
+	host := hostWnd()
+	pSetForegroundWindow.Call(host)
+	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, host, 0)
 	pDestroyMenu.Call(menu)
 	if cmd != 0 {
 		messageAction(int(cmd))
@@ -191,7 +192,7 @@ func messageMenu(m store.Message, x, y int32) {
 
 // messageAction carries out a menu choice for the message the menu was opened for.
 func messageAction(id int) {
-	t, ok := threadByID(selectedID)
+	t, ok := threadByID(hostThreadID())
 	if !menuHas || !ok || menuMsg.ThreadID != t.ID {
 		return
 	}
@@ -227,8 +228,9 @@ func messageAction(id int) {
 }
 
 func setCompose(mode int, m store.Message) {
+	in := hostInput()
 	if compose.mode == cmEdit && mode != cmEdit {
-		setText(hInput, "")
+		setText(in, "")
 	}
 	if compose.mode == cmFile {
 		dropPasted(compose.file)
@@ -236,13 +238,13 @@ func setCompose(mode int, m store.Message) {
 	compose.mode, compose.msg = mode, m
 	if mode == cmEdit {
 		text := strings.ReplaceAll(strings.ReplaceAll(m.Text, "\r\n", "\n"), "\n", "\r\n")
-		setText(hInput, text)
+		setText(in, text)
 		n := uintptr(len(syscall.StringToUTF16(text)) - 1)
-		sendMsg(hInput, emSetSel, n, n)
+		sendMsg(in, emSetSel, n, n)
 	}
-	inputChanged()
-	layout()
-	pSetFocus.Call(hInput)
+	hostInputChanged()
+	hostLayout()
+	pSetFocus.Call(in)
 }
 
 // cancelCompose returns the text field to writing a new message.
@@ -251,14 +253,14 @@ func cancelCompose() {
 		return
 	}
 	if compose.mode == cmEdit {
-		setText(hInput, "")
+		setText(hostInput(), "")
 	}
 	if compose.mode == cmFile {
 		dropPasted(compose.file)
 	}
 	compose.mode = cmNone
-	inputChanged()
-	layout()
+	hostInputChanged()
+	hostLayout()
 }
 
 // composeLabels returns the two lines of the bar above the text field.

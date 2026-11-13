@@ -58,13 +58,13 @@ type openFileName struct {
 
 // pickFile asks for a file and puts it above the text field, ready to send.
 func pickFile() {
-	if _, ok := threadByID(selectedID); !ok {
+	if _, ok := threadByID(hostThreadID()); !ok {
 		return
 	}
 	buf := make([]uint16, 1024)
 	// The filter list is separated by zero characters, which the usual conversion refuses.
 	filter := utf16.Encode([]rune("Wszystkie pliki\x00*.*\x00Zdjęcia\x00*.jpg;*.jpeg;*.png;*.gif;*.webp\x00\x00"))
-	ofn := openFileName{owner: hMain, filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
+	ofn := openFileName{owner: hostWnd(), filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
 		title: u16("Wybierz plik do wysłania"), flags: 0x00080000 | 0x00001000 | 0x00000800 | 0x00000008}
 	ofn.structSize = uint32(unsafe.Sizeof(ofn))
 	if r, _, _ := pGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn))); r == 0 {

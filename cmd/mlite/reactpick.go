@@ -36,6 +36,7 @@ var (
 		msg  store.Message
 		hot  int
 		w, h int32
+		bank *viewBank // the view the bar was opened from
 	}
 )
 
@@ -68,7 +69,7 @@ func actRect(it *vitem, k int32) rect {
 // viewHover notes which message and which of its actions the pointer is over.
 func viewHover(x, y int32) {
 	item, act := -1, -1
-	if x >= 0 && pick.hwnd == 0 && !inPane() { // the actions of a message belong to the window's own view
+	if x >= 0 && pick.hwnd == 0 {
 		for i := range mv.items {
 			it := &mv.items[i]
 			if !hoverable(it) || y+mv.scroll < it.y || y+mv.scroll >= it.y+it.h {
@@ -145,7 +146,7 @@ func showPicker(m store.Message, x, y int32) {
 	closePicker()
 	cell := dp(40)
 	pick.w, pick.h = int32(len(reactions))*cell+dp(12), cell+dp(8)
-	pick.msg, pick.hot = m, -1
+	pick.msg, pick.hot, pick.bank = m, -1, curBank
 	pt := point{x, y}
 	pClientToScreen.Call(mv.hwnd, uintptr(unsafe.Pointer(&pt)))
 	var work rect
@@ -193,6 +194,9 @@ func pickerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	if hwnd != pick.hwnd {
 		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wp, lp)
 		return r
+	}
+	if pick.bank != nil && pick.bank != curBank {
+		defer enterBank(pick.bank)()
 	}
 	switch msg {
 	case wmEraseBkgnd:
@@ -242,7 +246,7 @@ func pickerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		i := pickAt(x, y)
 		m := pick.msg
 		closePicker()
-		if t, ok := threadByID(selectedID); ok && i >= 0 && i < len(reactions) {
+		if t, ok := threadByID(hostThreadID()); ok && i >= 0 && i < len(reactions) {
 			emoji := reactions[i].emoji
 			if emoji == ownReaction(m) { // the same one again takes it back
 				emoji = ""

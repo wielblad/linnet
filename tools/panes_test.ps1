@@ -2,7 +2,7 @@
 # panel and the panes beside it: all three open, one written in, one folded or closed, and
 # the panel put away.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File tools\panes_test.ps1 -Exe build\linnet.exe -DataDir .local\data-ui-test -OutDir .local\shots -Mode cols
-param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Mode = "cols", [string]$Theme = "")
+param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Mode = "cols", [string]$Theme = "", [switch]$Full)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing @"
@@ -21,6 +21,7 @@ public class PT {
 [PT]::SetProcessDPIAware() | Out-Null
 $settings = '{"toasts":false,"body":true,"background":true,"show_mem":true,"dnd":false,"head_preview":false,"sound":false,"theme":"' + $Theme + '","head_mode":"' + $Mode + '","heads":[{"id":102,"x":1500,"y":260},{"id":101,"x":1500,"y":340},{"id":106,"x":1500,"y":420}]}'
 [IO.File]::WriteAllText((Join-Path $DataDir "settings.json"), $settings)
+$env:MLITE_KEEPHOVER = "1"   # the pointer is not really there: what it was moved over stays marked
 $p = Start-Process -FilePath $Exe -ArgumentList @("-data-dir", "`"$DataDir`"", "-self", "999", "-offline") -PassThru
 try {
   Start-Sleep -Seconds 4
@@ -78,6 +79,42 @@ try {
     if ($Mode -eq "dock") {   # fold the pane with its "–" button
       Click $pane (($q.R - $q.L) - 68) 26; Frame "$Mode-zwiniety"
     }
+  }
+  if ($Full -and $panes.Count -gt 1) {
+    # What a pane can do with a message, the same as the panel: the actions beside it, a
+    # reply, the reactions, the large picture, the menu and the question before deleting.
+    # The places are those of the test conversations at 100% scale.
+    function Kid($parent, $cls) { [PT]::FindWindowEx($parent, [IntPtr]::Zero, $cls, [NullString]::Value) }
+    function Hover($h, $x, $y) { [PT]::PostMessage($h, 0x0200, [IntPtr]::Zero, [IntPtr](($y -shl 16) -bor ($x -band 0xFFFF))) | Out-Null; Start-Sleep -Milliseconds 500 }
+    function Key($h, $vk) { [PT]::PostMessage($h, 0x0100, [IntPtr]$vk, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 700 }
+    $anna = $panes[1]; $tomek = $panes[0]
+    $av = Kid $anna "MliteView"; $ae = Kid $anna "Edit"
+    Hover $av 60 357; Frame "$Mode-pelne-akcje"
+    Hover $av 289 357; Click $av 289 357; Frame "$Mode-pelne-odpowiedz"
+    foreach ($ch in "Odpowiedz z dodatkowego okna".ToCharArray()) { [PT]::PostMessage($ae, 0x0102, [IntPtr][int]$ch, [IntPtr]::Zero) | Out-Null }
+    Start-Sleep -Milliseconds 500; Frame "$Mode-pelne-odpowiedz-tekst"
+    [PT]::PostMessage($ae, 0x000C, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null   # the field is emptied
+    Key $ae 0x1B                      # Esc in the field: the reply is given up
+    Frame "$Mode-pelne-po-esc"
+    Hover $av 60 357; Hover $av 255 357; Click $av 255 357; Frame "$Mode-pelne-reakcje"
+    Key $ae 0x1B
+    Hover $av 250 428; Hover $av 21 428; Click $av 21 428; Frame "$Mode-pelne-menu"
+    Key $anna 0x26; Key $anna 0x0D    # Up (the last item), Enter: "Usuń u wszystkich" asks first
+    Frame "$Mode-pelne-pytanie"
+    $q = Kid $anna "MliteDialog"
+    "  pytanie w oknie rozmowy: {0}" -f ($q -ne [IntPtr]::Zero)
+    if ($q -ne [IntPtr]::Zero) { Key $q 0x1B }
+    $tv = Kid $tomek "MliteView"
+    Click $tv 150 300; Frame "$Mode-pelne-zdjecie"
+    $big = Kid $tomek "MliteViewer"
+    "  duze zdjecie w oknie rozmowy: {0}" -f ($big -ne [IntPtr]::Zero)
+    if ($big -ne [IntPtr]::Zero) { Key $big 0x1B }
+    Frame "$Mode-pelne-koniec"
+    # and the panel itself still does the same, with its own field
+    $mview = Kid $main "MliteView"
+    Hover $mview 60 220; Hover $mview 249 220; Click $mview 249 220; Frame "$Mode-pelne-panel-odpowiedz"
+    Key (Kid $main "Edit") 0x1B
+    $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
   }
   Click $heads[0] 20 20; Frame "$Mode-bez-panelu"   # the head of the panel puts the panel away
   Click $heads[2] 20 20; Frame "$Mode-zamknieta"    # the head of a pane closes its pane
