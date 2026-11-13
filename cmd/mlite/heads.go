@@ -8,7 +8,9 @@ package main
 import (
 	"fmt"
 	"hash/fnv"
+	"math"
 	"os"
+	"time"
 	"path/filepath"
 	"syscall"
 	"unsafe"
@@ -160,8 +162,9 @@ func (g gfx) ellipseA(x, y, w, h int32, argb uint32) {
 	pGdipDeleteBrush.Call(br)
 }
 
-// paintHead draws one head: soft shadow, picture or initials, unread badge.
-func paintHead(g gfx, id int64, title string, unread int) {
+// paintHead draws one head: soft shadow, picture or initials, unread badge, and in the
+// lower corner what the other person is doing: writing, or having read what was sent.
+func paintHead(g gfx, id int64, title string, unread, mark, phase int) {
 	s := headSize()
 	d := dp(52)
 	ax, ay := (s-d)/2, s-d-dp(4)
@@ -178,6 +181,149 @@ func paintHead(g gfx, id int64, title string, unread int) {
 		g.pill(bx, dp(2), bw, bh, headBadge)
 		g.label(text, bx, dp(1), bw, bh, dp(13), true, 0xFFFFFF)
 	}
+	paintHeadMark(g, mark, phase)
+}
+
+// What a head says about the other person, in its lower right corner.
+const (
+	markNone = iota
+	markTyping
+	markSeen
+
+	headTyping = 0x0866E8 // the accent: something is happening now
+	headSeen   = 0x5F6A79 // a quiet grey: a state, not a call for attention
+)
+
+// paintHeadMark draws that mark: three dots that take turns while the other person is
+// writing, or a tick once they have read the last message. The two differ in shape as well
+// as in colour, so that nothing hangs on telling blue from grey.
+func paintHeadMark(g gfx, mark, phase int) {
+	if mark == markNone {
+		return
+	}
+	s, d := headSize(), dp(22)
+	x, y := s-d-dp(1), s-d-dp(1)
+	cx, cy := x+d/2, y+d/2
+	if mark == markTyping {
+		g.ellipse(x, y, d, d, headTyping)
+		r := dp(2)
+		for k := int32(0); k < 3; k++ {
+			alpha := uint32(0x66)
+			if int32(phase%3) == k {
+				alpha = 0xFF
+			}
+			g.ellipseA(cx+(k-1)*dp(5)-r, cy-r, 2*r, 2*r, alpha<<24|0xFFFFFF)
+		}
+		return
+	}
+	g.ellipse(x, y, d, d, headSeen)
+	// the tick: two strokes with round ends
+	u := func(v int32) int32 { return v * d / 22 }
+	a, b, c := point{cx - u(5), cy}, point{cx - u(2), cy + u(3)}, point{cx + u(5), cy - u(4)}
+	w := u(1)
+	if w < 1 {
+		w = 1
+	}
+	stroke := func(p, q point) {
+		dx, dy := float64(q.x-p.x), float64(q.y-p.y)
+		n := math.Hypot(dx, dy)
+		if n == 0 {
+			return
+		}
+		nx, ny := int32(math.Round(-dy/n*float64(w))), int32(math.Round(dx/n*float64(w)))
+		g.poly([]point{{p.x + nx, p.y + ny}, {q.x + nx, q.y + ny}, {q.x - nx, q.y - ny}, {p.x - nx, p.y - ny}}, 0xFFFFFF)
+	}
+	stroke(a, b)
+	stroke(b, c)
+	for _, p := range []point{a, b, c} {
+		g.ellipse(p.x-w, p.y-w, 2*w, 2*w, 0xFFFFFF)
+	}
+}
+
+// ---- what the other person is doing
+
+const (
+	wmAppTyping   = wmApp + 14 // someone started or stopped writing: wp 1 or 0, lp the conversation
+	timerHeadDots = 7
+)
+
+var (
+	typingUntil = map[int64]time.Time{} // conversations where the other person is writing now
+	headPhase   int                     // which of the three dots is lit
+)
+
+// typingArrived notes that someone is writing, or has stopped. Messenger repeats the news
+// every few seconds while it lasts, so it is believed only for a little while.
+func typingArrived(id int64, active bool) {
+	if active {
+		typingUntil[id] = time.Now().Add(8 * time.Second)
+	} else {
+		delete(typingUntil, id)
+	}
+	headsSync(false)
+	headDotsTimer()
+}
+
+// headDotsTimer keeps the dots turning only while a head really shows them.
+func headDotsTimer() {
+	for id := range heads {
+		if headMark(id) == markTyping {
+			pSetTimer.Call(hMain, timerHeadDots, 350, 0)
+			return
+		}
+	}
+	pKillTimer.Call(hMain, timerHeadDots)
+}
+
+// headMark is what the head of a conversation shows in its corner. A head whose panel is
+// open shows nothing: the conversation itself says it all there.
+func headMark(id int64) int {
+	switch os.Getenv("MLITE_HEADMARK") { // for looking at the marks only
+	case "typing":
+		return markTyping
+	case "seen":
+		return markSeen
+	}
+	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && compact.forID == id && vis != 0 {
+		return markNone
+	}
+	if until, ok := typingUntil[id]; ok {
+		if time.Now().Before(until) {
+			return markTyping
+		}
+		delete(typingUntil, id)
+	}
+	if headSeenBy(id) {
+		return markSeen
+	}
+	return markNone
+}
+
+// headSeenBy reports whether the last message of the conversation is one's own and the
+// other person has read it.
+func headSeenBy(id int64) bool {
+	self := be.accountID()
+	if self == 0 {
+		return false
+	}
+	msgs, _, err := be.db.RecentMessages(be.ctx, id, 1)
+	if err != nil || len(msgs) == 0 {
+		return false
+	}
+	last := msgs[len(msgs)-1]
+	if last.SenderID != self || last.Pending || last.Error != "" {
+		return false
+	}
+	marks, err := be.db.ReadMarks(be.ctx, id, self)
+	if err != nil {
+		return false
+	}
+	for _, at := range marks {
+		if !at.Before(last.Timestamp) {
+			return true
+		}
+	}
+	return false
 }
 
 // headsSync creates, removes and redraws the heads so they match the pinned list and the unread counts.
@@ -202,11 +348,15 @@ func headsSync(announce bool) {
 			title = threadTitle(t)
 		}
 		unread := unreadBy[hc.ID]
+		mark, phase := headMark(hc.ID), 0
+		if mark == markTyping {
+			phase = headPhase
+		}
 		sum := fnv.New64a()
-		fmt.Fprintf(sum, "%s|%d|%v|%06x|%d|%v", title, unread, avatarImage(hc.ID, dp(52)) != 0, pal.accent, dpi, pal.dark)
+		fmt.Fprintf(sum, "%s|%d|%v|%06x|%d|%v|%d|%d", title, unread, avatarImage(hc.ID, dp(52)) != 0, pal.accent, dpi, pal.dark, mark, phase)
 		if key := sum.Sum64(); key != h.key {
 			h.key = key
-			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread) })
+			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread, mark, phase) })
 			pShowWindow.Call(h.hwnd, swShowNA)
 		}
 		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
@@ -614,7 +764,7 @@ func dumpHeads(dir string) {
 		if bmp == 0 {
 			continue
 		}
-		paintHead(g, hc.ID, threadTitle(t), unreadBy[hc.ID])
+		paintHead(g, hc.ID, threadTitle(t), unreadBy[hc.ID], headMark(hc.ID), 0)
 		g.free()
 		name := filepath.Join(dir, fmt.Sprintf("head-%d.png", hc.ID))
 		pGdipSaveImageToFile.Call(bmp, uintptr(unsafe.Pointer(u16(name))), uintptr(unsafe.Pointer(&png)), 0)

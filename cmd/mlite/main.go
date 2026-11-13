@@ -111,6 +111,8 @@ var (
 		back, navBar                                            rect
 		stripText                                               string
 		stripClick                                              bool // the bar leads to the settings
+		top                                                     int32 // what the band about a new version takes from the top
+		band, bandGo, bandX                                     rect
 	}
 )
 
@@ -342,6 +344,7 @@ func onStrip(x, y int32) bool {
 
 var (
 	hotStrip bool   // the pointer is on that bar
+	hotBand  bool   // or on the band about a new version
 	stripDo  func() // what a click on it does
 )
 
@@ -566,26 +569,27 @@ func layout() {
 			barH = navH + dp(8)
 		}
 	}
-	lay.rail = rect{0, 0, railW, h}
-	lay.pane = rect{paneLeft, 0, paneLeft + paneW, h - barH}
-	lay.content = rect{paneLeft + paneW, 0, w, h}
+	lay.top = 0
+	lay.band, lay.bandGo, lay.bandX = rect{}, rect{}, rect{}
+	if !settings && bandText() != "" {
+		lay.top = dp(38)
+		lay.band = rect{0, 0, w, lay.top}
+	}
+	lay.rail = rect{0, lay.top, railW, h}
+	lay.pane = rect{paneLeft, lay.top, paneLeft + paneW, h - barH}
+	lay.content = rect{paneLeft + paneW, lay.top, w, h}
 	cx := lay.content.left + 1
 	if narrow {
-		lay.content, cx = rect{0, 0, w, h}, 0
+		lay.content, cx = rect{0, lay.top, w, h}, 0
 	}
 	lay.navBar = rect{0, h - barH, w, h}
-	searchTop := dp(14) + sp(34)
+	searchTop := lay.top + dp(14) + sp(34)
 	lay.search = rect{lay.pane.left + dp(12), searchTop, lay.pane.right - dp(12), searchTop + searchH}
 
 	lay.stripText, lay.stripClick, stripDo = statusLine(), false, nil
-	if lay.stripText == "" && !settings {
-		if n := updateNotice(); n != "" {
-			lay.stripText, lay.stripClick, stripDo = n, true, goToUpdates
-		}
-	}
 	lay.strip = rect{}
 	listTop := lay.search.bottom + dp(10)
-	viewTop := hdrH + 1
+	viewTop := lay.top + hdrH + 1
 	if lay.stripText != "" {
 		left, right := lay.pane.left+dp(12), lay.pane.right-dp(12)
 		if chat {
@@ -597,7 +601,7 @@ func layout() {
 			th = max
 		}
 		if chat { // in the conversation column the notice sits under the header
-			lay.strip = rect{left, hdrH + dp(8), right, hdrH + dp(8) + th + dp(14)}
+			lay.strip = rect{left, lay.top + hdrH + dp(8), right, lay.top + hdrH + dp(8) + th + dp(14)}
 			viewTop = lay.strip.bottom + dp(6)
 		} else {
 			top := lay.search.bottom + dp(8)
@@ -622,12 +626,12 @@ func layout() {
 		lay.bar = rect{cx + dp(12), h - compH + dp(8), w - dp(12), h - compH + dp(8) + barH}
 		compose.closeHit = rect{lay.bar.right - dp(32), lay.bar.top, lay.bar.right, lay.bar.bottom}
 	}
-	lay.header = rect{cx, 0, w, hdrH}
-	lay.hbInfo = rect{w - dp(10) - dp(36), (hdrH - dp(36)) / 2, w - dp(10), (hdrH + dp(36)) / 2}
+	lay.header = rect{cx, lay.top, w, lay.top + hdrH}
+	lay.hbInfo = rect{w - dp(10) - dp(36), lay.top + (hdrH-dp(36))/2, w - dp(10), lay.top + (hdrH+dp(36))/2}
 	lay.hbSearch = rect{lay.hbInfo.left - dp(4) - dp(36), lay.hbInfo.top, lay.hbInfo.left - dp(4), lay.hbInfo.bottom}
 	lay.hx, lay.back = 0, rect{}
 	if chat && !compact.on {
-		lay.hx, lay.back = dp(34), rect{0, 0, dp(46), hdrH}
+		lay.hx, lay.back = dp(34), rect{0, lay.top, dp(46), lay.top + hdrH}
 	}
 	lay.comp = rect{cx, h - compH, w, h}
 	lay.input = rect{cx + dp(12) + dp(40), h - dp(10) - fieldH, w - dp(12) - dp(36) - dp(8), h - dp(10)}
@@ -639,7 +643,7 @@ func layout() {
 		}
 	} else {
 		for i := int32(0); i < 2; i++ {
-			top := dp(6) + i*(navH+dp(4))
+			top := lay.top + dp(6) + i*(navH+dp(4))
 			moveTo(hNav[i], rect{dp(4), top, railW - dp(4), top + navH})
 		}
 		setBottom := h - dp(10) - sp(22)
@@ -725,6 +729,7 @@ func paintMain(target uintptr) {
 	buf := newBuffer(target, lay.w, lay.h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, lay.w, lay.h}, pal.mica)
+	paintBand(c, buf.hdc)
 	settings := nav == navSettings
 	showPane := !settings && !lay.chat
 	showContent := !settings && (!lay.narrow || lay.chat)
@@ -735,7 +740,7 @@ func paintMain(target uintptr) {
 	if showContent {
 		c.fill(lay.content, pal.layer)
 		if !lay.narrow {
-			c.fill(rect{lay.content.left, 0, lay.content.left + 1, lay.h}, pal.line)
+			c.fill(rect{lay.content.left, lay.top, lay.content.left + 1, lay.h}, pal.line)
 		}
 		if has {
 			c.fill(lay.header, pal.card)
@@ -772,7 +777,7 @@ func paintMain(target uintptr) {
 					g.image(img, lay.bar.left+dp(12), (lay.bar.top+lay.bar.bottom-s)/2, s, s)
 				}
 			}
-			hdrPhoto = threadAvatar(g, t, lay.header.left+hx+dp(14), (lay.header.bottom-dp(36))/2, dp(36), pal.card)
+			hdrPhoto = threadAvatar(g, t, lay.header.left+hx+dp(14), lay.header.top+(lay.header.bottom-lay.header.top-dp(36))/2, dp(36), pal.card)
 		}
 		if lay.stripText != "" {
 			s := lay.strip
@@ -793,7 +798,7 @@ func paintMain(target uintptr) {
 			if nav == navPeople {
 				title = "Osoby"
 			}
-			c.text(title, rect{lay.pane.left + dp(16), dp(8), lay.pane.right - dp(12), dp(8) + sp(34)}, pal.fg, dtSingleLine|dtVCenter)
+			c.text(title, rect{lay.pane.left + dp(16), lay.top + dp(8), lay.pane.right - dp(12), lay.top + dp(8) + sp(34)}, pal.fg, dtSingleLine|dtVCenter)
 			c.font(fnt.icon)
 			c.text(gSearch, rect{lay.search.left + dp(8), lay.search.top, lay.search.left + dp(30), lay.search.bottom}, pal.fg2, dtSingleLine|dtVCenter)
 		}
@@ -825,13 +830,14 @@ func paintMain(target uintptr) {
 		}
 		if has {
 			hh := lay.header.bottom
+			ht := lay.header.top
 			if lay.chat {
 				c.font(fnt.icon)
 				c.text(gBack, lay.back, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 			}
 			if !hdrPhoto {
 				c.font(fnt.avSm)
-				c.text(initials(threadTitle(t)), rect{lay.header.left + hx + dp(14), (hh - dp(36)) / 2, lay.header.left + hx + dp(50), (hh + dp(36)) / 2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+				c.text(initials(threadTitle(t)), rect{lay.header.left + hx + dp(14), ht + (hh - ht - dp(36)) / 2, lay.header.left + hx + dp(50), ht + (hh - ht + dp(36)) / 2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 			}
 			sub := ""
 			switch {
@@ -855,9 +861,9 @@ func paintMain(target uintptr) {
 			}
 			c.font(fnt.head)
 			if sub == "" {
-				c.text(threadTitle(t), rect{x, 0, titleRight, hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(threadTitle(t), rect{x, ht, titleRight, hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 			} else {
-				top := (hh - sp(38)) / 2
+				top := ht + (hh-ht-sp(38))/2
 				c.text(threadTitle(t), rect{x, top, titleRight, top + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 				c.font(fnt.small)
 				c.text(sub, rect{x, top + sp(20), titleRight, top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
@@ -1344,6 +1350,10 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmTimer:
 		switch wp {
+		case timerHeadDots:
+			headPhase++
+			headsSync(false)
+			headDotsTimer()
 		case timerOpen:
 			pKillTimer.Call(hMain, timerOpen)
 			if t, ok := threadByID(selectedID); ok {
@@ -1410,7 +1420,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmLButtonUp:
 		x, y := int32(int16(lp)), int32(int16(lp>>16))
-		if h := compose.closeHit; compose.mode != cmNone && x >= h.left && x < h.right && y >= h.top && y < h.bottom {
+		if onBand(x, y) {
+			bandClick(x, y)
+		} else if h := compose.closeHit; compose.mode != cmNone && x >= h.left && x < h.right && y >= h.top && y < h.bottom {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			goBack()
@@ -1419,6 +1431,12 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmMouseMove:
+		if hot := onBand(int32(int16(lp)), int32(int16(lp>>16))); hot != hotBand {
+			hotBand = hot
+			if hot {
+				trackLeave(hMain)
+			}
+		}
 		if hot := onStrip(int32(int16(lp)), int32(int16(lp>>16))); hot != hotStrip {
 			hotStrip = hot
 			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.strip)), 0)
@@ -1428,6 +1446,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmMouseLeave:
+		hotBand = false
 		if hotStrip {
 			hotStrip = false
 			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.strip)), 0)
@@ -1441,6 +1460,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmAppHistory:
 		historyChecked()
+		return 0
+	case wmAppTyping:
+		typingArrived(int64(lp), wp != 0)
 		return 0
 	case wmAppAvatar:
 		avatarArrived(int64(lp), wp != 0)
@@ -1456,7 +1478,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmSetCursor:
-		if lp&0xFFFF == 1 && hotStrip {
+		if lp&0xFFFF == 1 && (hotStrip || hotBand) {
 			cur, _, _ := pLoadCursorW.Call(0, idcHand)
 			pSetCursor.Call(cur)
 			return 1

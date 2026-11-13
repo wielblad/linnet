@@ -513,6 +513,11 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			for i := range sv.rows {
 				r := sv.rows[i]
 				if (r.kind == srToggle || r.kind == srAction) && y >= r.y && y < r.y+r.h {
+					// A row with a button acts only from the button: a click on the words
+					// beside it, to read them, must not sign anyone out or start anything.
+					if b, wy := r.btn, y-sv.scroll; r.kind == srAction && !(x >= b.left && x < b.right && wy >= b.top && wy < b.bottom) {
+						break
+					}
 					toggleSetting(i)
 					break
 				}

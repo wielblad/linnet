@@ -370,6 +370,21 @@ func (b *backend) run() {
 }
 
 func (b *backend) onEvent(ctx context.Context, evt meta.Event) {
+	// Someone writing: the heads on the desktop show it. One's own typing is not news.
+	if typing, err := meta.TypingFromEvent(ctx, b.db, evt); err == nil {
+		if h := b.hwnd.Load(); h != 0 {
+			for _, t := range typing {
+				if t.SenderID == b.accountID() || t.ThreadID == 0 {
+					continue
+				}
+				active := uintptr(0)
+				if t.Active {
+					active = 1
+				}
+				postMsg(h, wmAppTyping, active, uintptr(t.ThreadID))
+			}
+		}
+	}
 	switch {
 	case evt.Type == "permanent_error" && meta.IsLoggedOut(evt.Err):
 		b.setStatus("Sesja wygasła")

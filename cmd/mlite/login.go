@@ -470,7 +470,11 @@ func historyButton() string {
 
 // historyAction asks Meta whether there is a backup at all, and only then asks for the PIN.
 // Nothing of this happens by itself: it is the person who asks, from the settings.
-func historyAction() { historyAsk() }
+func historyAction() {
+	confirmBox("Wczytać historię rozmów szyfrowanych?",
+		"Program zgłosi Mecie nowe urządzenie z dostępem do kopii historii i poprosi o jej PIN. Zrobione zaraz po zalogowaniu potrafi skończyć się blokadą konta do czasu potwierdzenia tożsamości — lepiej odczekać.",
+		"Wczytaj", false, historyAsk)
+}
 
 func historyAsk() {
 	if historyBusy {

@@ -272,3 +272,83 @@ func updateStart() {
 		}
 	}()
 }
+
+// ---- the band about a new version, across the top of the window
+
+// bandGreen is the ground of the band; white on it reads at more than 6:1.
+const bandGreen = 0x116B35
+
+var bandHidden string // the version whose band was put away with the cross
+
+// bandText is what the band says, or "" when there is nothing to say. MLITE_UPDATEPREVIEW
+// shows it for a made-up version, for looking at it without a release.
+func bandText() string {
+	version := os.Getenv("MLITE_UPDATEPREVIEW")
+	if version == "" {
+		if !updatesOn() {
+			return ""
+		}
+		if state, _ := updateState(); state != upReady {
+			return ""
+		}
+		upd.mu.Lock()
+		version = upd.manifest.Version
+		upd.mu.Unlock()
+	}
+	if version == "" || version == bandHidden {
+		return ""
+	}
+	return "Jest nowa wersja " + version + " — kliknij, aby zaktualizować"
+}
+
+// paintBand draws the band: what it says, a button that starts the update, and a cross
+// that puts the band away until the next version.
+func paintBand(c canvas, hdc uintptr) {
+	b := lay.band
+	if b.bottom <= b.top {
+		return
+	}
+	c.fill(b, bandGreen)
+	h := b.bottom - b.top
+	c.font(fnt.smallSemi)
+	label := "Aktualizuj"
+	pw, ph := c.width(label)+dp(24), dp(24)
+	lay.bandX = rect{b.right - dp(40), b.top, b.right, b.bottom}
+	lay.bandGo = rect{lay.bandX.left - dp(4) - pw, b.top + (h-ph)/2, lay.bandX.left - dp(4), b.top + (h+ph)/2}
+	g := newGfx(hdc)
+	r := lay.bandGo
+	g.round(r.left, r.top, pw, ph, dp(6), dp(6), dp(6), dp(6), 0xFFFFFF)
+	g.round(r.left+1, r.top+1, pw-2, ph-2, dp(5), dp(5), dp(5), dp(5), bandGreen)
+	g.free()
+	c.text(label, r, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
+	c.font(fnt.iconSm)
+	c.text(gClose, lay.bandX, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
+	c.font(fnt.body)
+	c.text(bandText(), rect{b.left + dp(16), b.top, r.left - dp(12), b.bottom}, 0xFFFFFF, dtSingleLine|dtVCenter|dtEndEllipsis)
+}
+
+func onBand(x, y int32) bool {
+	b := lay.band
+	return b.bottom > b.top && x >= b.left && x < b.right && y >= b.top && y < b.bottom
+}
+
+// bandClick: the cross puts the band away, the button starts the update, and anywhere else
+// leads to the settings, where the update is.
+func bandClick(x, y int32) {
+	in := func(r rect) bool { return x >= r.left && x < r.right && y >= r.top && y < r.bottom }
+	switch {
+	case in(lay.bandX):
+		bandHidden = os.Getenv("MLITE_UPDATEPREVIEW")
+		if bandHidden == "" {
+			upd.mu.Lock()
+			bandHidden = upd.manifest.Version
+			upd.mu.Unlock()
+		}
+		layout()
+	case in(lay.bandGo):
+		goToUpdates()
+		updateAction()
+	default:
+		goToUpdates()
+	}
+}
