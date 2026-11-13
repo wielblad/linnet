@@ -1,8 +1,8 @@
 {
-  "version": "0.8.1",
+  "version": "0.8.2",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29775872,
-  "sha256": "a655af5100cebf76a9d03120c222d6c2d6fe8ba0fc93908833a63cb8feda827c",
-  "signature": "1g60LnAUaOS+nUnEZ0SN0xfr9VO+8YlIA8WyZB895rXFbMr+D+Im4PfkpQGNRIg+Vp+dct7NF4wHCsvWSNRYAA==",
-  "notes": "Program sprawdza, czy jest nowsza wersja, co 15 minut zamiast co 6 godzin. Poza tym to samo co 0.8: grupy główek z własnymi oknami rozmów, rozmiary główek i okien, zdjęcia i filmy na pełnym ekranie, wyszukiwanie w każdej rozmowie, powiadomienie Windows o aktualizacji."
+  "size": 29776384,
+  "sha256": "3f75af3a618a3078c698b31b9d71b1df16f5201302c6249f92783e28d402e417",
+  "signature": "iHjbgDLftbadJfkgdLlyaMQP/O5ZnSv1BKjP1dAVcv39L4IbNP+l6Pok6ItyjuMj8SuGDkSZNr/oBym/YCEVDQ==",
+  "notes": "Okno programu jest nad główkami i nad oknami rozmów. Pasek i powiadomienie o nowej wersji tylko prowadzą do ustawień; aktualizacja startuje wyłącznie po kliknięciu Aktualizuj."
 }
