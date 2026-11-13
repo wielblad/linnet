@@ -82,6 +82,12 @@ func legible(c, ink uint32, bgs ...uint32) uint32 {
 func loadPalette() {
 	const personalize = `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
 	dark := regDword(personalize, "AppsUseLightTheme", 1) == 0
+	switch cfg.Theme { // chosen in the settings; "" follows Windows
+	case "light":
+		dark = false
+	case "dark":
+		dark = true
+	}
 	if v := os.Getenv("MLITE_THEME"); v != "" { // for screenshots of the other theme only
 		dark = v == "dark"
 	}

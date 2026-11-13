@@ -11,8 +11,8 @@ import (
 	"unsafe"
 )
 
-// config holds the settings that the program itself applies. Theme, accent and text size
-// come from Windows and are deliberately not duplicated here.
+// config holds the settings that the program itself applies. Accent and text size come from
+// Windows; the theme follows Windows unless it is chosen here.
 type config struct {
 	Toasts     bool `json:"toasts"`
 	Body       bool `json:"body"`
@@ -29,6 +29,10 @@ type config struct {
 	VideoSession bool `json:"video_session"`
 	// Sound plays the Windows message sound with a notification.
 	Sound bool `json:"sound"`
+	// Tone is the sound played: "" for the Windows one, otherwise an id from tones.
+	Tone string `json:"tone"`
+	// Theme is "" to follow Windows, "light" or "dark".
+	Theme string `json:"theme"`
 }
 
 var (
@@ -85,7 +89,7 @@ type setRow struct {
 	live        func() string // description computed at paint time
 	label       func() string // text of the button of an action row, "" for none
 	action      func()
-	btn         rect          // where that button was drawn
+	btn         rect // where that button was drawn
 	get         func() bool
 	set         func(bool)
 	y, h        int32
@@ -109,12 +113,14 @@ func buildSettings() {
 		{kind: srHeader, title: "Powiadomienia"},
 		{kind: srToggle, title: "Powiadomienia Windows", desc: "Nowa wiadomość pojawia się w rogu ekranu.",
 			get: func() bool { return cfg.Toasts }, set: func(v bool) { cfg.Toasts = v }},
-		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Systemowy dźwięk wiadomości razem z powiadomieniem.",
+		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Dźwięk razem z powiadomieniem.",
 			get: func() bool { return cfg.Sound }, set: func(v bool) { cfg.Sound = v }},
+		{kind: srAction, title: "Rodzaj dźwięku", desc: "Kliknij, aby przejść do następnego i go posłuchać.",
+			label: toneLabel, action: nextTone},
 		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
 			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
-			{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
-				get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
+		{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
+			get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
 		{kind: srHeader, title: "Główki rozmów"},
 		{kind: srInfo, title: "Przypinanie rozmowy do pulpitu", desc: "Prawy przycisk na rozmowie na liście, potem „Przypnij jako główkę”."},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",
@@ -127,7 +133,9 @@ func buildSettings() {
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",
 			get: func() bool { return cfg.Background }, set: func(v bool) { cfg.Background = v }},
 		{kind: srHeader, title: "Wygląd"},
-		{kind: srInfo, title: "Motyw, kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
+		{kind: srAction, title: "Motyw", desc: "Auto: tak jak w ustawieniach Windows.",
+			label: themeLabel, action: nextTheme},
+		{kind: srInfo, title: "Kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
 		{kind: srToggle, title: "Pokaż zużycie pamięci na pasku bocznym",
 			get: func() bool { return cfg.ShowMem }, set: func(v bool) { cfg.ShowMem = v }},
 		{kind: srHeader, title: "Aktualizacje"},
@@ -138,6 +146,52 @@ func buildSettings() {
 			return fmt.Sprintf("Teraz: %d MB.", workingSetMB())
 		}},
 	}
+}
+
+var themes = []struct{ id, label string }{{"", "Auto"}, {"light", "Jasny"}, {"dark", "Ciemny"}}
+
+func themeLabel() string {
+	for _, t := range themes {
+		if t.id == cfg.Theme {
+			return t.label
+		}
+	}
+	return themes[0].label
+}
+
+// nextTheme moves to the next theme and repaints everything as after a change in Windows.
+func nextTheme() {
+	next := 0
+	for i, t := range themes {
+		if t.id == cfg.Theme {
+			next = (i + 1) % len(themes)
+		}
+	}
+	cfg.Theme = themes[next].id
+	saveConfig()
+	sendMsg(hMain, wmSettingChange, 0, 0)
+}
+
+func toneLabel() string {
+	for _, t := range tones {
+		if t.id == cfg.Tone {
+			return t.label
+		}
+	}
+	return tones[0].label
+}
+
+// nextTone moves to the next sound and plays it, whether or not the sound is switched on.
+func nextTone() {
+	next := 0
+	for i, t := range tones {
+		if t.id == cfg.Tone {
+			next = (i + 1) % len(tones)
+		}
+	}
+	cfg.Tone = tones[next].id
+	saveConfig()
+	playTone(cfg.Tone)
 }
 
 func layoutSettings() {
