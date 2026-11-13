@@ -85,12 +85,12 @@ func decodeLiveMessage(evt *events.FBMessage) (liveMessage, bool) {
 	}
 	return liveMessage{
 		message: store.Message{
-			ID:        evt.Info.ID,
-			ThreadID:  threadID,
-			SenderID:  senderID,
-			Text:      body.Text,
-			Timestamp: evt.Info.Timestamp,
-			ReplyToID: evt.FBApplication.GetMetadata().GetQuotedMessage().GetStanzaID(),
+			ID:              evt.Info.ID,
+			ThreadID:        threadID,
+			SenderID:        senderID,
+			Text:            body.Text,
+			Timestamp:       evt.Info.Timestamp,
+			ReplyToID:       evt.FBApplication.GetMetadata().GetQuotedMessage().GetStanzaID(),
 			MediaKind:       att.Kind,
 			MediaMime:       att.Mime,
 			MediaName:       att.Name,

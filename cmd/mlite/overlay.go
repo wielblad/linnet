@@ -16,25 +16,25 @@ import (
 )
 
 const (
-	gwlStyle    = ^uintptr(15) // GWL_STYLE (-16)
-	gwlExStyle  = ^uintptr(19) // GWL_EXSTYLE (-20)
-	wmNcHitTest = 0x0084
-	htClient    = 1
-	hwndTopmost = ^uintptr(0) // HWND_TOPMOST (-1)
-	hwndNoTop   = ^uintptr(1) // HWND_NOTOPMOST (-2)
-	swpFrame    = 0x0020
-	swpNoMove   = 0x0002
-	swpNoSize   = 0x0001
+	gwlStyle      = ^uintptr(15) // GWL_STYLE (-16)
+	gwlExStyle    = ^uintptr(19) // GWL_EXSTYLE (-20)
+	wmNcHitTest   = 0x0084
+	htClient      = 1
+	hwndTopmost   = ^uintptr(0) // HWND_TOPMOST (-1)
+	hwndNoTop     = ^uintptr(1) // HWND_NOTOPMOST (-2)
+	swpFrame      = 0x0020
+	swpNoMove     = 0x0002
+	swpNoSize     = 0x0001
 	swpNoZOrder   = 0x0004
 	swpNoActivate = 0x0010
 )
 
 var (
-	pGetWindowLongPtrW    = user32.NewProc("GetWindowLongPtrW")
-	pRedrawWindow         = user32.NewProc("RedrawWindow")
-	pBeginDeferWindowPos  = user32.NewProc("BeginDeferWindowPos")
-	pDeferWindowPos       = user32.NewProc("DeferWindowPos")
-	pEndDeferWindowPos    = user32.NewProc("EndDeferWindowPos")
+	pGetWindowLongPtrW   = user32.NewProc("GetWindowLongPtrW")
+	pRedrawWindow        = user32.NewProc("RedrawWindow")
+	pBeginDeferWindowPos = user32.NewProc("BeginDeferWindowPos")
+	pDeferWindowPos      = user32.NewProc("DeferWindowPos")
+	pEndDeferWindowPos   = user32.NewProc("EndDeferWindowPos")
 )
 
 const (

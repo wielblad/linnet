@@ -104,10 +104,10 @@ type paintStruct struct {
 	rgbReserved [32]byte
 }
 type memCountersEx2 struct {
-	cb, pageFaults                        uint32
+	cb, pageFaults                          uint32
 	peakWS, ws, qpp, qp, qpnp, qnp, pf, ppf uintptr
-	privateUsage, privateWS               uintptr
-	sharedCommit                          uint64
+	privateUsage, privateWS                 uintptr
+	sharedCommit                            uint64
 }
 
 const (
@@ -288,7 +288,7 @@ func paint(target0 uintptr) {
 	if d2dReady {
 		full := rect{0, 0, w, h}
 		com(target, 57, mem, uintptr(unsafe.Pointer(&full))) // BindDC
-		com(target, 48)                                       // BeginDraw
+		com(target, 48)                                      // BeginDraw
 		bg := cf(mica)
 		com(target, 47, uintptr(unsafe.Pointer(&bg))) // Clear
 		for side := int32(0); side < 2; side++ {

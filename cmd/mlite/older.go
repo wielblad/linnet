@@ -23,9 +23,9 @@ const (
 )
 
 var older struct {
-	busy   int64           // thread a page is being fetched for, 0 when none
-	done   map[int64]bool  // threads whose beginning has been reached
-	failed time.Time       // last failed fetch: no retry for a moment
+	busy   int64          // thread a page is being fetched for, 0 when none
+	done   map[int64]bool // threads whose beginning has been reached
+	failed time.Time      // last failed fetch: no retry for a moment
 }
 
 // fetchOlder asks Messenger for one page older than what is stored. The window is told

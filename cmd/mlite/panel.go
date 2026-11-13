@@ -27,11 +27,11 @@ const (
 	phEntry
 	phResult
 
-	idFind     = 333
-	idInfo     = 334
-	idClose    = 335
-	timerFlash = 23
-	timerToast = 24
+	idFind      = 333
+	idInfo      = 334
+	idClose     = 335
+	timerFlash  = 23
+	timerToast  = 24
 	idPanelEdit = 360
 )
 

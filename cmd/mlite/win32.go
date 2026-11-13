@@ -325,13 +325,13 @@ type measureItem struct {
 }
 
 type scrollInfo struct {
-	cbSize   uint32
-	fMask    uint32
-	nMin     int32
-	nMax     int32
-	nPage    uint32
-	nPos     int32
-	nTrack   int32
+	cbSize uint32
+	fMask  uint32
+	nMin   int32
+	nMax   int32
+	nPage  uint32
+	nPos   int32
+	nTrack int32
 }
 
 type minMaxInfo struct {

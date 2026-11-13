@@ -1462,7 +1462,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			return 1
 		}
 	case wmAppUpdate:
-		layout() // the bar about a new version comes and goes
+		layout()         // the bar about a new version comes and goes
 		layoutSettings() // the row grows and shrinks with its text
 		clampSettingsScroll()
 		invalidate(hSet)

@@ -92,7 +92,7 @@ type setRow struct {
 	live        func() string // description computed at paint time
 	label       func() string // text of the button of an action row, "" for none
 	action      func()
-	btn         rect          // where that button was drawn
+	btn         rect // where that button was drawn
 	get         func() bool
 	set         func(bool)
 	y, h        int32
@@ -122,8 +122,8 @@ func buildSettings() {
 			live: soundLine, label: soundLabel, action: pickSound},
 		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
 			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
-			{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
-				get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
+		{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
+			get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
 		{kind: srHeader, title: "Główki rozmów"},
 		{kind: srInfo, title: "Przypinanie rozmowy do pulpitu", desc: "Prawy przycisk na rozmowie na liście, potem „Przypnij jako główkę”."},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",

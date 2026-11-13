@@ -506,7 +506,7 @@ func (b *backend) send(thread store.Thread, text string, replyTo store.Message) 
 		ReplyToID:     replyTo.ID,
 		ReplyText:     replyTo.Text,
 		ReplySenderID: replyTo.SenderID,
-		}
+	}
 	if err := b.db.UpsertMessage(b.ctx, pending); err != nil {
 		b.notice("Błąd zapisu: " + err.Error())
 		return false

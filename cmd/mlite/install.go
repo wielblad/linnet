@@ -292,10 +292,10 @@ func createShortcut(link, target, workDir, icon, id, description string) error {
 	}
 	defer com(sl, 2)
 	p := func(s string) uintptr { return uintptr(unsafe.Pointer(u16(s))) }
-	com(sl, 20, p(target))      // SetPath
-	com(sl, 9, p(workDir))      // SetWorkingDirectory
-	com(sl, 7, p(description))  // SetDescription
-	com(sl, 17, p(icon), 0)     // SetIconLocation
+	com(sl, 20, p(target))     // SetPath
+	com(sl, 9, p(workDir))     // SetWorkingDirectory
+	com(sl, 7, p(description)) // SetDescription
+	com(sl, 17, p(icon), 0)    // SetIconLocation
 	if hr := com(sl, 0, uintptr(unsafe.Pointer(&iidStore)), uintptr(unsafe.Pointer(&store))); hr != 0 || store == 0 {
 		return fmt.Errorf("krok 2 (%08X)", uint32(hr))
 	}

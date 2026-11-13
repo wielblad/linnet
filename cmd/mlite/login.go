@@ -30,8 +30,8 @@ const (
 	gEye              = "" // Segoe Fluent / MDL2: an eye
 	gLock             = "" // and a padlock
 	gWarn             = ""
-	idLoginField  = 350
-	idLoginOption = 360 // a choice of one step: idLoginOption + field*optionsPerField + option
+	idLoginField      = 350
+	idLoginOption     = 360 // a choice of one step: idLoginOption + field*optionsPerField + option
 
 	optionsPerField = 8
 

@@ -474,11 +474,11 @@ func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, 
 			return err
 		}
 		if err := s.UpsertMessage(ctx, store.Message{
-			ID:        plain.ID,
-			ThreadID:  thread.ID,
-			SenderID:  plain.SenderID,
-			Text:      plain.Text,
-			Timestamp: time.UnixMilli(plain.TimestampMS),
+			ID:              plain.ID,
+			ThreadID:        thread.ID,
+			SenderID:        plain.SenderID,
+			Text:            plain.Text,
+			Timestamp:       time.UnixMilli(plain.TimestampMS),
 			MediaKind:       plain.MediaKind,
 			MediaMime:       plain.MediaMime,
 			MediaName:       plain.MediaName,
@@ -517,7 +517,7 @@ type plainArchiveMessage struct {
 	TimestampMS int64
 
 	MediaKind, MediaMime, MediaRef, MediaName string
-	DurationMs                               int64
+	DurationMs                                int64
 
 	LinkURL, LinkTitle, LinkRef string
 }

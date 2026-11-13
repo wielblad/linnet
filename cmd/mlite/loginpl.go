@@ -112,4 +112,3 @@ func loginPreview(kind string) {
 	loginFields()
 	layout()
 }
-

@@ -4,8 +4,8 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"hash/fnv"
+	"os"
 	"strings"
 	"syscall"
 	"time"
@@ -54,7 +54,7 @@ type vitem struct {
 	img        bool    // the message shows a picture
 	imgReady   bool    // the picture itself can be drawn
 	imgW, imgH int32
-	imgTop     int32 // offset of the picture from the top of the bubble
+	imgTop     int32         // offset of the picture from the top of the bubble
 	imgMsg     store.Message // what the picture is fetched for: the message, or a video preview
 	preview    bool          // the picture stands for a link, not for a photo
 	og         string        // link whose preview is fetched from its page when it is seen
@@ -73,32 +73,32 @@ type vitem struct {
 }
 
 var mv struct {
-	hwnd     uintptr
-	items    []vitem
-	total    int32
-	scroll   int32
-	w, h     int32
-	key      uint64
-	thread   store.Thread
-	has      bool
-	group    bool
-	msgs     []store.Message
-	receipts []store.Receipt
-	nicks    map[int64]string
-	self     int64
-	newAfter time.Time
-	hasNew   bool
-	focus    bool
-	sc       scroller
-	hover    int // index of the message under the pointer, -1 when none
-	flash    string // message marked for a moment after a jump from the search
-	toast    string // short confirmation shown over the bottom of the view
-	limit     int   // how many of the newest messages are loaded
-	limitFor  int64 // the thread that limit belongs to
-	localMore bool  // the store holds older messages than the loaded ones
-	spin      int   // step of the fetching mark
-	hotJump   bool  // the pointer is on the button that returns to the newest message
-	hotAct   int // which of its actions is under the pointer
+	hwnd      uintptr
+	items     []vitem
+	total     int32
+	scroll    int32
+	w, h      int32
+	key       uint64
+	thread    store.Thread
+	has       bool
+	group     bool
+	msgs      []store.Message
+	receipts  []store.Receipt
+	nicks     map[int64]string
+	self      int64
+	newAfter  time.Time
+	hasNew    bool
+	focus     bool
+	sc        scroller
+	hover     int    // index of the message under the pointer, -1 when none
+	flash     string // message marked for a moment after a jump from the search
+	toast     string // short confirmation shown over the bottom of the view
+	limit     int    // how many of the newest messages are loaded
+	limitFor  int64  // the thread that limit belongs to
+	localMore bool   // the store holds older messages than the loaded ones
+	spin      int    // step of the fetching mark
+	hotJump   bool   // the pointer is on the button that returns to the newest message
+	hotAct    int    // which of its actions is under the pointer
 }
 
 func isGroup(t store.Thread) bool { return !table.ThreadType(t.ThreadType).IsOneToOne() }
@@ -772,10 +772,10 @@ func paintView(target uintptr) {
 				if !it.imgReady {
 					c.font(fnt.small)
 					c.text(mediaNote(it.imgMsg), rect{x0 + dp(8), cy, x0 + it.imgW - dp(8), cy + it.imgH}, ink2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
-					} else if it.preview && it.play {
-						c.font(fnt.iconLg)
-						c.text(gPlay, rect{x0, cy, x0 + it.imgW, cy + it.imgH}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
-					}
+				} else if it.preview && it.play {
+					c.font(fnt.iconLg)
+					c.text(gPlay, rect{x0, cy, x0 + it.imgW, cy + it.imgH}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
+				}
 				cy += it.imgH + dp(6)
 			}
 			col := ink

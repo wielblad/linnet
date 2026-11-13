@@ -146,7 +146,9 @@ var fnt struct {
 	lineH                                                                                     int32
 }
 
-func makeFont(px int32, weight int, face string) uintptr { return makeFontStyle(px, weight, face, false) }
+func makeFont(px int32, weight int, face string) uintptr {
+	return makeFontStyle(px, weight, face, false)
+}
 
 func makeFontStyle(px int32, weight int, face string, italic bool) uintptr {
 	slant := uintptr(0)

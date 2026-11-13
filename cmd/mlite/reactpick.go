@@ -16,8 +16,8 @@ const (
 	gReply = ""
 	gMore  = ""
 
-	gCopy  = "\uE8C8"
-	gDown  = "\uE70D"
+	gCopy = "\uE8C8"
+	gDown = "\uE70D"
 
 	actReact = 0
 	actReply = 1

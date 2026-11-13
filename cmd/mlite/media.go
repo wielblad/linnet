@@ -35,14 +35,14 @@ type mediaDone struct {
 }
 
 var md struct {
-	files  map[string]string    // local file by message id
-	busy   map[string]bool      // download running
-	failed map[string]time.Time // last failed attempt
-	dims   map[string][2]int32  // pixel size of the file; zero when it cannot be decoded here
-	thumbs map[string]thumb     // decoded, scaled, rounded
+	files   map[string]string        // local file by message id
+	busy    map[string]bool          // download running
+	failed  map[string]time.Time     // last failed attempt
+	dims    map[string][2]int32      // pixel size of the file; zero when it cannot be decoded here
+	thumbs  map[string]thumb         // decoded, scaled, rounded
 	pending map[string]store.Message // files to open as soon as they arrive
 	shown   map[string]string        // the file that is drawn, when it differs from the fetched one
-	done   chan mediaDone
+	done    chan mediaDone
 }
 
 func init() {
