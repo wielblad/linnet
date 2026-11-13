@@ -19,6 +19,7 @@ const (
 	niifUser      = 0x04
 	niifLargeIcon = 0x20
 	niifQuietTime = 0x80
+	niifNoSound   = 0x10 // the program plays the message sound itself
 )
 
 var notifyPic uintptr // the icon of the last notification, kept until the next one replaces it
@@ -48,9 +49,9 @@ func notifyAbout(t store.Thread, title, text string) {
 	}
 	n := tray
 	n.uFlags = nifInfo
-	n.dwInfoFlags = niifInfo | niifQuietTime
+	n.dwInfoFlags = niifInfo | niifQuietTime | niifNoSound
 	if icon != 0 {
-		n.dwInfoFlags = niifUser | niifLargeIcon | niifQuietTime
+		n.dwInfoFlags = niifUser | niifLargeIcon | niifQuietTime | niifNoSound
 		n.hBalloonIcon = icon
 	}
 	copyU16(n.szInfoTitle[:], title)

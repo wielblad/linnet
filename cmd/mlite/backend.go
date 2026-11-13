@@ -57,6 +57,7 @@ type backend struct {
 	selfOverride   int64
 	noRead         bool // never tell Messenger that something was read (for checks)
 	refreshPending atomic.Bool
+	mediaRetry     atomic.Bool // pictures that failed may be tried again (the connection came back)
 	armed          atomic.Bool
 	done           chan struct{}
 }
@@ -299,6 +300,21 @@ func (b *backend) onEvent(ctx context.Context, evt meta.Event) {
 		b.setStatus("Błąd: " + evt.Err.Error())
 	case evt.Type == "transient_disconnect":
 		b.setStatus("Rozłączono, ponawiam…")
+	case evt.Type == "e2ee_connected":
+		// Encrypted chats are back after a break: catch up on what arrived meanwhile and let
+		// pictures that could not be fetched be tried again.
+		log.Warn().Msg("encrypted chats reconnected")
+		b.mediaRetry.Store(true)
+		if client := b.current(); client != nil {
+			go func() {
+				if err := client.SyncRecentEncrypted(b.ctx, b.db); err != nil {
+					log.Warn().Err(err).Msg("catch up after reconnect")
+				}
+				b.requestRefresh()
+			}()
+		}
+		b.requestRefresh()
+		return
 	case evt.Type == "reconnected" || evt.Type == "connected":
 		if b.armed.Load() {
 			b.setStatus("Połączono")

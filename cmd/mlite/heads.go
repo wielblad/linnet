@@ -192,8 +192,8 @@ func headsSync(announce bool) {
 			layer(h.hwnd, headSize(), headSize(), func(g gfx) { paintHead(g, hc.ID, title, unread) })
 			pShowWindow.Call(h.hwnd, swShowNA)
 		}
-		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) {
-			showPeek(h, title, oneLine(previewText(t.LastPreview), 110), firstURL(t.LastPreview))
+		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
+			showPeek(h, title, oneLine(previewText(t.LastPreview), 260), firstURL(t.LastPreview))
 		}
 		if unread == 0 {
 			hidePeek(h)
@@ -233,33 +233,39 @@ func showPeek(h *head, title, text, link string) {
 		text = "Nowa wiadomość"
 	}
 	hidePeek(h) // made anew each time: its size and whether it takes clicks depend on the message
-	w, ht := peekSize(link != "")
-	if h.peek == 0 {
-		ex := uint32(wsExLayered | wsExTopmost | wsExToolWindow | wsExNoActivate)
-		if link == "" {
-			ex |= wsExTransparent // nothing to press: clicks go through to what is underneath
-		}
-		h.peek = createWindow(ex, "MlitePeek", "Nowa wiadomość", wsPopup, 0, 0)
-		if h.peek == 0 {
-			return
-		}
-		pSetLayeredAttrs.Call(h.peek, 0, 255, 2) // opaque; layered only so that clicks pass through
-		rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(w+1), uintptr(ht+1), uintptr(dp(20)), uintptr(dp(20)))
-		pSetWindowRgn.Call(h.peek, rgn, 0)
+	p := &peekData{title: title, text: emojify(text), link: link}
+	p.measure()
+	w, ht := p.w, p.h
+	ex := uint32(wsExLayered | wsExTopmost | wsExToolWindow | wsExNoActivate)
+	if link == "" {
+		ex |= wsExTransparent // nothing to press: clicks go through to what is underneath
 	}
-	peeks[h.peek] = &peekData{title: title, text: emojify(text), link: link}
+	h.peek = createWindow(ex, "MlitePeek", "Nowa wiadomość", wsPopup, 0, 0)
+	if h.peek == 0 {
+		return
+	}
+	pSetLayeredAttrs.Call(h.peek, 0, 255, 2) // opaque; layered only so that clicks can pass through
+	rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(w+1), uintptr(ht+1), uintptr(dp(24)), uintptr(dp(24)))
+	pSetWindowRgn.Call(h.peek, rgn, 0)
+	peeks[h.peek] = p
 	var r, work rect
 	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
-	x := r.left - w - dp(6)
+	x := r.left - w - dp(8)
 	if (r.left+r.right)/2 < (work.left+work.right)/2 {
-		x = r.right + dp(6)
+		x = r.right + dp(8)
 	}
 	y := r.top + (headSize()-ht)/2
+	if y+ht > work.bottom-dp(8) {
+		y = work.bottom - dp(8) - ht
+	}
+	if y < work.top+dp(8) {
+		y = work.top + dp(8)
+	}
 	pSetWindowPos.Call(h.peek, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), 0x0004|0x0010)
 	pShowWindow.Call(h.peek, swShowNA)
 	invalidate(h.peek)
-	stay := uintptr(6000)
+	stay := uintptr(7000)
 	if link != "" {
 		stay = 10000 // long enough to reach for the link
 	}
@@ -412,7 +418,7 @@ func peekProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmMouseMove:
 		if p := peeks[hwnd]; p != nil && p.link != "" {
 			x, y := lpPoint(lp)
-			r := peekLinkRect()
+			r := p.linkRect()
 			hot := x >= r.left && x < r.right && y >= r.top && y < r.bottom
 			if hot != p.hot {
 				p.hot = hot
@@ -438,7 +444,7 @@ func peekProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmLButtonUp:
 		if p := peeks[hwnd]; p != nil && p.link != "" {
 			x, y := lpPoint(lp)
-			if r := peekLinkRect(); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+			if r := p.linkRect(); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
 				peekOpen(hwnd)
 			}
 		}

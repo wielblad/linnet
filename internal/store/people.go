@@ -192,6 +192,16 @@ func (s *Store) AllReceipts(ctx context.Context) (map[int64][]Receipt, error) {
 }
 
 // LastSenders returns who sent the newest stored message of each thread.
+// UnreadSince counts the messages of other people in a thread newer than the given time.
+func (s *Store) UnreadSince(ctx context.Context, threadID, selfID, sinceMs int64) (int, error) {
+	var n int
+	err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE thread_id = ? AND sender_id != ? AND timestamp_ms > ? AND pending = 0`, threadID, selfID, sinceMs).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("unread since: %w", err)
+	}
+	return n, nil
+}
+
 // LastAttachments returns, for each thread whose newest message is an attachment, its kind
 // and file name.
 func (s *Store) LastAttachments(ctx context.Context) (map[int64][2]string, error) {

@@ -1,4 +1,4 @@
-param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Python = "python")
+param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Python = "python", [int]$Downs = 2)
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 Add-Type -ReferencedAssemblies System.Drawing @"
 using System;
@@ -34,7 +34,7 @@ function Find($cls) {
 $h = Find "MliteMain"
 $list = [WA]::GetDlgItem($h, 311)
 # 1. what a screen reader is told when the keyboard moves through the list
-foreach ($i in 0, 1) {
+foreach ($i in 0..($Downs - 1)) {
   [WA]::PostMessage($list, 0x0100, [IntPtr]0x28, [IntPtr]1) | Out-Null
   Start-Sleep -Milliseconds 500
   $name = [System.Windows.Automation.AutomationElement]::FromHandle($list).Current.Name

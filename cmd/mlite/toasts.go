@@ -71,6 +71,7 @@ func toastAbout(t store.Thread, title, text string) bool {
 		Args:  "open:" + toastTag(t.ID),
 		Reply: be.current() != nil || os.Getenv("MLITE_TOASTREPLY") != "", ReplyHint: "Napisz odpowiedź…", ReplyLabel: "Wyślij",
 		ReplyArgs: "reply:" + toastTag(t.ID),
+		Silent:    true, // the program plays the sound itself
 	}
 	if err := toast.Show(n); err != nil {
 		log.Warn().Err(err).Msg("show toast")

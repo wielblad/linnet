@@ -27,10 +27,12 @@ type config struct {
 	Quiet []int64 `json:"quiet"`
 	// VideoSession hands the embedded video player this program's Facebook session.
 	VideoSession bool `json:"video_session"`
+	// Sound plays the Windows message sound with a notification.
+	Sound bool `json:"sound"`
 }
 
 var (
-	cfg     = config{Toasts: true, Body: true, Background: true, ShowMem: true, HeadPreview: true, VideoSession: true}
+	cfg     = config{Toasts: true, Body: true, Background: true, ShowMem: true, HeadPreview: true, VideoSession: true, Sound: true}
 	cfgPath string
 	dataDir string
 )
@@ -101,6 +103,8 @@ func buildSettings() {
 		{kind: srHeader, title: "Powiadomienia"},
 		{kind: srToggle, title: "Powiadomienia Windows", desc: "Nowa wiadomość pojawia się w rogu ekranu.",
 			get: func() bool { return cfg.Toasts }, set: func(v bool) { cfg.Toasts = v }},
+		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Systemowy dźwięk wiadomości razem z powiadomieniem.",
+			get: func() bool { return cfg.Sound }, set: func(v bool) { cfg.Sound = v }},
 		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
 			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
 			{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",

@@ -214,7 +214,36 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("connect e2ee: %w", err)
 	}
 	go c.persistStateLoop(ctx)
+	go c.e2eeWatchdog(ctx)
 	return nil
+}
+
+// e2eeWatchdog brings the connection of encrypted chats back when it has dropped and was
+// not re-established: after the server ends the stream the library closes the socket and
+// leaves it so. Without this no encrypted message arrives live, pictures cannot be fetched
+// and read marks cannot be sent until the program is restarted.
+func (c *Client) e2eeWatchdog(ctx context.Context) {
+	const calm = 15 * time.Second
+	wait := calm
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if c.e2ee == nil || c.e2ee.IsConnected() {
+			wait = calm
+			continue
+		}
+		if err := c.e2ee.Connect(); err != nil && !errors.Is(err, whatsmeow.ErrAlreadyConnected) {
+			if wait < 2*time.Minute {
+				wait *= 2 // keep trying, less often
+			}
+			continue
+		}
+		wait = calm
+		c.handler(ctx, Event{Type: "e2ee_connected"})
+	}
 }
 
 func (c *Client) Disconnect() {

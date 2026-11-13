@@ -132,6 +132,7 @@ func drawable(path string) (string, int32, int32) {
 
 type peekData struct {
 	title, text, link string
+	w, h, textH       int32
 	hot               bool // the pointer is on "Otwórz link"
 }
 
@@ -140,19 +141,27 @@ var (
 	peeks            = map[uintptr]*peekData{} // by window
 )
 
-// peekSize is the size of the bubble; with a link it has one more line, the one that opens it.
-func peekSize(link bool) (int32, int32) {
-	h := dp(20) + sp(38)
-	if link {
-		h += sp(28)
+// peekMeasure sizes the bubble for its text: up to four lines of the message, and one more
+// line, the one that opens the link, when the message carries one.
+func (p *peekData) measure() {
+	p.w = dp(340)
+	lineH := fnt.lineH
+	withFont(fnt.body, func(c canvas) { _, p.textH = c.measure(p.text, p.w-dp(32)) })
+	if p.textH < lineH {
+		p.textH = lineH
 	}
-	return dp(260), h
+	if p.textH > 4*lineH {
+		p.textH = 4 * lineH
+	}
+	p.h = dp(14) + sp(22) + dp(2) + p.textH + dp(14)
+	if p.link != "" {
+		p.h += sp(32)
+	}
 }
 
-// peekLinkRect is the line that opens the link, in the bubble's own coordinates.
-func peekLinkRect() rect {
-	w, h := peekSize(true)
-	return rect{1, h - sp(28) - dp(4), w - 1, h - 1}
+// linkRect is the line that opens the link, in the bubble's own coordinates.
+func (p *peekData) linkRect() rect {
+	return rect{1, p.h - sp(32) - dp(4), p.w - 1, p.h - 1}
 }
 
 func paintPeek(hwnd, target uintptr) {
@@ -160,31 +169,43 @@ func paintPeek(hwnd, target uintptr) {
 	if p == nil {
 		return
 	}
-	w, h := peekSize(p.link != "")
+	w, h := p.w, p.h
 	buf := newBuffer(target, w, h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, w, h}, pal.line)
 	g := newGfx(buf.hdc)
-	g.round(1, 1, w-2, h-2, dp(9), dp(9), dp(9), dp(9), pal.card)
-	lr := peekLinkRect()
+	g.round(1, 1, w-2, h-2, dp(11), dp(11), dp(11), dp(11), pal.card)
+	lr := p.linkRect()
 	if p.link != "" {
 		if p.hot {
-			g.round(lr.left+dp(4), lr.top+dp(2), lr.right-lr.left-dp(8), lr.bottom-lr.top-dp(4), dp(6), dp(6), dp(6), dp(6), mix(pal.accent, pal.card, 14))
+			g.round(lr.left+dp(6), lr.top+dp(3), lr.right-lr.left-dp(12), lr.bottom-lr.top-dp(6), dp(8), dp(8), dp(8), dp(8), mix(pal.accent, pal.card, 14))
 		}
-		g.round(dp(12), lr.top, w-dp(24), 1, 0, 0, 0, 0, pal.line)
+		g.round(dp(16), lr.top, w-dp(32), 1, 0, 0, 0, 0, pal.line)
 	}
 	g.free()
-	c.font(fnt.smallSemi)
-	c.text(p.title, rect{dp(12), dp(8), w - dp(12), dp(8) + sp(18)}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
-	c.font(fnt.small)
-	c.text(p.text, rect{dp(12), dp(8) + sp(18), w - dp(12), dp(8) + sp(38)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.font(fnt.name)
+	c.text(p.title, rect{dp(16), dp(14), w - dp(16), dp(14) + sp(22)}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.font(fnt.body)
+	ty := dp(14) + sp(22) + dp(2)
+	c.text(p.text, rect{dp(16), ty, w - dp(16), ty + p.textH}, pal.fg, dtWordBreak|dtEndEllipsis)
 	if p.link != "" {
-		c.font(fnt.iconSm)
-		c.text(gLink, rect{dp(12), lr.top, dp(30), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter)
-		c.font(fnt.smallSemi)
-		c.text("Otwórz link · "+linkHost(p.link), rect{dp(32), lr.top, w - dp(12), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+		c.font(fnt.icon)
+		c.text(gLink, rect{dp(16), lr.top, dp(38), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter)
+		c.font(fnt.name)
+		c.text("Otwórz link · "+linkHost(p.link), rect{dp(42), lr.top, w - dp(16), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
 	}
 	buf.flush(0, 0)
+}
+
+// conversationShown reports whether the conversation is on screen in the program's window,
+// whatever its size: then a bubble beside its head would only repeat what is already seen.
+func conversationShown(id int64) bool {
+	if id == 0 || selectedID != id || nav == navSettings || (lay.narrow && !lay.chat) || lg.active {
+		return false
+	}
+	vis, _, _ := pIsWindowVisible.Call(hMain)
+	min, _, _ := pIsIconic.Call(hMain)
+	return vis != 0 && min == 0
 }
 
 // peekOpen opens the link of a bubble in the default browser.

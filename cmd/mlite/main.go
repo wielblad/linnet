@@ -158,6 +158,9 @@ func main() {
 		setAppID() // installed: notifications carry the shortcut's name and icon
 	}
 
+	if !onlyInstance(dir) { // one program per account data: the one already running is shown instead
+		return
+	}
 	var err error
 	be, err = newBackend(dir)
 	if err != nil {
@@ -1169,6 +1172,10 @@ func inputChanged() {
 }
 
 func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if msg == showMsg && showMsg != 0 { // a second start of the program asks this one to come forward
+		showMain()
+		return 0
+	}
 	switch msg {
 	case wmEraseBkgnd:
 		return 1
@@ -1651,10 +1658,30 @@ func markSelectedRead() {
 		return
 	}
 	lastMarked[t.ID] = stamp
+	// Seen here counts at once, whether or not Messenger can be told right now: the counter
+	// must not grow for messages that are on the screen.
+	seenLocal[t.ID] = stamp
 	be.openThread(t, true)
 }
 
+// seenLocal holds, per conversation, the time of the newest message the user has had on
+// screen in this run; unread counts never include messages up to it.
+var seenLocal = map[int64]int64{}
+
+// unreadNow reports whether a conversation has messages the user has not seen.
+func unreadNow(t *store.Thread) bool {
+	return t.Unread() && t.UpdatedAt.UnixMilli() > seenLocal[t.ID]
+}
+
 func refresh() {
+	retryRead := false
+	if be.mediaRetry.CompareAndSwap(true, false) { // the connection came back: failed pictures get another try
+		for id := range md.failed {
+			delete(md.failed, id)
+		}
+		defer relayoutView()
+		retryRead = true
+	}
 	ts, err := be.db.ListThreads(be.ctx)
 	if err != nil {
 		return
@@ -1688,13 +1715,18 @@ func refresh() {
 		t := &threads[i]
 		stamp := t.UpdatedAt.UnixMilli()
 		prev, seen := prevUpdated[t.ID]
-		if be.armed.Load() && (!seen || stamp > prev) && t.Unread() && !t.Muted(now) && !quietThread(t.ID) && !(fg && t.ID == selectedID) && notify == nil {
+		if retryRead && t.Unread() && seenLocal[t.ID] >= stamp {
+			be.openThread(*t, true) // seen while Messenger could not be told: tell it now
+		}
+		if be.armed.Load() && (!seen || stamp > prev) && unreadNow(t) && !t.Muted(now) && !quietThread(t.ID) && !(fg && t.ID == selectedID) && notify == nil {
 			notify = t
 		}
 		prevUpdated[t.ID] = stamp
-		if t.Unread() {
+		if unreadNow(t) {
 			n := 0
-			if ids, err := be.db.UnreadMessageIDs(be.ctx, t.ID, self); err == nil {
+			if since := seenLocal[t.ID]; since > t.LastRead.UnixMilli() { // seen here, not yet recorded as read
+				n, _ = be.db.UnreadSince(be.ctx, t.ID, self, since)
+			} else if ids, err := be.db.UnreadMessageIDs(be.ctx, t.ID, self); err == nil {
 				for _, v := range ids {
 					n += len(v)
 				}
@@ -1809,6 +1841,7 @@ func refresh() {
 		if cfg.Body {
 			body = oneLine(previewText(notify.LastPreview), 200)
 		}
+		playMessageSound()
 		notifyAbout(*notify, oneLine(threadTitle(*notify), 60), body)
 		if !fg {
 			pFlashWindow.Call(hMain, 1)
