@@ -216,7 +216,7 @@ func historyButton() string {
 }
 
 func historyAction() {
-	go be.offerHistory()
+	historyCheck()
 }
 
 func layoutSettings() {

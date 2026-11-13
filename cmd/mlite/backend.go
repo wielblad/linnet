@@ -296,24 +296,28 @@ func (b *backend) run() {
 	}
 }
 
-// offerHistory checks whether the account keeps a PIN backup, then shows the PIN card.
+// historyChecks carries the answer of offerHistory to the window: "" when the PIN is
+// needed, otherwise what to tell instead.
+var historyChecks = make(chan string, 1)
+
+// offerHistory checks whether the account keeps a PIN backup; the card, already showing
+// that it is checking, then asks for the PIN or says why there is nothing to do.
 func (b *backend) offerHistory() {
-	client := b.current()
-	if client == nil {
-		b.setStatus("Program nie jest połączony z Messengerem.")
-		return
-	}
-	need, err := client.NeedsHistoryPIN(b.ctx)
-	switch {
-	case err != nil:
+	msg := ""
+	if client := b.current(); client == nil {
+		msg = "Program nie jest połączony z Messengerem."
+	} else if need, err := client.NeedsHistoryPIN(b.ctx); err != nil {
 		log.Warn().Err(err).Msg("check history backup")
-		b.setStatus("Nie można sprawdzić kopii historii: " + err.Error())
-	case !need:
-		b.setStatus("To konto nie ma kopii historii chronionej PIN-em.")
+		msg = "Nie można sprawdzić kopii historii: " + err.Error()
+	} else if !need {
+		msg = "To konto nie ma kopii historii chronionej PIN-em, więc nie ma czego wczytać."
+	}
+	select {
+	case historyChecks <- msg:
 	default:
-		if h := b.hwnd.Load(); h != 0 {
-			postMsg(h, wmAppHistory, 0, 0)
-		}
+	}
+	if h := b.hwnd.Load(); h != 0 {
+		postMsg(h, wmAppHistory, 0, 0)
 	}
 }
 

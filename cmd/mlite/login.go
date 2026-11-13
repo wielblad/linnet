@@ -44,6 +44,8 @@ var lg struct {
 	active         bool
 	expired        bool
 	pin            bool // the screen asks for the PIN of the encrypted chat history, not a login
+	checking       bool // on the PIN card: asking Meta whether there is a backup at all
+	info           bool // the card only tells something; one button closes it
 	login          *meta.Login
 	step           meta.LoginStep
 	started, busy  bool
@@ -96,7 +98,7 @@ func loginClose() {
 		lg.login = nil
 	}
 	loginClearControls()
-	lg.active, lg.pin, lg.busy = false, false, false
+	lg.active, lg.pin, lg.busy, lg.checking, lg.info = false, false, false, false, false
 	pKillTimer.Call(lg.hwnd, timerLoginSpin)
 	layout()
 }
@@ -127,6 +129,36 @@ func showHistoryPIN() {
 	}
 	loginFields()
 	layout()
+}
+
+// historyCheck opens the PIN card at once, showing that it asks Meta about the backup.
+func historyCheck() {
+	showHistoryPIN()
+	if !lg.pin {
+		return // a sign-in is on the screen
+	}
+	lg.busy, lg.checking = true, true
+	loginLayout()
+	go be.offerHistory()
+}
+
+// historyChecked runs on the window thread with Meta's answer about the backup.
+func historyChecked() {
+	var msg string
+	select {
+	case msg = <-historyChecks:
+	default:
+		return
+	}
+	if !lg.pin || !lg.checking {
+		return
+	}
+	lg.busy, lg.checking = false, false
+	if msg != "" {
+		lg.step = meta.LoginStep{Kind: meta.LoginInput, Instructions: msg}
+		lg.info = true
+	}
+	loginFields()
 }
 
 // historyPINNext checks the PIN with Messenger; the core then fetches the history.
@@ -249,6 +281,8 @@ func loginChoose(j int) {
 
 func loginText() string {
 	switch {
+	case lg.busy && lg.checking:
+		return "Sprawdzanie, czy konto ma kopię historii…"
 	case lg.busy && lg.pin:
 		return "Sprawdzanie PIN-u…"
 	case lg.busy && lg.started && lg.login != nil:
@@ -364,7 +398,7 @@ func loginLayout() {
 		on = 1
 	}
 	pEnableWindow.Call(lg.hNext, on)
-	show(lg.hNext, !waiting && !loginOnlyChoices())
+	show(lg.hNext, !waiting && !loginOnlyChoices() && !lg.info)
 	show(lg.hCancel, lg.started && !lg.busy)
 	invalidate(lg.hwnd)
 	invalidate(lg.hNext)
@@ -683,7 +717,10 @@ func loginProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			return 1
 		case idLoginCancel:
 			label := "Wróć"
-			if lg.pin {
+			switch {
+			case lg.info:
+				label = "Zamknij"
+			case lg.pin:
 				label = "Pomiń"
 			}
 			drawLoginButton(d, label, false)

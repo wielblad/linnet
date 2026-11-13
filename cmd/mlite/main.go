@@ -1419,7 +1419,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		loginStepArrived()
 		return 0
 	case wmAppHistory:
-		showHistoryPIN()
+		historyChecked()
 		return 0
 	case wmAppAvatar:
 		avatarArrived(int64(lp), wp != 0)

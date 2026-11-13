@@ -83,6 +83,22 @@ func optionAbout(v string) string {
 // loginPreview shows a sign-in step without Meta, for looking at it (MLITE_LOGINPREVIEW
 // with "choices", "code", "wait" or "busy"); nothing typed or chosen goes anywhere.
 func loginPreview(kind string) {
+	switch kind {
+	case "pin-check", "pin", "pin-busy", "pin-none":
+		showHistoryPIN()
+		switch kind {
+		case "pin-check":
+			lg.busy, lg.checking = true, true
+		case "pin-busy":
+			lg.busy = true
+		case "pin-none":
+			lg.step = meta.LoginStep{Kind: meta.LoginInput, Instructions: "To konto nie ma kopii historii chronionej PIN-em, więc nie ma czego wczytać."}
+			lg.info = true
+			loginFields()
+		}
+		loginLayout()
+		return
+	}
 	showLogin(false)
 	lg.started = true
 	switch kind {
