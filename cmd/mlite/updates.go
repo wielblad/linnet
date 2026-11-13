@@ -23,7 +23,7 @@ import (
 )
 
 // updateManifestURL is where the newest release is announced. Empty means no updates.
-const updateManifestURL = "https://raw.githubusercontent.com/wieladek/linnet/main/latest.json"
+const updateManifestURL = "https://raw.githubusercontent.com/wielblad/linnet/main/latest.json"
 
 const (
 	upIdle = iota

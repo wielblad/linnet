@@ -24,6 +24,9 @@ import (
 const (
 	keyFile = ".local/keys/update-ed25519.key"
 	pubFile = "cmd/mlite/updatekey.go"
+	// defaultURL is where the published installer is fetched from: the file in the same
+	// repository the program reads latest.json from.
+	defaultURL = "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe"
 )
 
 func main() {
@@ -70,13 +73,13 @@ func keygen() {
 func sign(args []string) {
 	fs := flag.NewFlagSet("sign", flag.ExitOnError)
 	version := fs.String("version", "", "version being released")
-	base := fs.String("url", "", "address the installer will be downloaded from")
+	base := fs.String("url", defaultURL, "address the installer will be downloaded from")
 	exe := fs.String("exe", "build/Linnet-Setup.exe", "installer to sign")
 	notes := fs.String("notes", "", "what is new")
-	out := fs.String("out", "dist", "folder for the files to publish")
+	out := fs.String("out", ".", "folder the files to publish are written into")
 	fs.Parse(args)
 	if *version == "" || *base == "" {
-		fail("-version and -url are required")
+		fail("-version is required")
 	}
 	seedHex, err := os.ReadFile(keyFile)
 	if err != nil {
@@ -97,14 +100,18 @@ func sign(args []string) {
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		fail(err.Error())
 	}
-	if err := os.WriteFile(filepath.Join(*out, "Linnet-Setup.exe"), data, 0o755); err != nil {
+	exeOut := filepath.Join(*out, "release", "Linnet-Setup.exe")
+	if err := os.MkdirAll(filepath.Dir(exeOut), 0o755); err != nil {
+		fail(err.Error())
+	}
+	if err := os.WriteFile(exeOut, data, 0o755); err != nil {
 		fail(err.Error())
 	}
 	raw, _ := json.MarshalIndent(m, "", "  ")
 	if err := os.WriteFile(filepath.Join(*out, "latest.json"), append(raw, '\n'), 0o644); err != nil {
 		fail(err.Error())
 	}
-	fmt.Printf("release %s: %d bytes, sha256 %s\nfiles to publish in %s: Linnet-Setup.exe, latest.json\n", m.Version, m.Size, m.SHA256, *out)
+	fmt.Printf("wydanie %s: %d bajtow, sha256 %s\ndo opublikowania: %s oraz latest.json\n", m.Version, m.Size, m.SHA256, exeOut)
 }
 
 func trim(b []byte) []byte {

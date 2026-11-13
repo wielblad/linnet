@@ -24,3 +24,6 @@ cookies.json
 # Releases built for publishing, and the test release
 /dist/
 /dist-test/
+
+# The published installer is the one file of its kind that belongs in the repository
+!/release/Linnet-Setup.exe
