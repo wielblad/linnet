@@ -302,18 +302,42 @@ var compact struct {
 	on      bool
 	restore rect
 	forID   int64
+	side    int32 // which side of the head the panel took when it opened: -1 left, 1 right
 }
 
 // panelPlace is where the panel of the overlay belongs beside a head: on the side of the
 // head that has room, and on the screen the head is on.
 func panelPlace(h *head) (x, y, w, ht int32) {
-	w, ht = dp(380), dp(580)
-	var hr, work rect
+	var hr rect
 	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
+	return panelPlaceAt(hr)
+}
+
+// panelPlaceAt is the same for a head that is about to be at that place: while it is
+// dragged, both windows are moved together and the old place is of no use.
+func panelPlaceAt(hr rect) (x, y, w, ht int32) {
+	w, ht = dp(380), dp(580)
+	var work rect
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
-	x = hr.left - w - dp(10)
-	if (hr.left+hr.right)/2 < (work.left+work.right)/2 {
-		x = hr.right + dp(10)
+	// The side is settled when the panel opens and kept while it is open: a panel that
+	// jumped from one side of the head to the other mid-drag looked like a fault.
+	if compact.side == 0 {
+		compact.side = -1
+		if (hr.left+hr.right)/2 < (work.left+work.right)/2 {
+			compact.side = 1
+		}
+	}
+	place := func(side int32) int32 {
+		if side > 0 {
+			return hr.right + dp(10)
+		}
+		return hr.left - w - dp(10)
+	}
+	x = place(compact.side)
+	if x+w > work.right-dp(4) || x < work.left+dp(4) { // no room on that side any more
+		if other := place(-compact.side); other+w <= work.right-dp(4) && other >= work.left+dp(4) {
+			x = other
+		}
 	}
 	if x+w > work.right-dp(4) {
 		x = work.right - dp(4) - w
@@ -340,12 +364,40 @@ func panelFollow(h *head) {
 		return
 	}
 	x, y, w, ht := panelPlace(h)
-	// Windows would carry the old picture along with the window and leave stripes behind;
-	// the panel is drawn afresh at its new place instead, children and all.
-	const swpNoCopyBits, swpNoActivate, swpNoZ = 0x0100, 0x0010, 0x0004
-	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), swpNoZ|swpNoActivate|swpNoCopyBits)
-	const rdwInvalidate, rdwErase, rdwAllChildren, rdwUpdateNow = 0x0001, 0x0004, 0x0080, 0x0100
-	pRedrawWindow.Call(hMain, 0, 0, rdwInvalidate|rdwErase|rdwAllChildren|rdwUpdateNow)
+	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), swpNoZOrder|swpNoActivate)
+}
+
+// moveWithPanel carries the head to a new place, and its open panel with it. Both windows
+// are moved in one go: moved one after the other they lag behind each other, and the
+// picture of the panel is torn while it travels.
+func moveWithPanel(h *head, x, y int32) {
+	open := compact.on && compact.forID == h.id
+	if open {
+		if vis, _, _ := pIsWindowVisible.Call(hMain); vis == 0 {
+			open = false
+		}
+	}
+	if !open {
+		pSetWindowPos.Call(h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
+		return
+	}
+	var hr rect
+	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
+	hr = rect{x, y, x + (hr.right - hr.left), y + (hr.bottom - hr.top)}
+	px, py, pw, ph := panelPlaceAt(hr)
+	batch, _, _ := pBeginDeferWindowPos.Call(2)
+	if batch == 0 { // no room for a batch: one after the other, as before
+		pSetWindowPos.Call(h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
+		pSetWindowPos.Call(hMain, 0, uintptr(px), uintptr(py), uintptr(pw), uintptr(ph), swpNoZOrder|swpNoActivate)
+		return
+	}
+	batch, _, _ = pDeferWindowPos.Call(batch, h.hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpQuiet)
+	if batch != 0 {
+		batch, _, _ = pDeferWindowPos.Call(batch, hMain, 0, uintptr(px), uintptr(py), uintptr(pw), uintptr(ph), swpNoZOrder|swpNoActivate)
+	}
+	if batch != 0 {
+		pEndDeferWindowPos.Call(batch)
+	}
 }
 
 // openHead shows the conversation in a small window beside the head; a second click puts it away.
@@ -365,7 +417,7 @@ func openHead(h *head) {
 		compact.on = true
 		setOverlay(true)
 	}
-	compact.forID = h.id
+	compact.forID, compact.side = h.id, 0 // the side is settled afresh each time it opens
 	x, y, w, ht := panelPlace(h)
 	if r, _, _ := pIsIconic.Call(hMain); r != 0 {
 		pShowWindow.Call(hMain, swRestore)
@@ -404,8 +456,7 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			hidePeek(h)
 		}
 		if h.dragging {
-			pSetWindowPos.Call(hwnd, 0, uintptr(h.originX+dx), uintptr(h.originY+dy), 0, 0, swpQuiet)
-			panelFollow(h) // the panel is anchored to the head and travels with it
+			moveWithPanel(h, h.originX+dx, h.originY+dy) // the panel is anchored to the head
 		}
 		return 0
 	case wmLButtonUp:

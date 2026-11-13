@@ -22,12 +22,16 @@ const (
 	swpFrame    = 0x0020
 	swpNoMove   = 0x0002
 	swpNoSize   = 0x0001
-	swpNoZOrder = 0x0004
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
 )
 
 var (
-	pGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
-	pRedrawWindow      = user32.NewProc("RedrawWindow")
+	pGetWindowLongPtrW    = user32.NewProc("GetWindowLongPtrW")
+	pRedrawWindow         = user32.NewProc("RedrawWindow")
+	pBeginDeferWindowPos  = user32.NewProc("BeginDeferWindowPos")
+	pDeferWindowPos       = user32.NewProc("DeferWindowPos")
+	pEndDeferWindowPos    = user32.NewProc("EndDeferWindowPos")
 )
 
 const (
