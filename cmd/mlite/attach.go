@@ -107,14 +107,23 @@ func (b *backend) sendFile(thread store.Thread, path string) bool {
 		if err != nil {
 			return err
 		}
-		dropPasted(path)
+		defer dropPasted(path)
 		at := result.Timestamp
 		if at.IsZero() {
 			at = time.Now()
 		}
 		if result.MessageID != "" {
-			_ = b.db.UpsertMessage(b.ctx, store.Message{ID: result.MessageID, ThreadID: thread.ID, SenderID: c.AccountID(),
-				Timestamp: at, MediaKind: fileKind(path), MediaName: filepath.Base(path)})
+			sent := store.Message{ID: result.MessageID, ThreadID: thread.ID, SenderID: c.AccountID(),
+				Timestamp: at, MediaKind: fileKind(path), MediaName: filepath.Base(path)}
+			if sent.MediaKind == "image" { // keep a copy, so that the conversation shows the picture at once
+				if data, err := os.ReadFile(path); err == nil {
+					dst := mediaPath(sent)
+					if os.MkdirAll(filepath.Dir(dst), 0o700) == nil {
+						_ = os.WriteFile(dst, data, 0o600)
+					}
+				}
+			}
+			_ = b.db.UpsertMessage(b.ctx, sent)
 			_ = b.db.SetLastRead(b.ctx, thread.ID, at)
 		}
 		return nil

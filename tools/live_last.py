@@ -23,6 +23,6 @@ for (mid, sender, ts, pending, error, tlen, is_test, kind, edited, unsent, reply
     if edited: flags.append("edytowana")
     if unsent: flags.append("cofnieta")
     if reply: flags.append("odpowiedz")
-    if rx: flags.append("reakcja " + rx)
+    if rx: flags.append("reakcja " + " ".join("U+%04X" % ord(ch) for ch in rx if ord(ch) != 0xFE0F))
     local = "lokalny" if not mid.startswith("mid.") and len(mid) < 24 else "z serwera"
     print("%s %s tekst %3d zn. id %-9s %s" % (when, who, tlen, local, ", ".join(flags)))

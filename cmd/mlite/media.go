@@ -55,7 +55,18 @@ func init() {
 
 // showsInline reports whether the message carries a picture this window can fetch.
 func showsInline(m store.Message) bool {
-	return m.MediaKind == "image" && (m.MediaURL != "" || m.MediaRef != "") && !m.Unsent
+	if m.MediaKind != "image" || m.Unsent {
+		return false
+	}
+	if m.MediaURL != "" || m.MediaRef != "" {
+		return true
+	}
+	// a picture sent from here has no address yet: it is shown from the copy kept at sending
+	if _, ok := md.files[m.ID]; ok {
+		return true
+	}
+	_, err := os.Stat(mediaPath(m))
+	return err == nil
 }
 
 // placeholderLabel turns the words the core stores for attachments it could not keep into a label.

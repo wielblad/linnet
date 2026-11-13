@@ -107,6 +107,8 @@ try {
         }
         "pasek reakcji: {0}" -f $hit; Start-Sleep -Milliseconds 800
       }
+      "cancel" { [LV]::PostMessage($h, 0x001F, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep -Milliseconds 400 }
+      "menuchar" { [LV]::PostMessage($h, 0x0102, [IntPtr][int][char]$arg, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 600 }
       "menukey" { [LV]::PostMessage($h, 0x0100, [IntPtr][int][char]$arg.ToUpper(), [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 600 }
       "yes" {
         $dlg = [IntPtr]::Zero; $found = $false
