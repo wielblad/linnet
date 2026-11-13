@@ -286,9 +286,24 @@ func (c *Client) fetchOlderSocket(ctx context.Context, s *store.Store, thread st
 	if err := ApplyTable(ctx, s, tbl); err != nil {
 		return false, err
 	}
-	upsert, _ := tbl.WrapMessages()
-	um := upsert[thread.ID]
-	return um != nil && um.Range != nil && um.Range.HasMoreBefore && um.Range.MinMessageId != "" && um.Range.MinMessageId != refID, nil
+	// The answer does not always say whether more is left, and part of a page can arrive a
+	// moment later over the socket. So the page counts as "there may be more" when it moved
+	// the oldest stored message back, and as the beginning when it brought nothing older.
+	for try := 0; try < 4; try++ {
+		after, err := s.OldestMessage(ctx, thread.ID)
+		if err == nil && after.ID != refID {
+			return true, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(600 * time.Millisecond):
+		}
+	}
+	return false, nil
 }
 
 func (c *Client) SyncAllEncryptedHistory(ctx context.Context, s *store.Store) error {
