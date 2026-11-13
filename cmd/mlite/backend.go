@@ -288,6 +288,32 @@ func (b *backend) run() {
 	_ = b.db.RepairThreadActivity(b.ctx)
 	b.requestRefresh()
 	debug.FreeOSMemory() // the first synchronisation is over; hand its working memory back
+	// The history of encrypted chats sits in Messenger's backup behind a PIN: ask for it once
+	// a run, or fetch it straight away when this computer already holds the key.
+	if client.HasHistoryDevice() {
+		b.syncHistory()
+	} else if need, err := client.NeedsHistoryPIN(b.ctx); err != nil {
+		log.Warn().Err(err).Msg("check history backup")
+	} else if need {
+		if h := b.hwnd.Load(); h != 0 {
+			postMsg(h, wmAppHistory, 0, 0)
+		}
+	}
+}
+
+// syncHistory fetches the history of the encrypted chats once the PIN has unlocked it.
+func (b *backend) syncHistory() {
+	client := b.current()
+	if client == nil || !client.HasHistoryDevice() {
+		return
+	}
+	b.setStatus("Połączono · wczytywanie historii czatów…")
+	if err := client.SyncAllEncryptedHistory(b.ctx, b.db); err != nil {
+		log.Warn().Err(err).Msg("sync encrypted history")
+	}
+	_ = b.db.RepairThreadActivity(b.ctx)
+	b.requestRefresh()
+	b.setStatus("Połączono")
 }
 
 func (b *backend) onEvent(ctx context.Context, evt meta.Event) {
@@ -427,7 +453,7 @@ func (b *backend) send(thread store.Thread, text string, replyTo store.Message) 
 		ReplyToID:     replyTo.ID,
 		ReplyText:     replyTo.Text,
 		ReplySenderID: replyTo.SenderID,
-		}
+	}
 	if err := b.db.UpsertMessage(b.ctx, pending); err != nil {
 		b.notice("Błąd zapisu: " + err.Error())
 		return false

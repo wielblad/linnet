@@ -18,6 +18,7 @@ import (
 const (
 	wmAppLogin     = wmApp + 7
 	wmAppLoginStep = wmApp + 8
+	wmAppHistory   = wmApp + 13
 
 	idLoginNext   = 340
 	idLoginCancel = 341
@@ -25,6 +26,14 @@ const (
 
 	esPassword        = 0x0020
 	wsExControlParent = 0x00010000
+
+	cbsDropDownList   = 0x0003
+	cbAddString       = 0x0143
+	cbSetCurSel       = 0x014E
+	cbSetItemHeight   = 0x0153
+	cbGetDroppedState = 0x0157
+	cbnSetFocus       = 3
+	cbnKillFocus      = 4
 
 	loginExpired = 1
 )
@@ -38,6 +47,7 @@ var lg struct {
 	hwnd           uintptr
 	active         bool
 	expired        bool
+	pin            bool // the screen asks for the PIN of the encrypted chat history, not a login
 	login          *meta.Login
 	step           meta.LoginStep
 	started, busy  bool
@@ -82,13 +92,60 @@ func loginClose() {
 		pDestroyWindow.Call(e)
 	}
 	lg.edits = nil
-	lg.active = false
+	lg.active, lg.pin = false, false
 	layout()
+}
+
+// showHistoryPIN asks for the PIN that unlocks the history of end-to-end encrypted chats.
+// Without it those chats show only what arrived after signing in.
+func showHistoryPIN() {
+	if lg.active {
+		return
+	}
+	lg.active, lg.pin, lg.expired, lg.started, lg.busy, lg.err = true, true, false, true, false, ""
+	lg.step = meta.LoginStep{
+		Kind:         meta.LoginInput,
+		Instructions: "Czaty szyfrowane end-to-end mają historię w kopii zapasowej Messengera. Podaj sześciocyfrowy PIN tej kopii, aby ją wczytać, albo pomiń — wtedy zobaczysz tylko nowe wiadomości.",
+		Fields:       []meta.LoginField{{ID: "pin", Name: "PIN", Secret: true}},
+	}
+	loginFields()
+	layout()
+}
+
+// historyPINNext checks the PIN with Messenger; the core then fetches the history.
+func historyPINNext() {
+	if len(lg.edits) == 0 {
+		return
+	}
+	pin := strings.TrimSpace(getText(lg.edits[0]))
+	setText(lg.edits[0], "")
+	if len(pin) != 6 || strings.Trim(pin, "0123456789") != "" {
+		lg.err = "PIN ma sześć cyfr."
+		loginLayout()
+		return
+	}
+	client := be.current()
+	if client == nil {
+		lg.err = "Program nie jest połączony z Messengerem."
+		loginLayout()
+		return
+	}
+	lg.busy = true
+	loginLayout()
+	go func() {
+		err := client.UnlockHistory(be.ctx, pin)
+		lg.results <- loginResult{meta.LoginStep{Kind: meta.LoginDone}, err}
+		postMsg(hMain, wmAppLoginStep, 0, 0)
+	}()
 }
 
 func fieldLabel(f meta.LoginField) string {
 	name := strings.ToLower(f.Name + " " + f.ID)
 	switch {
+	case lg.pin && f.ID == "pin":
+		return "PIN kopii zapasowej czatów"
+	case strings.Contains(name, "mfa"):
+		return "Sposób potwierdzenia logowania"
 	case strings.Contains(name, "password"):
 		return "Hasło"
 	case strings.Contains(name, "code") || strings.Contains(name, "otp"):
@@ -99,7 +156,8 @@ func fieldLabel(f meta.LoginField) string {
 	return f.Name
 }
 
-// loginFields rebuilds the text fields for the current step.
+// loginFields rebuilds the fields for the current step: a text field each, or a drop-down
+// list when Meta offers a fixed set of answers (such as the way to confirm the login).
 func loginFields() {
 	for _, e := range lg.edits {
 		pDestroyWindow.Call(e)
@@ -107,6 +165,16 @@ func loginFields() {
 	lg.edits = nil
 	if lg.step.Kind == meta.LoginInput && lg.started {
 		for i, f := range lg.step.Fields {
+			if len(f.Options) > 0 {
+				e := createWindow(0, "COMBOBOX", "", wsChild|wsVisible|wsTabStop|wsVScroll|cbsDropDownList, lg.hwnd, uintptr(idLoginField+i))
+				sendMsg(e, wmSetFont, fnt.body, 1)
+				for _, o := range f.Options {
+					sendMsg(e, cbAddString, 0, uintptr(unsafe.Pointer(u16(o))))
+				}
+				sendMsg(e, cbSetCurSel, 0, 0)
+				lg.edits = append(lg.edits, e)
+				continue
+			}
 			style := uint32(wsChild | wsVisible | wsTabStop | esAutoHScroll)
 			if f.Secret {
 				style |= esPassword
@@ -172,12 +240,18 @@ func loginLayout() {
 	lg.textR = rect{x + in, cy, x + cw - in, cy + th}
 	cy += th + dp(20)
 	lg.labelR, lg.fieldR = nil, nil
-	for _, e := range lg.edits {
+	for i, e := range lg.edits {
 		lg.labelR = append(lg.labelR, rect{x + in, cy, x + cw - in, cy + labelH})
 		cy += labelH
 		fr := rect{x + in, cy, x + cw - in, cy + fieldH}
 		lg.fieldR = append(lg.fieldR, fr)
-		moveTo(e, rect{fr.left + dp(10), fr.top + (fieldH-lay.editH)/2, fr.right - dp(10), fr.top + (fieldH-lay.editH)/2 + lay.editH})
+		if loginPick(i) {
+			// A drop-down list covers the whole field; its height includes the opened list.
+			sendMsg(e, cbSetItemHeight, ^uintptr(0), uintptr(fieldH-6))
+			moveTo(e, rect{fr.left, fr.top, fr.right, fr.top + fieldH + dp(200)})
+		} else {
+			moveTo(e, rect{fr.left + dp(10), fr.top + (fieldH-lay.editH)/2, fr.right - dp(10), fr.top + (fieldH-lay.editH)/2 + lay.editH})
+		}
 		cy += fieldH + dp(14)
 	}
 	lg.errR = rect{}
@@ -199,12 +273,21 @@ func loginLayout() {
 	invalidate(lg.hNext)
 }
 
+// loginPick reports whether the i-th field of the current step is a drop-down list.
+func loginPick(i int) bool {
+	return lg.step.Kind == meta.LoginInput && i < len(lg.step.Fields) && len(lg.step.Fields[i].Options) > 0
+}
+
 // loginNext starts signing in or answers the current step.
 func loginNext() {
 	if lg.busy {
 		return
 	}
 	lg.err = ""
+	if lg.pin {
+		historyPINNext()
+		return
+	}
 	if !lg.started {
 		lg.started, lg.busy = true, true
 		loginLayout()
@@ -240,8 +323,12 @@ func loginNext() {
 	}()
 }
 
-// loginBack returns to the first screen.
+// loginBack returns to the first screen; on the PIN screen it skips the history.
 func loginBack() {
+	if lg.pin {
+		loginClose()
+		return
+	}
 	if lg.login != nil {
 		lg.login.Close()
 		lg.login = nil
@@ -265,6 +352,16 @@ func loginStepArrived() {
 		select {
 		case r := <-lg.results:
 			lg.busy = false
+			if lg.pin {
+				if r.err != nil {
+					lg.err = "Nie udało się wczytać historii: " + r.err.Error()
+					loginFields()
+					continue
+				}
+				loginClose()
+				go be.syncHistory()
+				continue
+			}
 			if r.err != nil {
 				lg.err = loginError(r.err)
 				if lg.login == nil {
@@ -358,7 +455,11 @@ func paintLogin(target uintptr) {
 	}
 	g.free()
 	c.font(fnt.title)
-	c.text("Zaloguj się do Messengera", lg.headR, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	head := "Zaloguj się do Messengera"
+	if lg.pin {
+		head = "Historia szyfrowanych czatów"
+	}
+	c.text(head, lg.headR, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.body)
 	c.text(lg.text, lg.textR, pal.fg2, dtWordBreak)
 	c.font(fnt.small)
@@ -399,7 +500,11 @@ func loginProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			}
 			drawLoginButton(d, label, true)
 		case idLoginCancel:
-			drawLoginButton(d, "Wróć", false)
+			label := "Wróć"
+			if lg.pin {
+				label = "Pomiń"
+			}
+			drawLoginButton(d, label, false)
 		}
 		return 1
 	case wmCtlColorEdit:
@@ -415,7 +520,7 @@ func loginProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			loginNext()
 		case id == idLoginCancel && code == 0:
 			loginBack()
-		case id >= idLoginField && (code == enSetFocus || code == enKillFocus):
+		case id >= idLoginField && (code == enSetFocus || code == enKillFocus || code == cbnSetFocus || code == cbnKillFocus):
 			invalidate(hwnd)
 		}
 		return 0

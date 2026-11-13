@@ -277,7 +277,7 @@ func handleKey(m *msgT) bool {
 		return true
 	case lg.active && m.wParam == vkReturn:
 		for _, e := range lg.edits {
-			if m.hwnd == e {
+			if m.hwnd == e && sendMsg(e, cbGetDroppedState, 0, 0) == 0 { // an open list takes Enter itself
 				loginNext()
 				return true
 			}
@@ -1415,6 +1415,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmAppLoginStep:
 		loginStepArrived()
 		return 0
+	case wmAppHistory:
+		showHistoryPIN()
+		return 0
 	case wmAppAvatar:
 		avatarArrived(int64(lp), wp != 0)
 		return 0
@@ -1435,7 +1438,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			return 1
 		}
 	case wmAppUpdate:
-		layout() // the bar about a new version comes and goes
+		layout()         // the bar about a new version comes and goes
 		layoutSettings() // the row grows and shrinks with its text
 		clampSettingsScroll()
 		invalidate(hSet)
