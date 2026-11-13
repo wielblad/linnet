@@ -1,8 +1,8 @@
 {
-  "version": "0.3",
+  "version": "0.4",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 28647936,
-  "sha256": "96d67e276eb006a7cb6260e5de54bd8c37f4c28cc8faffcdcbd5d04b3bc21024",
-  "signature": "BrHLcBwNbM2axJtP2wNUORS5rL7QlpUplmZFwuNoKg0Pgr98I56p+j/wHUV+9m71pmc5uuyZr6IbBvDQOLjPDg==",
-  "notes": "Panel nakładki wygląda jak okno programu i ma tylko X, które zamyka rozmowę i zostawia główkę."
+  "size": 28651008,
+  "sha256": "92b95d2a766b68901ddfb6189105070efa8aecef9c4db6d001a4bfd25cea9f12",
+  "signature": "SUpbEy/j9ObUgNlFhw0p+jRpKuB8ud+SJtv8Gh8Te/Qy/NUjPUrj6f0tY1SllaNNQa4460xn2jqXfC67X0j1AQ==",
+  "notes": "Pasek o nowej wersji w głównym oknie i koniec migotania przy przesuwaniu główki z otwartym panelem."
 }

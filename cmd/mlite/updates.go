@@ -115,6 +115,36 @@ func updateLine() string {
 	return "Sprawdź, czy jest nowsza wersja."
 }
 
+// updateNotice is what the bar at the top of the window says when a newer release is
+// waiting, and "" when there is nothing to say.
+func updateNotice() string {
+	if !updatesOn() {
+		return ""
+	}
+	if state, _ := updateState(); state != upReady {
+		return ""
+	}
+	upd.mu.Lock()
+	version := upd.manifest.Version
+	upd.mu.Unlock()
+	return "Jest nowsza wersja " + version + ". Kliknij, aby zaktualizować."
+}
+
+// goToUpdates opens the settings on the row about updates: where the bar leads.
+func goToUpdates() {
+	setNav(navSettings)
+	for i := range sv.rows {
+		if sv.rows[i].kind == srAction {
+			sv.focus = i
+			sv.scroll = sv.rows[i].y + sv.rows[i].h - sv.h + dp(24)
+			clampSettingsScroll()
+			break
+		}
+	}
+	pSetFocus.Call(sv.hwnd)
+	invalidate(sv.hwnd)
+}
+
 // updateButton is the label of the button beside that row, "" when there is none.
 func updateButton() string {
 	if !updatesOn() {

@@ -110,6 +110,7 @@ var (
 		hbInfo, hbSearch                                        rect // buttons at the right end of the conversation header
 		back, navBar                                            rect
 		stripText                                               string
+		stripClick                                              bool // the bar leads to the settings
 	}
 )
 
@@ -324,6 +325,14 @@ func handleKey(m *msgT) bool {
 	}
 	return false
 }
+
+// onStrip reports whether a point is on the bar that leads to the settings.
+func onStrip(x, y int32) bool {
+	s := lay.strip
+	return lay.stripClick && x >= s.left && x < s.right && y >= s.top && y < s.bottom
+}
+
+var hotStrip bool // the pointer is on that bar
 
 func fatal(msg string) {
 	pMessageBoxW.Call(0, uintptr(unsafe.Pointer(u16(msg))), uintptr(unsafe.Pointer(u16(appName))), 0x10)
@@ -554,7 +563,12 @@ func layout() {
 	searchTop := dp(14) + sp(34)
 	lay.search = rect{lay.pane.left + dp(12), searchTop, lay.pane.right - dp(12), searchTop + searchH}
 
-	lay.stripText = statusLine()
+	lay.stripText, lay.stripClick = statusLine(), false
+	if lay.stripText == "" && !settings {
+		if n := updateNotice(); n != "" {
+			lay.stripText, lay.stripClick = n, true
+		}
+	}
 	lay.strip = rect{}
 	listTop := lay.search.bottom + dp(10)
 	viewTop := hdrH + 1
@@ -748,7 +762,14 @@ func paintMain(target uintptr) {
 		}
 		if lay.stripText != "" {
 			s := lay.strip
-			g.round(s.left, s.top, s.right-s.left, s.bottom-s.top, dp(6), dp(6), dp(6), dp(6), mix(pal.accent, pal.mica, 16))
+			fill := mix(pal.accent, pal.mica, 16)
+			if lay.stripClick {
+				fill = mix(pal.accent, pal.mica, 30)
+				if hotStrip {
+					fill = mix(pal.accent, pal.mica, 44)
+				}
+			}
+			g.round(s.left, s.top, s.right-s.left, s.bottom-s.top, dp(8), dp(8), dp(8), dp(8), fill)
 		}
 		g.free()
 
@@ -764,8 +785,14 @@ func paintMain(target uintptr) {
 		}
 		if lay.stripText != "" {
 			s := lay.strip
+			right := s.right - dp(10)
+			if lay.stripClick {
+				right -= dp(20)
+				c.font(fnt.iconSm)
+				c.text(gChevron, rect{s.right - dp(26), s.top, s.right - dp(8), s.bottom}, pal.accentText, dtCenter|dtVCenter|dtSingleLine)
+			}
 			c.font(fnt.small)
-			c.text(lay.stripText, rect{s.left + dp(10), s.top + dp(7), s.right - dp(10), s.bottom - dp(7)}, pal.fg, dtWordBreak|dtEditControl|dtEndEllipsis)
+			c.text(lay.stripText, rect{s.left + dp(10), s.top + dp(7), right, s.bottom - dp(7)}, pal.fg, dtWordBreak|dtEditControl|dtEndEllipsis)
 		}
 		if has && compose.mode != cmNone {
 			b := lay.bar
@@ -1363,6 +1390,23 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			goBack()
+		} else if onStrip(x, y) {
+			goToUpdates()
+		}
+		return 0
+	case wmMouseMove:
+		if hot := onStrip(int32(int16(lp)), int32(int16(lp>>16))); hot != hotStrip {
+			hotStrip = hot
+			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.strip)), 0)
+			if hot {
+				trackLeave(hMain)
+			}
+		}
+		return 0
+	case wmMouseLeave:
+		if hotStrip {
+			hotStrip = false
+			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.strip)), 0)
 		}
 		return 0
 	case wmAppLogin:
@@ -1384,7 +1428,14 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			invalidate(pn.hwnd)
 		}
 		return 0
+	case wmSetCursor:
+		if lp&0xFFFF == 1 && hotStrip {
+			cur, _, _ := pLoadCursorW.Call(0, idcHand)
+			pSetCursor.Call(cur)
+			return 1
+		}
 	case wmAppUpdate:
+		layout() // the bar about a new version comes and goes
 		layoutSettings() // the row grows and shrinks with its text
 		clampSettingsScroll()
 		invalidate(hSet)

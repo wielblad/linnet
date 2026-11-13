@@ -25,7 +25,10 @@ const (
 	swpNoZOrder = 0x0004
 )
 
-var pGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
+var (
+	pGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
+	pRedrawWindow      = user32.NewProc("RedrawWindow")
+)
 
 const (
 	dwmaCornerPreference = 33

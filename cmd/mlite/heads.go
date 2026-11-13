@@ -325,7 +325,12 @@ func panelFollow(h *head) {
 		return
 	}
 	x, y, w, ht := panelPlace(h)
-	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), 0x0004|0x0010) // no activation
+	// Windows would carry the old picture along with the window and leave stripes behind;
+	// the panel is drawn afresh at its new place instead, children and all.
+	const swpNoCopyBits, swpNoActivate, swpNoZ = 0x0100, 0x0010, 0x0004
+	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), swpNoZ|swpNoActivate|swpNoCopyBits)
+	const rdwInvalidate, rdwErase, rdwAllChildren, rdwUpdateNow = 0x0001, 0x0004, 0x0080, 0x0100
+	pRedrawWindow.Call(hMain, 0, 0, rdwInvalidate|rdwErase|rdwAllChildren|rdwUpdateNow)
 }
 
 // openHead shows the conversation in a small window beside the head; a second click puts it away.
