@@ -568,7 +568,7 @@ func layout() {
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
-		moveTo(vw.hwnd, rect{0, 0, w, h})
+		moveTo(viewerInner(), rect{0, 0, w, h})
 		return
 	}
 	settings := nav == navSettings

@@ -124,4 +124,5 @@ func olderArrived(thread int64, res uintptr) {
 		loadView(true)
 	}
 	panesOlder(thread)
+	viewerOlderArrived(thread, false)
 }

@@ -506,7 +506,7 @@ func paneCovered(p *pane) uintptr {
 	case dlg.hwnd != 0 && dlg.host == p.hwnd:
 		return dlg.hwnd
 	case vw.hwnd != 0 && vw.host == p.hwnd:
-		return vw.hwnd
+		return viewerInner()
 	}
 	return 0
 }

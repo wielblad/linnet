@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unicode/utf16"
 	"unsafe"
 
@@ -30,6 +31,11 @@ const (
 	gPrev     = ""
 	gNext     = ""
 
+	gFull   = "" // to the whole screen
+	gUnfull = "" // and back into the window
+
+	timerViewerIdle = 27 // on the whole screen, what is not the picture goes away after a while
+
 	viewerGround = 0x0E0F12
 	viewerInk    = 0xF2F2F4
 	viewerInk2   = 0xA9ABB3
@@ -43,6 +49,7 @@ const (
 	vbClose
 	vbPrev
 	vbNext
+	vbFull
 	vbCount
 )
 
@@ -63,6 +70,11 @@ var (
 		btn    [vbCount]rect
 		pic    rect
 		host   uintptr   // the window it covers: the program's, or a pane
+		inner  uintptr   // while the picture has the whole screen: the viewer left behind in that window
+		full   bool      // the picture has the whole screen
+		idle   bool      // nothing moved for a while: only the picture is shown
+		older  bool      // older messages were asked for, to find older pictures
+		last   time.Time // the last click on the picture, to tell two in a row
 		bank   *viewBank // the view it was opened from
 		video  string    // address played in the embedded browser; "" while pictures are shown
 		web    *webview.View
@@ -75,17 +87,7 @@ func openViewer(m store.Message) {
 	if vw.video != "" || (vw.hwnd != 0 && vw.host != hostWnd()) {
 		closeViewer()
 	}
-	vw.list = vw.list[:0]
-	vw.idx = 0
-	for i := range mv.items {
-		it := &mv.items[i]
-		if it.kind == itMsg && it.img && !it.preview {
-			if it.imgMsg.ID == m.ID {
-				vw.idx = len(vw.list)
-			}
-			vw.list = append(vw.list, it.imgMsg)
-		}
-	}
+	vw.list, vw.idx = viewerList(m.ID)
 	if len(vw.list) == 0 {
 		return
 	}
@@ -99,10 +101,154 @@ func openViewer(m store.Message) {
 	pSetFocus.Call(vw.hwnd)
 }
 
+// viewerInner is the viewer as the window it was opened in knows it: the one that is laid
+// out there, also while the picture itself is on the whole screen.
+func viewerInner() uintptr {
+	if vw.full {
+		return vw.inner
+	}
+	return vw.hwnd
+}
+
+// viewerFull gives the picture the whole screen the window is on, or takes it back.
+func viewerFull(on bool) {
+	if vw.hwnd == 0 || vw.video != "" || on == vw.full {
+		return
+	}
+	if on {
+		mi := monitorInfo{size: uint32(unsafe.Sizeof(monitorInfo{}))}
+		mon, _, _ := pMonitorFromWindow.Call(vw.host, 2) // the nearest one
+		if r, _, _ := pGetMonitorInfoW.Call(mon, uintptr(unsafe.Pointer(&mi))); r == 0 {
+			return
+		}
+		top := createWindow(wsExTopmost|wsExToolWindow, "MliteViewer", "Zdjęcie na pełnym ekranie", wsPopup, 0, 0)
+		if top == 0 {
+			return
+		}
+		vw.inner, vw.hwnd, vw.full, vw.idle = vw.hwnd, top, true, false
+		m := mi.monitor
+		pSetWindowPos.Call(top, hwndTopmost, uintptr(m.left), uintptr(m.top), uintptr(m.right-m.left), uintptr(m.bottom-m.top), 0x0040) // shown
+		pSetForegroundWindow.Call(top)
+		pSetFocus.Call(top)
+		pSetTimer.Call(top, timerViewerIdle, 1800, 0)
+	} else {
+		top := vw.hwnd
+		vw.hwnd, vw.inner, vw.full, vw.idle = vw.inner, 0, false, false
+		pDestroyWindow.Call(top)
+		var rc rect
+		pGetClientRect.Call(vw.hwnd, uintptr(unsafe.Pointer(&rc)))
+		vw.w, vw.h = rc.right, rc.bottom
+		pSetForegroundWindow.Call(vw.host)
+		pSetFocus.Call(vw.hwnd)
+	}
+	viewerDrop()
+	invalidate(vw.hwnd)
+}
+
+type monitorInfo struct {
+	size          uint32
+	monitor, work rect
+	flags         uint32
+}
+
+var (
+	pMonitorFromWindow = user32.NewProc("MonitorFromWindow")
+	pGetMonitorInfoW   = user32.NewProc("GetMonitorInfoW")
+)
+
+// viewerList gathers the pictures of the conversation the viewer was opened from, oldest
+// first, and gives the place of one of them.
+func viewerList(current string) ([]store.Message, int) {
+	var list []store.Message
+	idx := 0
+	for i := range mv.items {
+		it := &mv.items[i]
+		if it.kind == itMsg && it.img && !it.preview {
+			if it.imgMsg.ID == current {
+				idx = len(list)
+			}
+			list = append(list, it.imgMsg)
+		}
+	}
+	return list, idx
+}
+
+// viewerMayHaveOlder reports whether there may be pictures before the first one shown:
+// messages kept on this computer that are not loaded, or pages Messenger still has.
+func viewerMayHaveOlder() bool {
+	if vw.video != "" || !mv.has {
+		return false
+	}
+	id := mv.thread.ID
+	return mv.localMore || (!older.done[id] && !older.locked[id] && !av.offline)
+}
+
+// viewerOlder goes looking for pictures older than the first one: the conversation loads
+// what is before, the way it does when it is scrolled to its top.
+func viewerOlder() {
+	if !viewerMayHaveOlder() || vw.older {
+		if !vw.older {
+			vw.note = "To najstarsze zdjęcie w tej rozmowie"
+			invalidate(vw.hwnd)
+		}
+		return
+	}
+	if mv.localMore { // kept on this computer already
+		mv.limit += windowStep
+		loadView(true)
+		viewerOlderArrived(mv.thread.ID, true)
+		return
+	}
+	if older.busy != 0 {
+		return
+	}
+	if be.fetchOlder(mv.thread) {
+		older.busy = mv.thread.ID
+		vw.older, vw.note = true, "Doczytuję starsze wiadomości…"
+		invalidate(vw.hwnd)
+	}
+}
+
+// viewerOlderArrived is told that older messages of a conversation are in place: the viewer
+// takes the pictures that came with them and steps to the newest of those.
+func viewerOlderArrived(thread int64, local bool) {
+	if vw.hwnd == 0 || vw.video != "" || vw.bank == nil || len(vw.list) == 0 || (!vw.older && !local) {
+		return
+	}
+	if vw.bank != curBank {
+		defer enterBank(vw.bank)()
+	}
+	if mv.thread.ID != thread {
+		return
+	}
+	vw.older = false
+	was := vw.idx
+	list, idx := viewerList(vw.list[vw.idx].ID)
+	if len(list) == 0 {
+		return
+	}
+	vw.list, vw.idx = list, idx
+	switch gained := idx - was; {
+	case gained > 0:
+		vw.idx = idx - 1
+		vw.note = fmt.Sprintf("Doczytane starsze zdjęcia: %d", gained)
+		viewerLoad()
+	case viewerMayHaveOlder():
+		vw.note = "W doczytanych wiadomościach nie było zdjęć. Spróbuj jeszcze raz."
+	default:
+		vw.note = "To najstarsze zdjęcie w tej rozmowie"
+	}
+	invalidate(vw.hwnd)
+}
+
 func closeViewer() {
 	if vw.hwnd == 0 {
 		return
 	}
+	if vw.full {
+		viewerFull(false)
+	}
+	vw.older = false
 	if vw.web != nil { // the browser goes first: its processes end with it
 		vw.web.Close()
 		vw.web = nil
@@ -153,7 +299,27 @@ func viewerRefresh() {
 }
 
 func viewerStep(by int) {
-	if n := vw.idx + by; n >= 0 && n < len(vw.list) {
+	n := vw.idx + by
+	if n < 0 && vw.video == "" { // before the first one: look for older pictures
+		viewerOlder()
+		return
+	}
+	if n >= 0 && n < len(vw.list) {
+		vw.idx, vw.note = n, ""
+		viewerLoad()
+	}
+}
+
+// viewerGo shows the first or the last of the pictures.
+func viewerGo(last bool) {
+	if len(vw.list) == 0 {
+		return
+	}
+	n := 0
+	if last {
+		n = len(vw.list) - 1
+	}
+	if n != vw.idx {
 		vw.idx, vw.note = n, ""
 		viewerLoad()
 	}
@@ -178,12 +344,20 @@ func viewerLayout(c canvas) {
 	x := vw.w - pad
 	vw.btn[vbClose] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
 	x -= s + dp(8)
+	vw.btn[vbFull] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
+	if vw.video == "" {
+		x -= s + dp(8)
+	}
+	narrow := vw.w < dp(560) // a conversation beside a head: the buttons keep their signs and lose their words
 	c.font(fnt.body)
 	for _, b := range []struct {
 		id    int
 		label string
 	}{{vbOpen, "Otwórz w Windows"}, {vbSave, "Pobierz"}} {
 		w := dp(14) + dp(20) + dp(6) + c.width(b.label) + dp(14)
+		if narrow {
+			w = s
+		}
 		vw.btn[b.id] = rect{x - w, (bar - s) / 2, x, (bar + s) / 2}
 		x -= w + dp(8)
 	}
@@ -196,6 +370,18 @@ func viewerLayout(c canvas) {
 	vw.pic = rect{}
 	if vw.iw > 0 && vw.ih > 0 && availW > 0 && availH > 0 {
 		w, h := vw.iw, vw.ih
+		if vw.full { // on the whole screen a small picture is shown larger, up to three times
+			k := int32(3)
+			if availW/w < k {
+				k = availW / w
+			}
+			if availH/h < k {
+				k = availH / h
+			}
+			if k > 1 {
+				w, h = w*k, h*k
+			}
+		}
 		if w > availW {
 			h, w = h*availW/w, availW
 		}
@@ -217,9 +403,12 @@ func viewerHas(id int) bool {
 	if vw.video != "" {
 		return id == vbOpen || id == vbClose
 	}
+	if vw.full && vw.idle {
+		return false
+	}
 	switch id {
 	case vbPrev:
-		return vw.idx > 0
+		return vw.idx > 0 || viewerMayHaveOlder()
 	case vbNext:
 		return vw.idx < len(vw.list)-1
 	case vbSave, vbOpen:
@@ -231,7 +420,11 @@ func viewerHas(id int) bool {
 func paintViewer(target uintptr) {
 	buf := newBuffer(target, vw.w, vw.h)
 	c := canvas{buf.hdc}
-	c.fill(rect{0, 0, vw.w, vw.h}, viewerGround)
+	ground := uint32(viewerGround)
+	if vw.full {
+		ground = 0x000000
+	}
+	c.fill(rect{0, 0, vw.w, vw.h}, ground)
 	viewerLayout(c)
 	hotFill := mix(viewerInk, viewerGround, 16)
 	edge := mix(viewerInk, viewerGround, 26)
@@ -259,7 +452,7 @@ func paintViewer(target uintptr) {
 				fill = mix(viewerInk, viewerGround, 22)
 			}
 			g.ellipse(r.left, r.top, w, h, fill)
-		case id == vbClose:
+		case id == vbClose || id == vbFull:
 			if vw.hot == id {
 				g.round(r.left, r.top, w, h, dp(6), dp(6), dp(6), dp(6), hotFill)
 			}
@@ -285,10 +478,12 @@ func paintViewer(target uintptr) {
 		when += fmt.Sprintf("  ·  %d z %d", vw.idx+1, len(vw.list))
 	}
 	textRight := vw.btn[vbSave].left - dp(16)
-	c.font(fnt.bodySemi)
-	c.text(who, rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
-	c.font(fnt.small)
-	c.text(when, rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	if !(vw.full && vw.idle) {
+		c.font(fnt.bodySemi)
+		c.text(who, rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
+		c.font(fnt.small)
+		c.text(when, rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	}
 	for id := 0; id < vbCount; id++ {
 		if !viewerHas(id) {
 			continue
@@ -298,6 +493,13 @@ func paintViewer(target uintptr) {
 		case vbClose:
 			c.font(fnt.icon)
 			c.text(gCloseBig, r, viewerInk, dtCenter|dtVCenter|dtSingleLine)
+		case vbFull:
+			glyph := gFull
+			if vw.full {
+				glyph = gUnfull
+			}
+			c.font(fnt.icon)
+			c.text(glyph, r, viewerInk, dtCenter|dtVCenter|dtSingleLine)
 		case vbPrev, vbNext:
 			glyph := gPrev
 			if id == vbNext {
@@ -311,6 +513,10 @@ func paintViewer(target uintptr) {
 				glyph, label = gOpenOut, "Otwórz w Windows"
 			}
 			c.font(fnt.icon)
+			if r.right-r.left <= dp(36) { // no room for the word
+				c.text(glyph, r, viewerInk, dtCenter|dtVCenter|dtSingleLine)
+				continue
+			}
 			c.text(glyph, rect{r.left + dp(14), r.top, r.left + dp(34), r.bottom}, viewerInk, dtSingleLine|dtVCenter)
 			c.font(fnt.body)
 			c.text(label, rect{r.left + dp(40), r.top, r.right - dp(10), r.bottom}, viewerInk, dtSingleLine|dtVCenter)
@@ -344,10 +550,13 @@ func viewerAct(id int) {
 		viewerStep(-1)
 	case vbNext:
 		viewerStep(1)
+	case vbFull:
+		viewerFull(!vw.full)
 	case vbOpen:
 		if vw.video != "" {
 			openURL(vw.video)
 		} else if p, ok := mediaFile(vw.list[vw.idx]); ok {
+			viewerFull(false) // the other program would open behind the picture
 			safeOpen(p)
 		}
 	case vbSave:
@@ -377,7 +586,7 @@ func viewerSave() {
 	copy(buf, syscall.StringToUTF16(name))
 	filter := utf16.Encode([]rune("Zdjęcie (*" + ext + ")\x00*" + ext + "\x00Wszystkie pliki\x00*.*\x00\x00"))
 	defExt := syscall.StringToUTF16(strings.TrimPrefix(ext, "."))
-	ofn := openFileName{owner: vw.host, filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
+	ofn := openFileName{owner: vw.hwnd, filter: &filter[0], file: &buf[0], maxFile: uint32(len(buf)),
 		title: u16("Zapisz zdjęcie"), defExt: &defExt[0], flags: 0x00080000 | 0x00000800 | 0x00000008 | 0x00000002}
 	ofn.structSize = uint32(unsafe.Sizeof(ofn))
 	dst := ""
@@ -420,6 +629,9 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		pEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 		return 0
 	case wmSize:
+		if hwnd != vw.hwnd { // the one left in the window while the picture has the screen
+			return 0
+		}
 		var rc rect
 		pGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 		vw.w, vw.h = rc.right, rc.bottom
@@ -430,12 +642,33 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmMouseMove:
 		x, y := lpPoint(lp)
+		if vw.full && hwnd == vw.hwnd { // moving brings the buttons back, and starts the wait again
+			if vw.idle {
+				vw.idle = false
+				invalidate(hwnd)
+			}
+			pSetTimer.Call(hwnd, timerViewerIdle, 1800, 0)
+		}
 		if hot := viewerHit(x, y); hot != vw.hot {
 			vw.hot = hot
 			invalidate(hwnd)
 		}
 		return 0
+	case wmTimer:
+		if wp == timerViewerIdle && hwnd == vw.hwnd && vw.full {
+			pKillTimer.Call(hwnd, timerViewerIdle)
+			if !vw.idle && vw.hot < 0 { // not while the pointer rests on a button
+				vw.idle = true
+				invalidate(hwnd)
+				pSetCursor.Call(0)
+			}
+		}
+		return 0
 	case wmSetCursor:
+		if lp&0xFFFF == 1 && vw.full && vw.idle {
+			pSetCursor.Call(0) // only the picture: no pointer over it either
+			return 1
+		}
 		if lp&0xFFFF == 1 && vw.hot >= 0 {
 			cur, _, _ := pLoadCursorW.Call(0, idcHand)
 			pSetCursor.Call(cur)
@@ -448,8 +681,20 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		x, y := lpPoint(lp)
 		if id := viewerHit(x, y); id >= 0 {
 			viewerAct(id)
-		} else if p := vw.pic; vw.video == "" && !(x >= p.left && x < p.right && y >= p.top && y < p.bottom) && y > dp(56) {
-			closeViewer() // a click on the dark ground closes, like in other viewers
+		} else if p := vw.pic; vw.video == "" && x >= p.left && x < p.right && y >= p.top && y < p.bottom {
+			// twice on the picture: the whole screen, and back
+			if twice := time.Since(vw.last) < 400*time.Millisecond; twice {
+				vw.last = time.Time{}
+				viewerFull(!vw.full)
+			} else {
+				vw.last = time.Now()
+			}
+		} else if vw.video == "" && y > dp(56) {
+			if vw.full {
+				viewerFull(false) // a click on the dark ground steps back, like Esc
+			} else {
+				closeViewer()
+			}
 		}
 		return 0
 	case wmMouseWheel:
@@ -463,12 +708,22 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0x0004 // every key comes here
 	case wmKeyDown:
 		switch {
-		case wp == vkEscape:
-			closeViewer()
+		case wp == vkEscape: // out of the whole screen first, out of the viewer second
+			if vw.full {
+				viewerFull(false)
+			} else {
+				closeViewer()
+			}
+		case wp == 'F' && !keyDown(vkControl), wp == 0x7A: // F or F11
+			viewerFull(!vw.full)
 		case wp == vkLeft:
 			viewerStep(-1)
 		case wp == vkRight:
 			viewerStep(1)
+		case wp == vkHome:
+			viewerGo(false)
+		case wp == vkEnd:
+			viewerGo(true)
 		case wp == 'S' && keyDown(vkControl):
 			viewerSave()
 		}
