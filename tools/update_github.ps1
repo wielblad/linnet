@@ -100,7 +100,7 @@ try {
   [IO.File]::WriteAllText($install, $orig, (New-Object Text.UTF8Encoding $false))
 }
 & $sh "$root/tools/build.sh" | Out-Null
-"zbudowano wersje 0.0.9 do instalacji; opublikowana jest 0.1"
+"zbudowano wersje 0.0.9 do instalacji; opublikowana jest {0}" -f ((Get-Content (Join-Path $root "latest.json") -Raw | ConvertFrom-Json).version)
 
 $i = Start-Process -FilePath (Join-Path $env:TEMP "Linnet-Setup-009.exe") -ArgumentList @("-install", "-quiet", "-name", "`"$name`"") -PassThru -Wait
 "instalacja 0.0.9: kod {0}, wersja: {1}" -f $i.ExitCode, (Version)
