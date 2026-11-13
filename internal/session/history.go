@@ -15,6 +15,13 @@ func HistoryDevicePath(dataDir string) string {
 	return filepath.Join(dataDir, HistoryDeviceFileName)
 }
 
+// HaveHistoryDevice reports whether the key to the stored encrypted history is already on
+// this computer, so that older messages of those conversations can be fetched.
+func HaveHistoryDevice(dataDir string) bool {
+	device, err := LoadHistoryDevice(dataDir)
+	return err == nil && device != nil
+}
+
 func LoadHistoryDevice(dataDir string) (*securehistory.Device, error) {
 	data, err := os.ReadFile(HistoryDevicePath(dataDir))
 	if err != nil {

@@ -23,19 +23,47 @@ var (
 		focus, hot              int // 0 the safe answer, 1 the action; hot -1 when none
 		card                    rect
 		btn                     [2]rect
+		label                   string  // a question that also asks for something typed
+		field                   uintptr // the field for it, 0 when the question is yes-or-no
+		fieldR, labelR          rect
+		onText                  func(string)
 	}
 )
 
 // confirmBox asks a yes-or-no question; then runs only when the action is chosen.
 func confirmBox(title, text, ok string, danger bool, then func()) {
+	openDialog(title, text, ok, danger, then, "", false, nil)
+}
+
+// promptBox asks for something typed, a code or a PIN; then gets what was typed, and runs
+// only when the action is chosen. Nothing typed here is kept anywhere by the program.
+func promptBox(title, text, label, ok string, secret bool, then func(string)) {
+	openDialog(title, text, ok, false, nil, label, secret, then)
+}
+
+func openDialog(title, text, ok string, danger bool, then func(), label string, secret bool, onText func(string)) {
 	if dlg.hwnd != 0 {
 		return
 	}
 	dlg.title, dlg.text, dlg.ok, dlg.cancel, dlg.danger, dlg.then = title, text, ok, "Anuluj", danger, then
+	dlg.label, dlg.onText, dlg.fieldR, dlg.labelR = label, onText, rect{}, rect{}
 	dlg.focus, dlg.hot = 0, -1
 	dlg.snap, dlg.sw, dlg.sh = snapshotMain()
 	dlg.hwnd = createWindow(0, "MliteDialog", title, wsChild|wsVisible|wsTabStop, hMain, 0)
+	if label != "" {
+		style := uint32(wsChild | wsVisible | wsTabStop | esAutoHScroll)
+		if secret {
+			style |= esPassword
+		}
+		dlg.field = createWindow(0, "EDIT", "", style, dlg.hwnd, 0)
+		sendMsg(dlg.field, wmSetFont, fnt.body, 1)
+		dlg.focus = 1 // the action: Enter in the field answers the question
+	}
 	layout()
+	if dlg.field != 0 {
+		pSetFocus.Call(dlg.field)
+		return
+	}
 	pSetFocus.Call(dlg.hwnd)
 }
 
@@ -43,8 +71,14 @@ func closeDialog(run bool) {
 	if dlg.hwnd == 0 {
 		return
 	}
-	h, then := dlg.hwnd, dlg.then
-	dlg.hwnd, dlg.then = 0, nil
+	h, then, onText := dlg.hwnd, dlg.then, dlg.onText
+	typed := ""
+	if dlg.field != 0 {
+		typed = getText(dlg.field)
+		pDestroyWindow.Call(dlg.field)
+		dlg.field = 0
+	}
+	dlg.hwnd, dlg.then, dlg.onText = 0, nil, nil
 	if dlg.snap != 0 {
 		pGdipDisposeImage.Call(dlg.snap)
 		dlg.snap = 0
@@ -54,6 +88,9 @@ func closeDialog(run bool) {
 	pSetFocus.Call(hView)
 	if run && then != nil {
 		then()
+	}
+	if run && onText != nil {
+		onText(typed)
 	}
 }
 
@@ -102,9 +139,23 @@ func paintDialog(target uintptr) {
 	c.font(fnt.name)
 	bwOK := c.width(dlg.ok) + dp(36)
 	bwNo := c.width(dlg.cancel) + dp(36)
-	ch := pad + sp(24) + dp(8) + th + dp(24) + bh + dp(20)
+	labelH, fieldH, extra := int32(0), int32(0), int32(0)
+	if dlg.field != 0 {
+		labelH, fieldH = sp(20), dp(36)
+		extra = dp(16) + labelH + fieldH
+	}
+	ch := pad + sp(24) + dp(8) + th + extra + dp(24) + bh + dp(20)
 	x, y := (dlg.w-cw)/2, (dlg.h-ch)/2
 	dlg.card = rect{x, y, x + cw, y + ch}
+	if dlg.field != 0 {
+		cy := y + pad + sp(24) + dp(8) + th + dp(16)
+		dlg.labelR = rect{x + pad, cy, x + cw - pad, cy + labelH}
+		fr := rect{x + pad, cy + labelH, x + cw - pad, cy + labelH + fieldH}
+		if fr != dlg.fieldR {
+			dlg.fieldR = fr
+			moveTo(dlg.field, rect{fr.left + dp(10), fr.top + (fieldH-lay.editH)/2, fr.right - dp(10), fr.top + (fieldH-lay.editH)/2 + lay.editH})
+		}
+	}
 	by := y + ch - dp(20) - bh
 	dlg.btn[1] = rect{x + cw - pad - bwOK, by, x + cw - pad, by + bh}
 	dlg.btn[0] = rect{dlg.btn[1].left - dp(8) - bwNo, by, dlg.btn[1].left - dp(8), by + bh}
@@ -142,12 +193,26 @@ func paintDialog(target uintptr) {
 		}
 	}
 	g.round(b1.left, b1.top, b1.right-b1.left, bh, dp(8), dp(8), dp(8), dp(8), okFill)
+	if f := dlg.fieldR; dlg.field != 0 && f.right > f.left {
+		focus, _, _ := pGetFocus.Call()
+		edge, inset := mix(pal.fg2, pal.line, 65), int32(1)
+		if focus == dlg.field {
+			edge, inset = pal.accent, 2
+		}
+		rr := dp(8)
+		g.round(f.left, f.top, f.right-f.left, f.bottom-f.top, rr, rr, rr, rr, edge)
+		g.round(f.left+inset, f.top+inset, f.right-f.left-2*inset, f.bottom-f.top-2*inset, rr-inset, rr-inset, rr-inset, rr-inset, pal.card)
+	}
 	g.free()
 
 	c.font(fnt.head)
 	c.text(dlg.title, rect{x + pad, y + pad, x + cw - pad, y + pad + sp(24)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.body)
 	c.text(dlg.text, rect{x + pad, y + pad + sp(24) + dp(8), x + cw - pad, y + pad + sp(24) + dp(8) + th}, pal.fg2, dtWordBreak)
+	if dlg.field != 0 {
+		c.font(fnt.small)
+		c.text(dlg.label, dlg.labelR, pal.fg, dtSingleLine|dtVCenter)
+	}
 	c.font(fnt.name)
 	c.text(dlg.cancel, b0, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	c.text(dlg.ok, b1, okInk, dtCenter|dtVCenter|dtSingleLine)
@@ -224,8 +289,17 @@ func dialogProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmKillFocus:
-		if dlg.hwnd == hwnd && wp != 0 && wp != hwnd { // the question keeps the keyboard while it is up
+		if dlg.hwnd == hwnd && wp != 0 && wp != hwnd && wp != dlg.field { // the question keeps the keyboard while it is up
 			pSetFocus.Call(hwnd)
+		}
+		return 0
+	case wmCtlColorEdit:
+		pSetTextColor.Call(wp, cref(pal.fg))
+		pSetBkColor.Call(wp, cref(pal.card))
+		return brCard
+	case wmCommand:
+		if code := (wp >> 16) & 0xFFFF; code == enSetFocus || code == enKillFocus {
+			invalidate(hwnd)
 		}
 		return 0
 	}

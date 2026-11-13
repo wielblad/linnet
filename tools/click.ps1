@@ -2,7 +2,8 @@ param([string]$Exe, [string]$DataDir, [string]$Out, [int]$Select = 2, [string]$C
 # Starts the program on test data with MLITE_DRYOPEN (nothing is really opened), selects a
 # conversation, clicks at the given points and saves a picture of the window.
 # -Clicks "x,y;x,y" are coordinates in the saved picture (window-relative).
-# A point may carry a verb: "move:x,y", "down:x,y", "up:x,y", "right:x,y", "key:VK", "ctrl:VK", "wait:ms", "shot:name".
+# A point may carry a verb: "move:x,y", "down:x,y", "up:x,y", "right:x,y", "key:VK", "ctrl:VK", "wait:ms", "shot:name",
+# "scroll:lines@WindowClass".
 Add-Type -AssemblyName System.Windows.Forms
 $keepText = $null; if ([Windows.Forms.Clipboard]::ContainsText()) { $keepText = [Windows.Forms.Clipboard]::GetText() }
 $keepImage = $null; if ($keepText -eq $null -and [Windows.Forms.Clipboard]::ContainsImage()) { $keepImage = [Windows.Forms.Clipboard]::GetImage() }
@@ -106,6 +107,7 @@ try {
       "type" { $pan = [CK]::FindWindowEx($h, [IntPtr]::Zero, "MlitePanel", [NullString]::Value); $ed = [CK]::FindWindowEx($pan, [IntPtr]::Zero, "EDIT", [NullString]::Value); [CK]::SendText($ed, 0x00C2, [IntPtr]1, $arg) | Out-Null; Start-Sleep -Milliseconds 400 }
       "clip" { "schowek [{0}]: {1}" -f $arg, [Windows.Forms.Clipboard]::GetText() }
       "shot" { Shot (Join-Path (Split-Path $Out) "$arg.png") }
+      "scroll" { $a = $arg -split "@"; $w = [CK]::FindWindowEx($h, [IntPtr]::Zero, $a[1], [NullString]::Value); for ($k = 0; $k -lt [int]$a[0]; $k++) { [CK]::PostMessage($w, 0x0115, [IntPtr]1, [IntPtr]::Zero) | Out-Null }; Start-Sleep -Milliseconds 500 }
       "key" { $a = $arg -split "@"; Key ([Convert]::ToInt32($a[0], 16)) $false $a[1] }
       "ctrl" { $a = $arg -split "@"; Key ([Convert]::ToInt32($a[0], 16)) $true $a[1] }
       default {

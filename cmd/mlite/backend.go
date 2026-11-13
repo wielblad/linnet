@@ -59,6 +59,7 @@ type backend struct {
 	refreshPending atomic.Bool
 	mediaRetry     atomic.Bool // pictures that failed may be tried again (the connection came back)
 	armed          atomic.Bool
+	pinNeeded      atomic.Bool // the encrypted history waits for Messenger's PIN
 	done           chan struct{}
 }
 
@@ -109,6 +110,62 @@ func (b *backend) stop() {
 	}
 	b.db.Close()
 	b.logF.Close()
+}
+
+// historyLocked reports that the older messages of the encrypted conversations are still
+// behind Messenger's PIN: without it this computer sees only what arrives from now on.
+func (b *backend) historyLocked() bool { return b.pinNeeded.Load() }
+
+// checkHistoryPIN asks, once connected, whether this account keeps a PIN-locked history.
+func (b *backend) checkHistoryPIN() {
+	client := b.current()
+	if client == nil {
+		return
+	}
+	need, err := client.NeedsHistoryPIN(b.ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("history pin")
+		return
+	}
+	b.pinNeeded.Store(need)
+	b.requestRefresh()
+}
+
+// unlockHistory hands Messenger's PIN over once, to fetch the key to the stored history. The
+// PIN goes to Meta and is kept nowhere on this computer.
+func (b *backend) unlockHistory(pin string) {
+	client := b.current()
+	if client == nil || pin == "" {
+		return
+	}
+	go func() {
+		if err := client.UnlockHistory(b.ctx, pin); err != nil {
+			log.Warn().Err(err).Msg("unlock history")
+			b.notice("Nie udało się odblokować historii. Sprawdź PIN i spróbuj jeszcze raz.")
+			return
+		}
+		b.pinNeeded.Store(false)
+		b.notice("Historia odblokowana. Pobieram starsze wiadomości…")
+		if err := client.SyncRecentEncrypted(b.ctx, b.db); err != nil {
+			log.Warn().Err(err).Msg("sync recent encrypted after unlock")
+		}
+		_ = b.db.RepairThreadActivity(b.ctx)
+		b.requestRefresh()
+	}()
+}
+
+// signOut ends the connection but leaves the program running, so that the sign-in screen can
+// come next. The conversations already on this computer stay where they are.
+func (b *backend) signOut() {
+	b.mu.Lock()
+	client := b.client
+	b.client = nil
+	b.mu.Unlock()
+	if client != nil {
+		client.Disconnect()
+	}
+	b.armed.Store(false)
+	b.setStatus("Wymagane logowanie")
 }
 
 func (b *backend) setStatus(s string) {
@@ -280,6 +337,7 @@ func (b *backend) run() {
 	b.armed.Store(true)
 	b.requestRefresh()
 	b.setStatus("Połączono")
+	b.checkHistoryPIN() // without the PIN the encrypted conversations start empty here
 	// Encrypted chats: the server does not know their last message, so fetch the newest
 	// page of each in the background and let the list reorder itself.
 	if err := client.SyncRecentEncrypted(b.ctx, b.db); err != nil {

@@ -121,7 +121,7 @@ func main() {
 	selfFlag := flag.Int64("self", 0, "identyfikator własnego konta, gdy brak połączenia (do testów)")
 	trayFlag := flag.Bool("tray", false, "uruchom bez pokazywania okna")
 	offlineFlag := flag.Bool("offline", false, "nie łącz się z Messengerem (do testów wyglądu)")
-	loginDemo := flag.Int("login-demo", 0, "pokaż ekran logowania bez łączenia: 1 start, 2 pola, 3 błąd (do testów wyglądu)")
+	loginDemo := flag.Int("login-demo", 0, "pokaż ekran logowania bez łączenia: 1 start, 2 pola, 3 błąd, 4 wybór potwierdzenia (do testów wyglądu)")
 	noReadFlag := flag.Bool("no-read", false, "nie oznaczaj rozmów jako przeczytanych (do sprawdzeń)")
 	installFlag := flag.Bool("install", false, "zainstaluj dla bieżącego użytkownika")
 	uninstallFlag := flag.Bool("uninstall", false, "odinstaluj")
@@ -214,6 +214,11 @@ func main() {
 			if *loginDemo == 3 {
 				lg.err = "Logowanie się nie udało: nieprawidłowe hasło."
 			}
+			if *loginDemo == 4 { // the step that asks how to confirm the login
+				lg.step = meta.LoginStep{Kind: meta.LoginInput, Instructions: "Choose how to finish signing in",
+					Fields: []meta.LoginField{{ID: "mfatype", Name: "Login method", Options: []string{
+						"Authentication app", "Text message", "Approve from another device", "Backup code"}}}}
+			}
 			loginFields()
 		}
 	}
@@ -275,6 +280,9 @@ func handleKey(m *msgT) bool {
 		}
 		pSetFocus.Call(hSearch)
 		return true
+	case dlg.field != 0 && m.hwnd == dlg.field && (m.wParam == vkReturn || m.wParam == vkEscape):
+		closeDialog(m.wParam == vkReturn)
+		return true
 	case lg.active && m.wParam == vkReturn:
 		for _, e := range lg.edits {
 			if m.hwnd == e {
@@ -332,7 +340,10 @@ func onStrip(x, y int32) bool {
 	return lay.stripClick && x >= s.left && x < s.right && y >= s.top && y < s.bottom
 }
 
-var hotStrip bool // the pointer is on that bar
+var (
+	hotStrip bool   // the pointer is on that bar
+	stripDo  func() // what a click on it does
+)
 
 func fatal(msg string) {
 	pMessageBoxW.Call(0, uintptr(unsafe.Pointer(u16(msg))), uintptr(unsafe.Pointer(u16(appName))), 0x10)
@@ -563,10 +574,15 @@ func layout() {
 	searchTop := dp(14) + sp(34)
 	lay.search = rect{lay.pane.left + dp(12), searchTop, lay.pane.right - dp(12), searchTop + searchH}
 
-	lay.stripText, lay.stripClick = statusLine(), false
+	lay.stripText, lay.stripClick, stripDo = statusLine(), false, nil
 	if lay.stripText == "" && !settings {
-		if n := updateNotice(); n != "" {
-			lay.stripText, lay.stripClick = n, true
+		switch {
+		case be.historyLocked():
+			lay.stripText, lay.stripClick, stripDo = "Starsze wiadomości z rozmów szyfrowanych czekają na PIN z Messengera. Kliknij, aby je odblokować.", true, historyAction
+		default:
+			if n := updateNotice(); n != "" {
+				lay.stripText, lay.stripClick, stripDo = n, true, goToUpdates
+			}
 		}
 	}
 	lay.strip = rect{}
@@ -1390,8 +1406,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			goBack()
-		} else if onStrip(x, y) {
-			goToUpdates()
+		} else if onStrip(x, y) && stripDo != nil {
+			stripDo()
 		}
 		return 0
 	case wmMouseMove:

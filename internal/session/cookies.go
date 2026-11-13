@@ -3,7 +3,9 @@ package session
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +40,21 @@ type browserCookie struct {
 
 func CookiesPath(dataDir string) string {
 	return filepath.Join(dataDir, CookiesFileName)
+}
+
+// HaveCookies reports whether a session is saved on this computer.
+func HaveCookies(dataDir string) bool {
+	_, err := os.Stat(CookiesPath(dataDir))
+	return err == nil
+}
+
+// ForgetCookies takes the saved session away: signing out. Nothing else is touched, so the
+// conversations already on this computer stay where they are.
+func ForgetCookies(dataDir string) error {
+	if err := os.Remove(CookiesPath(dataDir)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove cookies: %w", err)
+	}
+	return nil
 }
 
 func LoadCookies(dataDir string) (*Cookies, error) {
