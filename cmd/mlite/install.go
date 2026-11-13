@@ -102,10 +102,8 @@ func install() error {
 			return fmt.Errorf("nie można zapisać %s (jeśli %s działa, zamknij go z zasobnika i spróbuj ponownie): %w", dst, appName, err)
 		}
 	}
-	if err := writeIcon(iconPath()); err != nil {
-		return fmt.Errorf("ikona: %w", err)
-	}
-	if err := createShortcut(shortcutPath(), dst, dir, iconPath(), appID(), "Lekki klient Messengera"); err != nil {
+	os.Remove(iconPath()) // older versions kept a drawn icon beside the program; the file carries its own now
+	if err := createShortcut(shortcutPath(), dst, dir, dst, appID(), "Klient wiadomości Messenger na Windows"); err != nil {
 		return fmt.Errorf("skrót w menu Start: %w", err)
 	}
 	key := uninstRoot + appID()
@@ -115,7 +113,7 @@ func install() error {
 	}
 	regSetStr(key, "DisplayName", appName)
 	regSetStr(key, "DisplayVersion", appVersion)
-	regSetStr(key, "DisplayIcon", iconPath())
+	regSetStr(key, "DisplayIcon", dst)
 	regSetStr(key, "InstallLocation", dir)
 	regSetStr(key, "UninstallString", uninstall)
 	regSetStr(key, "QuietUninstallString", uninstall+" -quiet")

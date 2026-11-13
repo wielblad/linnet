@@ -307,16 +307,19 @@ func paintTextMarks(g gfx, it *vitem, fill uint32) {
 		return
 	}
 	ox, oy := bodyOrigin(it)
+	selFill, line := mix(pal.accent, fill, 42), mix(pal.fg, fill, 70)
+	if it.me { // on one's own bubble both are drawn in its text colour
+		selFill, line = mix(pal.ownFg, fill, 34), mix(pal.ownFg, fill, 78)
+	}
 	if selIn(it.m.ID) {
 		if layout := bodyLayout(it); layout != 0 {
 			from, to := selBounds()
 			for _, r := range layoutRange(layout, from, to-from) {
-				g.round(ox+r.left, oy+r.top, r.right-r.left, r.bottom-r.top, dp(2), dp(2), dp(2), dp(2), mix(pal.accent, fill, 42))
+				g.round(ox+r.left, oy+r.top, r.right-r.left, r.bottom-r.top, dp(2), dp(2), dp(2), dp(2), selFill)
 			}
 			com(layout, 2)
 		}
 	}
-	line := mix(pal.fg, fill, 70)
 	for _, l := range it.links {
 		for _, r := range l.rects {
 			g.round(ox+r.left, oy+r.bottom-dp(2), r.right-r.left, 1, 0, 0, 0, 0, line)

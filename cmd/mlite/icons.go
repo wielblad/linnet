@@ -171,12 +171,13 @@ var (
 		accent uint32
 		size   int32
 		valid  bool
+		light  bool // the taskbar was light when the icon was chosen
 	}
 )
 
 // setWindowIcons gives the window and its taskbar button the bubble icon in the current accent.
 func setWindowIcons() {
-	fresh := [2]uintptr{makeIcon(traySize(), 0, false), makeIcon(dp(32), 0, false)}
+	fresh := [2]uintptr{brandIcon(resApp, traySize()), brandIcon(resApp, dp(32))}
 	for i, ic := range fresh {
 		if ic == 0 {
 			continue
@@ -192,29 +193,39 @@ func setWindowIcons() {
 func unreadPhrase(n int) string {
 	switch {
 	case n == 1:
-		return "1 nieprzeczytana"
+		return "1 nieprzeczytana wiadomość"
 	case n%10 >= 2 && n%10 <= 4 && (n%100 < 12 || n%100 > 14):
-		return fmt.Sprintf("%d nieprzeczytane", n)
+		return fmt.Sprintf("%d nieprzeczytane wiadomości", n)
 	}
-	return fmt.Sprintf("%d nieprzeczytanych", n)
+	return fmt.Sprintf("%d nieprzeczytanych wiadomości", n)
 }
 
 // trayRefresh keeps the notification-area icon and its tooltip in step with the unread count.
 func trayRefresh() {
 	size := traySize()
-	if trayShown.valid && trayShown.count == unreadTotal && trayShown.quiet == cfg.DND && trayShown.accent == pal.accent && trayShown.size == size {
+	light := shellLight()
+	if trayShown.valid && trayShown.count == unreadTotal && trayShown.quiet == cfg.DND && trayShown.accent == pal.accent && trayShown.size == size && trayShown.light == light {
 		return
 	}
-	icon := makeIcon(size, unreadTotal, cfg.DND)
+	// With unread messages the icon is their number; otherwise the one-colour mark that
+	// suits the taskbar, which has its own light or dark setting.
+	var icon uintptr
+	if unreadTotal > 0 {
+		icon = makeIcon(size, unreadTotal, cfg.DND)
+	} else if light {
+		icon = brandIcon(resTrayDark, size)
+	} else {
+		icon = brandIcon(resTrayLight, size)
+	}
 	if icon == 0 {
 		return
 	}
 	tip := appName
 	if unreadTotal > 0 {
-		tip = appName + ": " + unreadPhrase(unreadTotal)
+		tip = appName + " — " + unreadPhrase(unreadTotal)
 	}
 	if cfg.DND {
-		tip += " (nie przeszkadzać)"
+		tip += " · Nie przeszkadzać"
 	}
 	old := tray.hIcon
 	tray.hIcon = icon
@@ -225,7 +236,7 @@ func trayRefresh() {
 	if old != 0 && trayShown.valid {
 		pDestroyIcon.Call(old)
 	}
-	trayShown.count, trayShown.quiet, trayShown.accent, trayShown.size, trayShown.valid = unreadTotal, cfg.DND, pal.accent, size, true
+	trayShown.count, trayShown.quiet, trayShown.accent, trayShown.size, trayShown.valid, trayShown.light = unreadTotal, cfg.DND, pal.accent, size, true, light
 }
 
 // dumpIcons saves the icon variants as PNG files, to look at them without the notification area.

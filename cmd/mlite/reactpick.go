@@ -55,7 +55,7 @@ var actGlyph = map[int]string{actReact: gReact, actReply: gReply, actCopy: gCopy
 
 // actRect is where action k of an item is drawn, in view coordinates.
 func actRect(it *vitem, k int32) rect {
-	s, gap := dp(28), dp(2)
+	s, gap := dp(32), dp(2) // closer to the identity's 36–40 px pointer target without crowding the bubble
 	y := it.y + it.top + (it.bh-s)/2 - mv.scroll
 	x := it.bx + it.bw + dp(6) + k*(s+gap)
 	if it.me {

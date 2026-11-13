@@ -127,7 +127,7 @@ func loginText() string {
 	case lg.busy:
 		return "Łączenie z Messengerem…"
 	case !lg.started && lg.expired:
-		return "Poprzednia sesja wygasła. Zaloguj się ponownie, a rozmowy wrócą na swoje miejsce."
+		return "Sesja wygasła. Zaloguj się ponownie, aby kontynuować."
 	case !lg.started:
 		return "Program łączy się z Messengerem tak jak aplikacja Messenger Lite. To, co wpiszesz, trafia wyłącznie do Mety; na tym komputerze zostaje zapisana sama sesja."
 	case lg.step.Kind == meta.LoginWait:
@@ -340,21 +340,21 @@ func drawLoginButton(d *drawItem, label string, primary bool) {
 func paintLogin(target uintptr) {
 	buf := newBuffer(target, lg.w, lg.h)
 	c := canvas{buf.hdc}
-	c.fill(rect{0, 0, lg.w, lg.h}, pal.layer)
+	c.fill(rect{0, 0, lg.w, lg.h}, pal.mica)
 	g := newGfx(buf.hdc)
 	k := lg.card
-	g.round(k.left, k.top+dp(2), k.right-k.left, k.bottom-k.top, dp(8), dp(8), dp(8), dp(8), mix(0x000000, pal.layer, 14))
-	g.round(k.left, k.top, k.right-k.left, k.bottom-k.top, dp(8), dp(8), dp(8), dp(8), pal.card)
+	g.round(k.left, k.top, k.right-k.left, k.bottom-k.top, dp(12), dp(12), dp(12), dp(12), pal.line)
+	g.round(k.left+1, k.top+1, k.right-k.left-2, k.bottom-k.top-2, dp(11), dp(11), dp(11), dp(11), pal.card)
 	focus, _, _ := pGetFocus.Call()
 	for i, r := range lg.fieldR {
-		edge := pal.fg2
+		edge := mix(pal.fg2, pal.line, 65)
 		inset := int32(1)
 		if i < len(lg.edits) && lg.edits[i] == focus {
 			edge, inset = pal.accent, 2
 		}
-		g.round(r.left, r.top, r.right-r.left, r.bottom-r.top, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 14))
-		g.round(r.left, r.bottom-dp(5), r.right-r.left, dp(5), 1, 1, dp(4), dp(4), edge)
-		g.round(r.left+1, r.top+1, r.right-r.left-2, r.bottom-r.top-1-inset, dp(3), dp(3), dp(3), dp(3), pal.card)
+		rr := dp(8)
+		g.round(r.left, r.top, r.right-r.left, r.bottom-r.top, rr, rr, rr, rr, edge)
+		g.round(r.left+inset, r.top+inset, r.right-r.left-2*inset, r.bottom-r.top-2*inset, rr-inset, rr-inset, rr-inset, rr-inset, pal.card)
 	}
 	g.free()
 	c.font(fnt.title)

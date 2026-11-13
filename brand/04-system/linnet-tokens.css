@@ -1,0 +1,29 @@
+:root {
+  --linnet-brand-primary: #0866E8;
+  --linnet-brand-hover: #0758C7;
+  --linnet-brand-pressed: #0649A6;
+  --linnet-brand-tint: #EAF2FF;
+  --linnet-brand-onPrimary: #FFFFFF;
+  --linnet-light-canvas: #F4F7FC;
+  --linnet-light-surface: #FFFFFF;
+  --linnet-light-text: #14213D;
+  --linnet-light-secondary: #58657D;
+  --linnet-light-border: #DCE3EF;
+  --linnet-light-focus: #0866E8;
+  --linnet-dark-canvas: #0D1422;
+  --linnet-dark-surface: #151F31;
+  --linnet-dark-elevated: #1D2A40;
+  --linnet-dark-text: #F4F7FC;
+  --linnet-dark-secondary: #B4C0D3;
+  --linnet-dark-border: #344259;
+  --linnet-dark-accent: #76ADFF;
+  --linnet-dark-onAccent: #0D1422;
+  --linnet-dark-focus: #76ADFF;
+  --linnet-semantic-success: #167143;
+  --linnet-semantic-warning: #8A5700;
+  --linnet-semantic-danger: #B42332;
+  --linnet-font-brand: Manrope, sans-serif;
+  --linnet-font-ui: "Segoe UI Variable", "Segoe UI", sans-serif;
+  --linnet-radius-control: 8px;
+  --linnet-radius-bubble: 16px;
+}

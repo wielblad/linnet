@@ -706,17 +706,15 @@ func paintMain(target uintptr) {
 	if !settings {
 		g := newGfx(buf.hdc)
 		field := func(r rect, focused bool) {
-			edge := pal.fg2
+			// a field of the identity: the control corner all round, a quiet edge, and the focus
+			// colour two pixels wide while the keyboard is in it
+			edge, inset := mix(pal.fg2, pal.line, 65), int32(1) // 3:1 against the field, so its outline can be seen
 			if focused {
-				edge = pal.accent
+				edge, inset = pal.accent, 2
 			}
-			g.round(r.left, r.top, r.right-r.left, r.bottom-r.top, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 14))
-			g.round(r.left, r.bottom-dp(5), r.right-r.left, dp(5), 1, 1, dp(4), dp(4), edge)
-			inset := int32(1)
-			if focused {
-				inset = 2
-			}
-			g.round(r.left+1, r.top+1, r.right-r.left-2, r.bottom-r.top-1-inset, dp(3), dp(3), dp(3), dp(3), pal.card)
+			rr := dp(8)
+			g.round(r.left, r.top, r.right-r.left, r.bottom-r.top, rr, rr, rr, rr, edge)
+			g.round(r.left+inset, r.top+inset, r.right-r.left-2*inset, r.bottom-r.top-2*inset, rr-inset, rr-inset, rr-inset, rr-inset, pal.card)
 		}
 		if showPane {
 			field(lay.search, focusEdit == hSearch)
@@ -894,12 +892,12 @@ func drawSend(d *drawItem) {
 	case d.itemState&odsDisabled != 0:
 		fill, ink = mix(pal.fg, pal.card, 8), pal.fg2
 	case d.itemState&odsSelected != 0:
-		fill = mix(pal.accent, pal.card, 78)
+		fill = pal.accentDown
 	case hotBtn == d.hwndItem:
-		fill = mix(pal.accent, pal.card, 90)
+		fill = pal.accentHover
 	}
 	g := newGfx(buf.hdc)
-	g.round(0, 0, w, h, dp(4), dp(4), dp(4), dp(4), fill)
+	g.round(0, 0, w, h, dp(8), dp(8), dp(8), dp(8), fill)
 	g.free()
 	c.font(fnt.icon)
 	c.text(gSend, rect{0, 0, w, h}, ink, dtCenter|dtVCenter|dtSingleLine)
@@ -930,11 +928,10 @@ func drawRow(d *drawItem) {
 	g := newGfx(buf.hdc)
 	switch {
 	case selected:
-		g.round(dp(6), dp(2)+1, w-dp(12), h-dp(4), dp(6), dp(6), dp(6), dp(6), mix(0x000000, pal.mica, 12))
-		g.round(dp(6), dp(2), w-dp(12), h-dp(4), dp(6), dp(6), dp(6), dp(6), pal.card)
+		g.round(dp(6), dp(2), w-dp(12), h-dp(4), dp(8), dp(8), dp(8), dp(8), pal.sel)
 		g.pill(dp(6), h/2-dp(9), dp(3), dp(18), pal.accent)
 	case int(d.itemID) == hotRow:
-		g.round(dp(6), dp(2), w-dp(12), h-dp(4), dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.mica, 5))
+		g.round(dp(6), dp(2), w-dp(12), h-dp(4), dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.mica, 5))
 	}
 	bg := pal.mica
 	if selected {
@@ -1128,7 +1125,7 @@ func inputProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		sendMsg(hwnd, emGetRect, 0, uintptr(unsafe.Pointer(&rc)))
 		hdc, _, _ := pGetDC.Call(hwnd)
 		old, _, _ := pSelectObject.Call(hdc, fnt.body)
-		canvas{hdc}.gdiText("Napisz wiadomość", rc, pal.fg2, dtSingleLine)
+		canvas{hdc}.gdiText("Napisz wiadomość…", rc, pal.fg2, dtSingleLine)
 		pSelectObject.Call(hdc, old)
 		pReleaseDC.Call(hwnd, hdc)
 	}

@@ -120,9 +120,10 @@ func buildSettings() {
 		{kind: srInfo, title: "Motyw, kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
 		{kind: srToggle, title: "Pokaż zużycie pamięci na pasku bocznym",
 			get: func() bool { return cfg.ShowMem }, set: func(v bool) { cfg.ShowMem = v }},
-		{kind: srHeader, title: "O programie"},
-		{kind: srInfo, title: appName + " " + appVersion, live: func() string {
-			return fmt.Sprintf("Pamięć teraz: %d MB. Program jest nieoficjalny i nie pochodzi od Mety.", workingSetMB())
+		{kind: srHeader, title: "O aplikacji " + appName},
+		{kind: srInfo, title: appName + " " + appVersion, desc: "Klient wiadomości Messenger na Windows. Linnet jest niezależną aplikacją i nie jest powiązana z Meta Platforms, Inc. Messenger i Facebook są znakami ich właścicieli."},
+		{kind: srInfo, title: "Pamięć", live: func() string {
+			return fmt.Sprintf("Teraz: %d MB.", workingSetMB())
 		}},
 	}
 }
@@ -202,7 +203,7 @@ func settingsWidth() int32 {
 func paintSettings(target uintptr) {
 	buf := newBuffer(target, sv.w, sv.h)
 	c := canvas{buf.hdc}
-	c.fill(rect{0, 0, sv.w, sv.h}, pal.layer)
+	c.fill(rect{0, 0, sv.w, sv.h}, pal.mica)
 	x, w := dp(28), settingsWidth()
 	g := newGfx(buf.hdc)
 	for i := range sv.rows {
@@ -211,8 +212,8 @@ func paintSettings(target uintptr) {
 		if r.kind == srHeader || y+r.h < 0 || y > sv.h {
 			continue
 		}
-		g.round(x, y, w, r.h, dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.card, 7))
-		g.round(x+1, y+1, w-2, r.h-2, dp(5), dp(5), dp(5), dp(5), pal.card)
+		g.round(x, y, w, r.h, dp(8), dp(8), dp(8), dp(8), pal.line)
+		g.round(x+1, y+1, w-2, r.h-2, dp(7), dp(7), dp(7), dp(7), pal.card)
 		if r.kind == srToggle {
 			tx, ty := x+w-dp(16)-dp(40), y+(r.h-dp(20))/2
 			if r.get() {

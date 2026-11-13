@@ -17,6 +17,8 @@ type palette struct {
 	mica, card, fg, fg2, line, layer, own uint32
 	accent, onAccent, signal, hover       uint32
 	accentText, ownMeta, ownAccent        uint32 // accent and secondary text that stay readable on their surfaces
+	bubble, ownFg, sel                    uint32 // incoming bubble, text on one's own bubble, the selected row
+	accentHover, accentDown               uint32 // the accent under the pointer and while pressed
 	avatars                               [6]uint32
 }
 
@@ -84,51 +86,40 @@ func loadPalette() {
 		dark = v == "dark"
 	}
 	p := palette{dark: dark}
-	accent := uint32(0x005FB8)
+	// Colours of the Linnet identity (brand/04-system/design-tokens.json). The blue is the
+	// brand's own and no longer follows the Windows accent colour.
 	if dark {
-		accent = 0x60CDFF
-	}
-	// AccentPalette: eight RGBA colours, light3..dark3. Windows uses dark1 on light and light2 on dark.
-	if raw := regBytes(`Software\Microsoft\Windows\CurrentVersion\Explorer\Accent`, "AccentPalette", 64); len(raw) >= 32 {
-		i := 4 * 4
-		if dark {
-			i = 1 * 4
-		}
-		accent = uint32(raw[i])<<16 | uint32(raw[i+1])<<8 | uint32(raw[i+2])
-	}
-	if dark {
-		p.mica, p.card, p.fg, p.fg2, p.line = 0x1C2026, 0x353A42, 0xF2F2F2, 0xB4B8BF, 0x373C44
-		p.onAccent, p.signal = 0x0B1A24, 0xFF99A4
-		for n := 0; n < 20 && contrast(accent, p.onAccent) < 4.5; n++ {
-			accent = mix(0xFFFFFF, accent, 12)
-		}
-		p.accent = accent
-		p.layer = mix(accent, 0x1F2328, 6)
-		p.own = mix(accent, p.card, 22)
-		p.hover = mix(p.fg, p.mica, 8)
-		for i, c := range [6]uint32{0x3D5C73, 0x5E5340, 0x6B4553, 0x3F5E4A, 0x554A6B, 0x4A5560} {
+		p.mica, p.layer, p.card, p.bubble = 0x0D1422, 0x151F31, 0x151F31, 0x1D2A40 // canvas, surface, surface, elevated
+		p.fg, p.fg2, p.line = 0xF4F7FC, 0xB4C0D3, 0x344259
+		p.accent, p.onAccent = 0x76ADFF, 0x0D1422
+		p.accentHover, p.accentDown = mix(0xFFFFFF, p.accent, 14), mix(0x0D1422, p.accent, 14)
+		p.own, p.ownFg = p.accent, p.onAccent
+		p.sel = mix(p.accent, p.mica, 18)
+		p.hover = mix(p.fg, p.mica, 7)
+		p.signal = legible(0xB42332, 0xFFFFFF, p.mica, p.layer, p.bubble) // the danger red, lightened until it reads on dark
+		for i, c := range [6]uint32{0x2B4A73, 0x4D4A3D, 0x5A3F52, 0x2F5647, 0x4A4470, 0x3B4A63} {
 			p.avatars[i] = c
 		}
 	} else {
-		p.mica, p.card, p.fg, p.fg2, p.line = 0xE9EDF3, 0xFFFFFF, 0x1B1B1B, 0x5C5C5C, 0xD5DAE2
-		p.onAccent, p.signal = 0xFFFFFF, 0xC42B1C
-		for n := 0; n < 20 && contrast(accent, p.onAccent) < 4.5; n++ {
-			accent = mix(0x000000, accent, 12)
-		}
-		p.accent = accent
-		p.layer = mix(accent, 0xF6F7F9, 6)
-		p.own = mix(accent, p.card, 16)
-		p.hover = mix(p.fg, p.mica, 6)
-		for i, c := range [6]uint32{0xC9D8E8, 0xD6CDB8, 0xE8D2D8, 0xBFD4C4, 0xD5D0E8, 0xC8CED6} {
+		p.mica, p.layer, p.card = 0xF4F7FC, 0xFFFFFF, 0xFFFFFF // canvas, surface, surface
+		p.bubble = mix(0xDCE3EF, 0xFFFFFF, 55)                 // the border colour, thinned: a bubble that shows on white
+		p.fg, p.fg2, p.line = 0x14213D, 0x58657D, 0xDCE3EF
+		p.accent, p.onAccent = 0x0866E8, 0xFFFFFF
+		p.accentHover, p.accentDown = 0x0758C7, 0x0649A6
+		p.own, p.ownFg = p.accent, p.onAccent
+		p.sel = 0xEAF2FF // tint
+		p.hover = mix(p.fg, p.mica, 5)
+		p.signal = 0xB42332
+		for i, c := range [6]uint32{0xC7DAF5, 0xDDD6C3, 0xEBD3DC, 0xC3DDCB, 0xD6D2EE, 0xCBD3E0} {
 			p.avatars[i] = c
 		}
 	}
 	if highContrast() {
 		p = contrastPalette()
 	}
-	p.accentText = legible(p.accent, p.fg, p.mica, p.layer, p.card)
-	p.ownMeta = legible(p.fg2, p.fg, p.own)
-	p.ownAccent = legible(p.accent, p.fg, p.own)
+	p.accentText = legible(p.accent, p.fg, p.mica, p.layer, p.card, p.bubble)
+	p.ownMeta = legible(mix(p.ownFg, p.own, 82), p.ownFg, p.own)
+	p.ownAccent = p.ownFg
 	pal = p
 	textScale = int32(regDword(`Software\Microsoft\Accessibility`, "TextScaleFactor", 100))
 	if v, err := strconv.Atoi(os.Getenv("MLITE_TEXTSCALE")); err == nil { // for screenshots at other text sizes only
@@ -183,14 +174,14 @@ func loadFonts(hwnd uintptr) {
 	display := pickFace(hwnd, "Segoe UI Variable Display", "Segoe UI")
 	icons := pickFace(hwnd, "Segoe Fluent Icons", "Segoe MDL2 Assets")
 	fnt.body = regFont(sp(14), 400, text)
-	fnt.bodySemi = regFont(sp(13), 600, text)
+	fnt.bodySemi = regFont(sp(12), 600, text)
 	fnt.small = regFont(sp(12), 400, text)
 	fnt.smallSemi = regFont(sp(12), 600, text)
-	fnt.prev = regFont(sp(13), 400, text)
+	fnt.prev = regFont(sp(14), 400, text)
 	fnt.name = regFont(sp(14), 600, text)
 	fnt.nameBold = regFont(sp(14), 700, text)
 	fnt.title = regFont(sp(20), 600, display)
-	fnt.head = regFont(sp(15), 600, text)
+	fnt.head = regFont(sp(16), 600, text)
 	fnt.icon = regFont(dp(16), 400, icons)
 	fnt.iconSm = regFont(dp(12), 400, icons)
 	fnt.iconLg = regFont(dp(20), 400, icons)
@@ -421,6 +412,7 @@ func contrastPalette() palette {
 	p.fg, p.fg2, p.line = text, text, text
 	p.accent, p.onAccent, p.signal = sel, selText, text
 	p.hover = face
+	p.bubble, p.ownFg, p.sel, p.accentHover, p.accentDown = face, text, face, sel, sel
 	for i := range p.avatars {
 		p.avatars[i] = face
 	}

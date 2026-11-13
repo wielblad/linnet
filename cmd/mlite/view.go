@@ -561,7 +561,7 @@ func paintView(target uintptr) {
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, mv.w, mv.h}, pal.layer)
 	if len(mv.items) == 0 {
-		msg := "Wybierz rozmowę z listy"
+		msg := "Wybierz rozmowę"
 		hint := "Ctrl+K szuka rozmowy lub osoby."
 		if mv.has {
 			msg, hint = "Nie ma tu jeszcze wiadomości", "Napisz pierwszą."
@@ -574,7 +574,7 @@ func paintView(target uintptr) {
 		return
 	}
 	padL, padR, padT := dp(12), dp(10), dp(6)
-	R, r := dp(14), dp(5)
+	R, r := dp(16), dp(6) // the identity's bubble corner; the smaller one joins bubbles of one run
 	shadow := mix(0x000000, pal.layer, 12)
 
 	// pass 1: shapes
@@ -603,7 +603,7 @@ func paintView(target uintptr) {
 			g.pill((mv.w-w)/2, y+sp(10), w, sp(20), pal.card)
 		case itMsg:
 			by := y + it.top
-			fill := pal.card
+			fill := pal.bubble
 			tl, tr, br, bl := R, R, R, R
 			if it.me {
 				fill = pal.own
@@ -645,8 +645,12 @@ func paintView(target uintptr) {
 				cy += sp(18)
 			}
 			if it.m.ReplyText != "" {
-				g.round(it.bx+padL, cy, it.bw-padL-padR, sp(40), dp(4), dp(4), dp(4), dp(4), mix(pal.accent, fill, 12))
-				g.round(it.bx+padL, cy, dp(3), sp(40), dp(2), dp(2), dp(2), dp(2), pal.accent)
+				quote, mark := mix(pal.accent, fill, 12), pal.accent
+				if it.me { // on the blue of one's own bubble the quote is drawn in its text colour
+					quote, mark = mix(pal.ownFg, fill, 16), pal.ownFg
+				}
+				g.round(it.bx+padL, cy, it.bw-padL-padR, sp(40), dp(8), dp(8), dp(8), dp(8), quote)
+				g.round(it.bx+padL, cy, dp(3), sp(40), dp(2), dp(2), dp(2), dp(2), mark)
 				cy += sp(40) + dp(4)
 			}
 			if it.img {
@@ -704,6 +708,10 @@ func paintView(target uintptr) {
 			by := y + it.top
 			x0 := it.bx + padL
 			x1 := it.bx + it.bw - padR
+			ink, ink2 := pal.fg, pal.fg2
+			if it.me {
+				ink, ink2 = pal.ownFg, pal.ownMeta
+			}
 			cy := by + padT
 			if it.showName {
 				c.font(fnt.bodySemi)
@@ -719,31 +727,31 @@ func paintView(target uintptr) {
 					who = "Ty"
 				}
 				c.font(fnt.smallSemi)
-				c.text(who, rect{x0 + dp(10), cy + dp(3), x1 - dp(6), cy + sp(20)}, pal.fg, dtSingleLine|dtEndEllipsis)
+				c.text(who, rect{x0 + dp(10), cy + dp(3), x1 - dp(6), cy + sp(20)}, ink, dtSingleLine|dtEndEllipsis)
 				c.font(fnt.small)
-				c.text(oneLine(it.m.ReplyText, 120), rect{x0 + dp(10), cy + sp(20), x1 - dp(6), cy + sp(38)}, pal.fg2, dtSingleLine|dtEndEllipsis)
+				c.text(oneLine(it.m.ReplyText, 120), rect{x0 + dp(10), cy + sp(20), x1 - dp(6), cy + sp(38)}, ink2, dtSingleLine|dtEndEllipsis)
 				cy += sp(40) + dp(4)
 			}
 			if it.media != "" {
 				c.font(fnt.icon)
-				c.text(gPhoto, rect{x0, cy, x0 + dp(18), cy + fnt.lineH}, pal.fg2, dtSingleLine|dtVCenter)
+				c.text(gPhoto, rect{x0, cy, x0 + dp(18), cy + fnt.lineH}, ink2, dtSingleLine|dtVCenter)
 				c.font(fnt.prev)
-				c.text(it.media, rect{x0 + dp(24), cy, x1, cy + fnt.lineH}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(it.media, rect{x0 + dp(24), cy, x1, cy + fnt.lineH}, ink2, dtSingleLine|dtVCenter|dtEndEllipsis)
 				cy += fnt.lineH
 			}
 			if it.img {
 				if !it.imgReady {
 					c.font(fnt.small)
-					c.text(mediaNote(it.imgMsg), rect{x0 + dp(8), cy, x0 + it.imgW - dp(8), cy + it.imgH}, pal.fg2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
+					c.text(mediaNote(it.imgMsg), rect{x0 + dp(8), cy, x0 + it.imgW - dp(8), cy + it.imgH}, ink2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
 					} else if it.preview && it.play {
 						c.font(fnt.iconLg)
 						c.text(gPlay, rect{x0, cy, x0 + it.imgW, cy + it.imgH}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
 					}
 				cy += it.imgH + dp(6)
 			}
-			col := pal.fg
+			col := ink
 			if it.m.Unsent {
-				col = pal.fg2
+				col = ink2
 			}
 			c.font(fnt.body)
 			c.text(it.body, rect{x0, cy, x0 + it.textW + 1, cy + it.textH}, col, dtWordBreak|dtEditControl)
@@ -796,7 +804,7 @@ func paintView(target uintptr) {
 			}
 			if it.state == stFailed {
 				c.font(fnt.smallSemi)
-				c.text("Nie wysłano. Kliknij, aby ponowić.", rect{dp(16), by + it.bh + dp(2), mv.w - dp(16), by + it.bh + sp(22)}, pal.signal, dtRight|dtSingleLine|dtVCenter)
+				c.text("Nie udało się wysłać wiadomości. Kliknij, aby spróbować ponownie.", rect{dp(16), by + it.bh + dp(2), mv.w - dp(16), by + it.bh + sp(22)}, pal.signal, dtRight|dtSingleLine|dtVCenter)
 			}
 			if mv.group && !it.me && !it.next && !it.photo {
 				c.font(fnt.avSm)

@@ -1,0 +1,719 @@
+{
+  "name": "Linnet",
+  "version": "1.2",
+  "updatedDate": "2026-11-13",
+  "status": "verified",
+  "reportPages": 20,
+  "pdfPageSize": "A4 landscape",
+  "approvedWordmark": {
+    "sourceAsset": "04-system/approved-wordmark-reference.png",
+    "sourceSha256": "0d6dcee00bb2d5596bb0de9b74af32faa732a9fd53ae336b11d17ad604bcdb83",
+    "method": "direct contour trace of the large approved wordmark",
+    "nativeContourOverlap": 0.996881129359474,
+    "LWidthToHeight": 0.6426512968299711,
+    "wordmarkWidth": 429.96460225322244,
+    "lockupWidth": 733.9646022532224,
+    "lockupGap": 48,
+    "pdfHeroPixelIdenticalToSource": true
+  },
+  "appIcon": {
+    "status": "unchanged",
+    "protectedFilesVerified": 112
+  },
+  "checks": [
+    "Approved source image SHA verified",
+    "PDF page7 hero is pixel-identical to source crop",
+    "Vector mask overlap verified at native resolution",
+    "Distinct original n contours retained",
+    "All112 icon, Windows, mockup and font files unchanged",
+    "Twenty PDF pages inspected, no footer overlap",
+    "Changed RGBA PNG files verified"
+  ],
+  "files": [
+    {
+      "path": "01-logo/linnet-lockup-blue.png",
+      "bytes": 54583,
+      "sha256": "6f40be22b9d4d5ec7275cca16286ccb46f3fe2218e197efde061d599dea5fb5b"
+    },
+    {
+      "path": "01-logo/linnet-lockup-blue.svg",
+      "bytes": 7314,
+      "sha256": "8de88dd8cdb2a2bfa104742e03eef8d4498924dbbc8ddb0f059e6e2a5ab3a29f"
+    },
+    {
+      "path": "01-logo/linnet-lockup-dark.png",
+      "bytes": 55465,
+      "sha256": "99ebd174dd0057d5bf8ee6007b1b66cc8f14684a142c16c48857da80c6b92ae8"
+    },
+    {
+      "path": "01-logo/linnet-lockup-dark.svg",
+      "bytes": 7314,
+      "sha256": "58151f703a172c47a81c2397e772324a0e49cca584fadf1b91fa44de432e8841"
+    },
+    {
+      "path": "01-logo/linnet-lockup-white.png",
+      "bytes": 42681,
+      "sha256": "39b1f47091fe1429319088148fbebdd1c988c3975aadef56fa3bcf763dc01263"
+    },
+    {
+      "path": "01-logo/linnet-lockup-white.svg",
+      "bytes": 7314,
+      "sha256": "9474415baf3f6d56185eed616d5f7421a25661430dbd5408253a46abe8bc4fad"
+    },
+    {
+      "path": "01-logo/linnet-symbol-black.png",
+      "bytes": 25212,
+      "sha256": "92c7a5584a35580cb9d6a959487c1071deb2d30b2c45b2c27630bc3d0dbc823a"
+    },
+    {
+      "path": "01-logo/linnet-symbol-black.svg",
+      "bytes": 497,
+      "sha256": "903d248c1e5a48a6f22dc9501314cfd5fccc5b948d41966114744827b6d90d5a"
+    },
+    {
+      "path": "01-logo/linnet-symbol-mono-dark.png",
+      "bytes": 30451,
+      "sha256": "319f2bbd360cd9e4695439364086d5c0dc5fe78784fe01ae3200edc85f2b2f5e"
+    },
+    {
+      "path": "01-logo/linnet-symbol-mono-dark.svg",
+      "bytes": 500,
+      "sha256": "51ebae61b01add11b83387ca9935ea45bf0c3eac0e305bafd095dca07546de89"
+    },
+    {
+      "path": "01-logo/linnet-symbol-mono-light.png",
+      "bytes": 25468,
+      "sha256": "35bffe927f2d5e4e015a28277d4acf500f67240d1685bc75f9aafb06fc6ba602"
+    },
+    {
+      "path": "01-logo/linnet-symbol-mono-light.svg",
+      "bytes": 500,
+      "sha256": "1ca1725aa9634e16dff3a3bf4a689ca82700967d0a6ff2544a808677bd7ee2a4"
+    },
+    {
+      "path": "01-logo/linnet-symbol-primary.png",
+      "bytes": 29953,
+      "sha256": "56749b4cb100664696ae74eaf0684a918e5f093226e55ddea7406296fc9f036e"
+    },
+    {
+      "path": "01-logo/linnet-symbol-primary.svg",
+      "bytes": 502,
+      "sha256": "43ec0101d7bf275f61d5f5a9dd2a23e859286a711618c000fac8a96b1a167137"
+    },
+    {
+      "path": "01-logo/linnet-symbol-small.png",
+      "bytes": 29959,
+      "sha256": "e560a3a31ce695939c0322d439c7e77169052ef585306ea19e476d5f38de2f56"
+    },
+    {
+      "path": "01-logo/linnet-symbol-small.svg",
+      "bytes": 500,
+      "sha256": "479966644820f2ba63d7b871f64319c8fce9372d151fe708ed79521d34730f48"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-blue.png",
+      "bytes": 30182,
+      "sha256": "e81442ca1de0f90cc6f663c6544777c30abebed41421d7dd09252bd0597ef108"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-blue.svg",
+      "bytes": 7063,
+      "sha256": "c132c0697e9c944a6f479ac0f98122d86ab7aa4d55ece2e6d3d9803f70b7ae26"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-dark.png",
+      "bytes": 30671,
+      "sha256": "1ed1a07f888bbe5cd1380a5d9c629206972f827bdf7db19d2350d04bdb1a8e36"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-dark.svg",
+      "bytes": 7063,
+      "sha256": "f0eaa9e71fbc2be44697164e5c2c24d377b1c8230c740887a768c3aa8308398d"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-et-detail.png",
+      "bytes": 41698,
+      "sha256": "9b7850ec04d5af019f577d924bbe109aeb57df06f677ab798bd12ed3c0f30beb"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-et-detail.svg",
+      "bytes": 7018,
+      "sha256": "0f2dca54023289425283df8047f376873285bb00e0b71e32b60bc5c942085b1d"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-white.png",
+      "bytes": 22574,
+      "sha256": "f3c9115684bbbbb1c69d2a6e563cbf38381010386d99aa971f905700431799a7"
+    },
+    {
+      "path": "01-logo/linnet-wordmark-white.svg",
+      "bytes": 7063,
+      "sha256": "de6de6aaef62f7fafb7a7a69061d673fa3d506276f7e61cbed0f9465268a33d7"
+    },
+    {
+      "path": "02-windows/README-Windows.md",
+      "bytes": 6110,
+      "sha256": "76d9e9e3f06b5bbb3472e583cfb56e070c183c6ed07dadbf6b7cc4013af7459a"
+    },
+    {
+      "path": "02-windows/msix/Square150x150Logo.scale-100.png",
+      "bytes": 5109,
+      "sha256": "f89e478c4b3e23b85e614563e85fb5f2fb00fc3a597b45a7dcc6d1870e324e0c"
+    },
+    {
+      "path": "02-windows/msix/Square150x150Logo.scale-125.png",
+      "bytes": 6483,
+      "sha256": "87cf6db40700eebeb51c6cfe6d6c00f1bafe7d5b53c94d6b29b3a1f14ea3b617"
+    },
+    {
+      "path": "02-windows/msix/Square150x150Logo.scale-150.png",
+      "bytes": 7950,
+      "sha256": "553bc610419967abaeccee22d4d47dc018ac3e9b9a76b7a6e59b2a8aa0a9f6b8"
+    },
+    {
+      "path": "02-windows/msix/Square150x150Logo.scale-200.png",
+      "bytes": 10725,
+      "sha256": "568bfdedb56327b24144ec153beb889387ec041a302666ba37eb7a7cd02008c4"
+    },
+    {
+      "path": "02-windows/msix/Square150x150Logo.scale-400.png",
+      "bytes": 22630,
+      "sha256": "eec8e513992fc46cdce15100bea7f1a6fb5684aa547f7c69a07dd3aaa73aeee7"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.scale-100.png",
+      "bytes": 1426,
+      "sha256": "3c3cd8f7d656e4ae233444a6053d4770498feb7528d214a5844f67a3ca8e09ad"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.scale-125.png",
+      "bytes": 1798,
+      "sha256": "fb11c4d4e994811ebf992c3c6a8514bdaf07aa8baf151797e52189639c0ab688"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.scale-150.png",
+      "bytes": 2231,
+      "sha256": "f1fd56037d7be37c710c45d2339a87fdc1067777d7910c4cbf819efd05c15023"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.scale-200.png",
+      "bytes": 2922,
+      "sha256": "12359855b7f65869fe967b46556d9cff116b96237b7b4c2788d6324c2e4aecf0"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.scale-400.png",
+      "bytes": 5956,
+      "sha256": "11bcf549d9267c9fa506afd0a1e49b96f34a20d5551148a2d3fb4601e6e1cc6a"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-16.png",
+      "bytes": 482,
+      "sha256": "ddc0519d17ce4bd40778ff26ac70c7d991895210c7a3793086350bea023ec573"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-16_altform-lightunplated.png",
+      "bytes": 482,
+      "sha256": "ddc0519d17ce4bd40778ff26ac70c7d991895210c7a3793086350bea023ec573"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-16_altform-unplated.png",
+      "bytes": 482,
+      "sha256": "ddc0519d17ce4bd40778ff26ac70c7d991895210c7a3793086350bea023ec573"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-20.png",
+      "bytes": 557,
+      "sha256": "44f86b95b687c08be0836427297da0c564efcdab7f5e931d359b83e0ee60f9a9"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-20_altform-lightunplated.png",
+      "bytes": 557,
+      "sha256": "44f86b95b687c08be0836427297da0c564efcdab7f5e931d359b83e0ee60f9a9"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-20_altform-unplated.png",
+      "bytes": 557,
+      "sha256": "44f86b95b687c08be0836427297da0c564efcdab7f5e931d359b83e0ee60f9a9"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-24.png",
+      "bytes": 678,
+      "sha256": "733c448b1ccd2c40a8ea836491cbfbab94a242f1df9c842d0440dfcd9e24fb29"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-24_altform-lightunplated.png",
+      "bytes": 678,
+      "sha256": "733c448b1ccd2c40a8ea836491cbfbab94a242f1df9c842d0440dfcd9e24fb29"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-24_altform-unplated.png",
+      "bytes": 678,
+      "sha256": "733c448b1ccd2c40a8ea836491cbfbab94a242f1df9c842d0440dfcd9e24fb29"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-256.png",
+      "bytes": 6814,
+      "sha256": "a62636a5b5cc14e10e4be1127fb3b1141e1bda189139d63993727d014c242286"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-256_altform-lightunplated.png",
+      "bytes": 6814,
+      "sha256": "a62636a5b5cc14e10e4be1127fb3b1141e1bda189139d63993727d014c242286"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-256_altform-unplated.png",
+      "bytes": 6814,
+      "sha256": "a62636a5b5cc14e10e4be1127fb3b1141e1bda189139d63993727d014c242286"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-30.png",
+      "bytes": 796,
+      "sha256": "25ceb6770f55c059d228dac67ef79037285bf292cb01c7a603e6efaa6a653d59"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-30_altform-lightunplated.png",
+      "bytes": 796,
+      "sha256": "25ceb6770f55c059d228dac67ef79037285bf292cb01c7a603e6efaa6a653d59"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-30_altform-unplated.png",
+      "bytes": 796,
+      "sha256": "25ceb6770f55c059d228dac67ef79037285bf292cb01c7a603e6efaa6a653d59"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-32.png",
+      "bytes": 926,
+      "sha256": "fe0523d893c13b6e54c16ae0cd2427ca19cacd7b3d72e012a92b669bb0b7a6d6"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-32_altform-lightunplated.png",
+      "bytes": 926,
+      "sha256": "fe0523d893c13b6e54c16ae0cd2427ca19cacd7b3d72e012a92b669bb0b7a6d6"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-32_altform-unplated.png",
+      "bytes": 926,
+      "sha256": "fe0523d893c13b6e54c16ae0cd2427ca19cacd7b3d72e012a92b669bb0b7a6d6"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-36.png",
+      "bytes": 955,
+      "sha256": "20d9691ea94546e03718ae5ffa0a5298219c819b5f95c5a9482b33590e4690db"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-36_altform-lightunplated.png",
+      "bytes": 955,
+      "sha256": "20d9691ea94546e03718ae5ffa0a5298219c819b5f95c5a9482b33590e4690db"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-36_altform-unplated.png",
+      "bytes": 955,
+      "sha256": "20d9691ea94546e03718ae5ffa0a5298219c819b5f95c5a9482b33590e4690db"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-40.png",
+      "bytes": 1072,
+      "sha256": "eaef8c6a941cde0a3932afd13c0a6147459529c64a950e93b31b1458c0c08e5a"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-40_altform-lightunplated.png",
+      "bytes": 1072,
+      "sha256": "eaef8c6a941cde0a3932afd13c0a6147459529c64a950e93b31b1458c0c08e5a"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-40_altform-unplated.png",
+      "bytes": 1072,
+      "sha256": "eaef8c6a941cde0a3932afd13c0a6147459529c64a950e93b31b1458c0c08e5a"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-48.png",
+      "bytes": 1329,
+      "sha256": "1210eaf4c18ad423edd0b31c83157b80e36f43b72abf93a406840b2e91b843b2"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-48_altform-lightunplated.png",
+      "bytes": 1329,
+      "sha256": "1210eaf4c18ad423edd0b31c83157b80e36f43b72abf93a406840b2e91b843b2"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-48_altform-unplated.png",
+      "bytes": 1329,
+      "sha256": "1210eaf4c18ad423edd0b31c83157b80e36f43b72abf93a406840b2e91b843b2"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-60.png",
+      "bytes": 1597,
+      "sha256": "3afee4b1be619bebb22cc5be01bad11c33aecca197c7e91880c963e91af6feaa"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-60_altform-lightunplated.png",
+      "bytes": 1597,
+      "sha256": "3afee4b1be619bebb22cc5be01bad11c33aecca197c7e91880c963e91af6feaa"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-60_altform-unplated.png",
+      "bytes": 1597,
+      "sha256": "3afee4b1be619bebb22cc5be01bad11c33aecca197c7e91880c963e91af6feaa"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-64.png",
+      "bytes": 1711,
+      "sha256": "f92c5684ca72434b1594c98d0a79d32c29ab4444ee7fc3df971ea517d3363655"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-64_altform-lightunplated.png",
+      "bytes": 1711,
+      "sha256": "f92c5684ca72434b1594c98d0a79d32c29ab4444ee7fc3df971ea517d3363655"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-64_altform-unplated.png",
+      "bytes": 1711,
+      "sha256": "f92c5684ca72434b1594c98d0a79d32c29ab4444ee7fc3df971ea517d3363655"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-72.png",
+      "bytes": 1928,
+      "sha256": "b3cf0f20b413819a447149f3093a55caf03aacb1ddfb5707a88a08827539383e"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-72_altform-lightunplated.png",
+      "bytes": 1928,
+      "sha256": "b3cf0f20b413819a447149f3093a55caf03aacb1ddfb5707a88a08827539383e"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-72_altform-unplated.png",
+      "bytes": 1928,
+      "sha256": "b3cf0f20b413819a447149f3093a55caf03aacb1ddfb5707a88a08827539383e"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-80.png",
+      "bytes": 2174,
+      "sha256": "492990d8505f18df9df18c5d517f1629c98f1b75257d27ada78c0e084a8b5a5b"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-80_altform-lightunplated.png",
+      "bytes": 2174,
+      "sha256": "492990d8505f18df9df18c5d517f1629c98f1b75257d27ada78c0e084a8b5a5b"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-80_altform-unplated.png",
+      "bytes": 2174,
+      "sha256": "492990d8505f18df9df18c5d517f1629c98f1b75257d27ada78c0e084a8b5a5b"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-96.png",
+      "bytes": 2598,
+      "sha256": "089344d9bd6efe51be033a20e5029025079255e84fcfb2b1d9788fdb5ca80e7d"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-96_altform-lightunplated.png",
+      "bytes": 2598,
+      "sha256": "089344d9bd6efe51be033a20e5029025079255e84fcfb2b1d9788fdb5ca80e7d"
+    },
+    {
+      "path": "02-windows/msix/Square44x44Logo.targetsize-96_altform-unplated.png",
+      "bytes": 2598,
+      "sha256": "089344d9bd6efe51be033a20e5029025079255e84fcfb2b1d9788fdb5ca80e7d"
+    },
+    {
+      "path": "02-windows/msix/StoreLogo.scale-100.png",
+      "bytes": 1620,
+      "sha256": "f963194325d38ef3318a897071118776def2f46bb45c08606cdadd4b226ced49"
+    },
+    {
+      "path": "02-windows/msix/StoreLogo.scale-125.png",
+      "bytes": 2146,
+      "sha256": "597948894d92dd334a1f35a069ffd0f55dad1eaee9f1a4a1c958effc31ee488c"
+    },
+    {
+      "path": "02-windows/msix/StoreLogo.scale-150.png",
+      "bytes": 2535,
+      "sha256": "d4782a2db4a3878b99df3f6c27594700bffe26b2b959118ca0f1012ffcfc0521"
+    },
+    {
+      "path": "02-windows/msix/StoreLogo.scale-200.png",
+      "bytes": 3338,
+      "sha256": "1c7a2475be869d82b741bd19989ff64763177d96881a35f6de434e61cf209312"
+    },
+    {
+      "path": "02-windows/msix/StoreLogo.scale-400.png",
+      "bytes": 6837,
+      "sha256": "e0c091768e2c2e5ccd1beaededc6ebd8b45684451a60edcd596f8f955e974f60"
+    },
+    {
+      "path": "02-windows/tray/Linnet-tray-dark.ico",
+      "bytes": 2076,
+      "sha256": "48fc3f82600c06d6e48e8ad436c4d5a124cc2785a91ba0c4b3ccf086d6a7b147"
+    },
+    {
+      "path": "02-windows/tray/Linnet-tray-light.ico",
+      "bytes": 1652,
+      "sha256": "d1731d45e1992a19e6fe19ad04f4b5b314c7637d4ff209c8c828bea3296715f3"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-16.png",
+      "bytes": 249,
+      "sha256": "d0e6ee46591efcc7ab7a6bf5b17cd4bbff988f0e95f5be2def64438aa6e8f9ed"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-20.png",
+      "bytes": 285,
+      "sha256": "e6d09953f9b31f268fa4a9953ecc4f1fbea04fbddff1420fe690fd7cef45ee2a"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-24.png",
+      "bytes": 305,
+      "sha256": "721f400b5180320f26df4e9cbab3c3eae6b081e088c24ef15f6fa61c5112e1f7"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-32.png",
+      "bytes": 377,
+      "sha256": "61eaee8144ba55c3528411d5f86c6e5c90283c529da36881fc29a2f434296073"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-40.png",
+      "bytes": 410,
+      "sha256": "a8ba987a646a1ec8c8091dd1d9890b75dd74e7844c4e05b9b2f1bce4715a196b"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark-48.png",
+      "bytes": 497,
+      "sha256": "e991eb554c375f0b261f9a146ae9d4485238943c6188e34de8302ca7d81da8fa"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-dark.svg",
+      "bytes": 440,
+      "sha256": "0fbc6e8e28dab8108bc366d9d47a4f08208056e0a95a3133579dbe650d5e7b95"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-16.png",
+      "bytes": 211,
+      "sha256": "e7cbbf30b4775c1637bcad981cf9b10f15e046810492e160ab003b35b2ca4709"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-20.png",
+      "bytes": 231,
+      "sha256": "58d0717f89d5c20bfa923b8751a7ae8c00c016d2071b371a95c41fb792a46c0a"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-24.png",
+      "bytes": 260,
+      "sha256": "a1412d96a5a6778fb5d30b6a81318069b0216676ac514c491da0e439285368b7"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-32.png",
+      "bytes": 298,
+      "sha256": "b880259f1d131f847801569031a8edd53d6152c289d14a07c1f2d1a1b89022aa"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-40.png",
+      "bytes": 349,
+      "sha256": "a9f73b9d19577d635490376466ebff8d533fd3235c07df5f3c21ae077635ea53"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light-48.png",
+      "bytes": 399,
+      "sha256": "e27f9357290ce63a971455ea9030793fb822bf3c706fed2e6f048ff9a28d9fe1"
+    },
+    {
+      "path": "02-windows/tray/linnet-tray-light.svg",
+      "bytes": 438,
+      "sha256": "44a65e3ed80f9b7f742a6c1147e5000cd94cf51a34b37310efa54f0a2779af19"
+    },
+    {
+      "path": "02-windows/win32/Linnet.ico",
+      "bytes": 17179,
+      "sha256": "d6ad0c695e22b5edd3bb7705aa80e03d8413a80fe1912ab340064e271b2bfb23"
+    },
+    {
+      "path": "02-windows/win32/linnet-1024.png",
+      "bytes": 29953,
+      "sha256": "56749b4cb100664696ae74eaf0684a918e5f093226e55ddea7406296fc9f036e"
+    },
+    {
+      "path": "02-windows/win32/linnet-128.png",
+      "bytes": 3344,
+      "sha256": "04f90ad5b0e84c7ce5e89077262d3f88f289975e54ab34a4117851a5c7973eca"
+    },
+    {
+      "path": "02-windows/win32/linnet-16.png",
+      "bytes": 487,
+      "sha256": "1949cfa11a4050d67d0c33492349487beca95189ab1e4044afdbccaf9033bbb9"
+    },
+    {
+      "path": "02-windows/win32/linnet-20.png",
+      "bytes": 574,
+      "sha256": "fae170e985657891cf38be8697257b5277b0c2cb6e0975d4fcea64be46285537"
+    },
+    {
+      "path": "02-windows/win32/linnet-24.png",
+      "bytes": 686,
+      "sha256": "9f12805fef3852ac955e81b9a018807a339af4e0b662f473e4ec76821ae46d8b"
+    },
+    {
+      "path": "02-windows/win32/linnet-256.png",
+      "bytes": 6531,
+      "sha256": "0ee13c3667123567dbc199b210306e26a40439ecfd7bc6de7e119f49240111a3"
+    },
+    {
+      "path": "02-windows/win32/linnet-30.png",
+      "bytes": 824,
+      "sha256": "a9ee53eed375891062f309a0bf3cd4dab44d814deb46fd749869e13c30aa51ec"
+    },
+    {
+      "path": "02-windows/win32/linnet-32.png",
+      "bytes": 924,
+      "sha256": "eff8072e34e4cc441851ba1f3cbb7d7276d30eee14e5d86f0eee34492104717e"
+    },
+    {
+      "path": "02-windows/win32/linnet-36.png",
+      "bytes": 946,
+      "sha256": "03b983b19f4fc04976c00341a4e5151a7880a0eed75764f1feb6fa7e7f487729"
+    },
+    {
+      "path": "02-windows/win32/linnet-40.png",
+      "bytes": 1075,
+      "sha256": "818e085f62a499b9060d4b0285343fa4614273f2161d44e2ee3c75def8a7f00f"
+    },
+    {
+      "path": "02-windows/win32/linnet-44.png",
+      "bytes": 1211,
+      "sha256": "b05db1374dde51b45171dd98b0d574c4fa7405b96e2f8543edcb592c9272b319"
+    },
+    {
+      "path": "02-windows/win32/linnet-48.png",
+      "bytes": 1338,
+      "sha256": "99155d2c22fa83466ed4d97801e4fbf529755a466d8b8e1243b9052087aca105"
+    },
+    {
+      "path": "02-windows/win32/linnet-512.png",
+      "bytes": 13852,
+      "sha256": "53aed8f5c682a2acb4c63f04efb343149c7dc3a9a619ff91eb0c05fdac441ce2"
+    },
+    {
+      "path": "02-windows/win32/linnet-60.png",
+      "bytes": 1595,
+      "sha256": "3946ffb74f0efe82729ed72a7fa82b96f18d3c4d3347e43eecc864a2b331d251"
+    },
+    {
+      "path": "02-windows/win32/linnet-64.png",
+      "bytes": 1691,
+      "sha256": "0ad5d8389817306e4efcb4d6c7438aa11a823dc5c24229e40bc29d6353159f5e"
+    },
+    {
+      "path": "02-windows/win32/linnet-72.png",
+      "bytes": 1889,
+      "sha256": "b270e15f531757fd2321c8d76234905ef1782b0db0aa3327b1f1ba4ae13c9373"
+    },
+    {
+      "path": "02-windows/win32/linnet-80.png",
+      "bytes": 2147,
+      "sha256": "2b9cde3fcd23836bc2c645bc6d29c61f8a2a995712016082b46cb93aae4f0181"
+    },
+    {
+      "path": "02-windows/win32/linnet-96.png",
+      "bytes": 2542,
+      "sha256": "9262f19d90612fdaaa782f1372ce273ca7aa4615be775a48adf506f321273cbb"
+    },
+    {
+      "path": "03-makiety/linnet-dark.html",
+      "bytes": 15842,
+      "sha256": "dd4b534cf1b70d903185ef2f032d90d11fb5bb7eaefb1778fcfdb608b2ec29ff"
+    },
+    {
+      "path": "03-makiety/linnet-dark.png",
+      "bytes": 186344,
+      "sha256": "165dd9b2dcbce2713cd81a069c77c71dc8cf3556ad0cd4219d11a72cb7d63ca8"
+    },
+    {
+      "path": "03-makiety/linnet-light.html",
+      "bytes": 15842,
+      "sha256": "fab9c0150827ae96879be501134df7cfd4d8a4d54f710369850d28c35d1b0663"
+    },
+    {
+      "path": "03-makiety/linnet-light.png",
+      "bytes": 202495,
+      "sha256": "f7c10f4cd0d1afc54540d8cdb036fc611482df3f21979869a23d59cef20285cc"
+    },
+    {
+      "path": "04-system/approved-wordmark-hero.png",
+      "bytes": 311940,
+      "sha256": "e9820c5968e28ab10a83a705c41ca60a6f93cc706961625cbc568475cc4e5491"
+    },
+    {
+      "path": "04-system/approved-wordmark-reference.png",
+      "bytes": 1123183,
+      "sha256": "0d6dcee00bb2d5596bb0de9b74af32faa732a9fd53ae336b11d17ad604bcdb83"
+    },
+    {
+      "path": "04-system/design-tokens.json",
+      "bytes": 2346,
+      "sha256": "c4b3e1b81d784d3f5dd29769e57830f58196cd9444ecebcf3981739120097f6f"
+    },
+    {
+      "path": "04-system/linnet-tokens.css",
+      "bytes": 974,
+      "sha256": "4737e566f62d10e6c105a1b9fc6b4a0fd9820681dba571ac7c283f118a9209b0"
+    },
+    {
+      "path": "04-system/wordmark-geometry.json",
+      "bytes": 10386,
+      "sha256": "965fa4519e35868d1b4355a515a23dc513c10213b981ab068df6476b276068b2"
+    },
+    {
+      "path": "05-fonty/Manrope-400.ttf",
+      "bytes": 97500,
+      "sha256": "ea57290b5ce7920161fced633cb280672e3c71bdc93689c38eba6965fbf4b5b8"
+    },
+    {
+      "path": "05-fonty/Manrope-500.ttf",
+      "bytes": 97580,
+      "sha256": "97e66b6edba5103797679eb57c81e3e490d83d999350bbce1c627eff7abd18c7"
+    },
+    {
+      "path": "05-fonty/Manrope-600.ttf",
+      "bytes": 97616,
+      "sha256": "799555ef347e1ea69a2699e17638f746b5195cc22b642036a4516f5bf0c6aeac"
+    },
+    {
+      "path": "05-fonty/Manrope-700.ttf",
+      "bytes": 97520,
+      "sha256": "7580a47e6945a1c3ca93c327cb8f4835fca0782818810bb8122ae2312dbe023c"
+    },
+    {
+      "path": "05-fonty/OFL-Manrope.txt",
+      "bytes": 4387,
+      "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 603,
+      "sha256": "dc7b07ac078aeb948fb8900e0c39d93cf78c77c221c683b442106902458f1328"
+    },
+    {
+      "path": "Linnet-plansza-marki.png",
+      "bytes": 55619,
+      "sha256": "f2d14fc5c2e475d9d1ee64a18d8fe9fc0916767bf1d00367363a2257efba0dc8"
+    },
+    {
+      "path": "Linnet-raport-identyfikacji.html",
+      "bytes": 1536099,
+      "sha256": "d48b95eea795fbbb258abab80c30c4e86bb67aabc04e92726f148961af174af0"
+    },
+    {
+      "path": "Linnet-raport-identyfikacji.pdf",
+      "bytes": 983331,
+      "sha256": "6905eb1ad9750e0f7b23624c1dfa6813cffdb5835a39050bfd72e7b13747cefe"
+    },
+    {
+      "path": "Linnet-raport-tekstowy.md",
+      "bytes": 19005,
+      "sha256": "ae032ad46e81277f66ec5a33aa57cf0140f5a0a833aaf6b8050fd1b7806a29e8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4190,
+      "sha256": "4b73ca3363dad05aa637338ae72b71000da410eb17d6c2e73db5a602918abdd6"
+    }
+  ]
+}

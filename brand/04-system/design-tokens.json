@@ -1,0 +1,110 @@
+{
+  "name": "Linnet",
+  "version": "1.2",
+  "status": "Koncepcja identyfikacji; makiety nie są działającą aplikacją",
+  "color": {
+    "brand": {
+      "primary": "#0866E8",
+      "hover": "#0758C7",
+      "pressed": "#0649A6",
+      "tint": "#EAF2FF",
+      "onPrimary": "#FFFFFF"
+    },
+    "light": {
+      "canvas": "#F4F7FC",
+      "surface": "#FFFFFF",
+      "text": "#14213D",
+      "secondary": "#58657D",
+      "border": "#DCE3EF",
+      "focus": "#0866E8"
+    },
+    "dark": {
+      "canvas": "#0D1422",
+      "surface": "#151F31",
+      "elevated": "#1D2A40",
+      "text": "#F4F7FC",
+      "secondary": "#B4C0D3",
+      "border": "#344259",
+      "accent": "#76ADFF",
+      "onAccent": "#0D1422",
+      "focus": "#76ADFF"
+    },
+    "semantic": {
+      "success": "#167143",
+      "warning": "#8A5700",
+      "danger": "#B42332"
+    }
+  },
+  "typography": {
+    "brand": "Manrope",
+    "nativeWindows": "Segoe UI Variable",
+    "fallback": [
+      "Segoe UI",
+      "sans-serif"
+    ],
+    "weights": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "sizePx": {
+      "caption": 12,
+      "body": 14,
+      "lead": 16,
+      "subheading": 20,
+      "heading": 28,
+      "display": 48
+    },
+    "wordmark": {
+      "type": "approved-image-contour",
+      "ligature": "e–t",
+      "primaryAsset": "01-logo/linnet-wordmark-dark.svg",
+      "fontRequired": false,
+      "referenceAsset": "04-system/approved-wordmark-reference.png"
+    }
+  },
+  "spacingPx": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32,
+    48,
+    64
+  ],
+  "radiusPx": {
+    "control": 8,
+    "bubble": 16,
+    "window": 12
+  },
+  "motionMs": {
+    "micro": 120,
+    "panel": 180
+  },
+  "icons": {
+    "gridPx": 24,
+    "strokePx": 1.75
+  },
+  "logo": {
+    "masterPx": 256,
+    "clearspacePx": 64,
+    "smallUseMaxPx": 32,
+    "verticalStemEdge": "top",
+    "stemWidthUnits": 58,
+    "footThicknessUnits": 58,
+    "letterWidthUnits": 108,
+    "letterBottomUnits": 222,
+    "wordmark": {
+      "widthUnits": 429.96460225322244,
+      "capHeightUnits": 118.08,
+      "lockupGapUnits": 48,
+      "lockupWidthUnits": 733.9646022532224,
+      "geometryAsset": "04-system/wordmark-geometry.json",
+      "referenceAsset": "04-system/approved-wordmark-reference.png",
+      "sourceContourOverlap": 0.996881129359474
+    }
+  },
+  "approvedDate": "2026-11-13"
+}

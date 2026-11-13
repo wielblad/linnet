@@ -222,7 +222,7 @@ func jumpToMessage(id string) {
 func paintPanel(target uintptr) {
 	buf := newBuffer(target, pn.w, pn.h)
 	c := canvas{buf.hdc}
-	c.fill(rect{0, 0, pn.w, pn.h}, pal.layer)
+	c.fill(rect{0, 0, pn.w, pn.h}, pal.mica)
 	t, ok := threadByID(selectedID)
 	if !ok {
 		buf.flush(0, 0)
@@ -248,12 +248,12 @@ func paintPanel(target uintptr) {
 	}
 	g := newGfx(buf.hdc)
 	card := func(y, h int32, hot bool) {
-		edge, fill := mix(pal.fg, pal.card, 7), pal.card
+		edge, fill := pal.line, pal.card
 		if hot {
 			fill = mix(pal.fg, pal.card, 6)
 		}
-		g.round(pad, y, cw, h, dp(6), dp(6), dp(6), dp(6), edge)
-		g.round(pad+1, y+1, cw-2, h-2, dp(5), dp(5), dp(5), dp(5), fill)
+		g.round(pad, y, cw, h, dp(8), dp(8), dp(8), dp(8), edge)
+		g.round(pad+1, y+1, cw-2, h-2, dp(7), dp(7), dp(7), dp(7), fill)
 	}
 	toggle := func(y, h int32, on bool) {
 		tx, ty := pad+cw-dp(14)-dp(40), y+(h-dp(20))/2
@@ -272,9 +272,8 @@ func paintPanel(target uintptr) {
 		// the field
 		fh := lay.editH + dp(12)
 		fy := y + dp(4)
-		g.round(pad, fy, cw, fh, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 14))
-		g.round(pad, fy+fh-dp(5), cw, dp(5), 1, 1, dp(4), dp(4), pal.accent)
-		g.round(pad+1, fy+1, cw-2, fh-3, dp(3), dp(3), dp(3), dp(3), pal.card)
+		g.round(pad, fy, cw, fh, dp(8), dp(8), dp(8), dp(8), pal.accent)
+		g.round(pad+2, fy+2, cw-4, fh-4, dp(6), dp(6), dp(6), dp(6), pal.card)
 		text(fnt.icon, gSearch, rect{pad + dp(8), fy, pad + dp(30), fy + fh}, pal.fg2, dtSingleLine|dtVCenter)
 		moveTo(pn.edit, rect{pad + dp(32), fy + (fh-lay.editH)/2, pad + cw - dp(8), fy + (fh-lay.editH)/2 + lay.editH})
 		y = fy + fh + dp(10)
@@ -315,7 +314,7 @@ func paintPanel(target uintptr) {
 		d := dp(72)
 		ax := (pn.w - d) / 2
 		y += dp(16)
-		photo := threadAvatar(g, t, ax, y, d, pal.layer)
+		photo := threadAvatar(g, t, ax, y, d, pal.mica)
 		if !photo {
 			text(fnt.title, initials(threadTitle(t)), rect{ax, y, ax + d, y + d}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 		}
@@ -399,7 +398,7 @@ func paintPanel(target uintptr) {
 				if th != 0 {
 					g.image(th, px, py, side, side)
 				} else {
-					g.round(px, py, side, side, dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.layer, 9))
+					g.round(px, py, side, side, dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.mica, 9))
 				}
 			}
 			rows := int32((len(pn.photos) + 2) / 3)
@@ -431,25 +430,25 @@ func paintPanel(target uintptr) {
 	pn.total = y + pn.scroll + dp(20)
 
 	// the bar on top stays in place
-	g.round(0, 0, pn.w, bar, 0, 0, 0, 0, pal.layer)
+	g.round(0, 0, pn.w, bar, 0, 0, 0, 0, pal.mica)
 	closeR := rect{pn.w - dp(8) - dp(36), (bar - dp(36)) / 2, pn.w - dp(8), (bar + dp(36)) / 2}
 	backR := rect{dp(6), (bar - dp(36)) / 2, dp(6) + dp(36), (bar + dp(36)) / 2}
 	// hits of the bar go last and win over what scrolled under it
 	ci := hit(closeR, phClose, 0)
 	if pn.hot == ci {
-		g.round(closeR.left, closeR.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.layer, 10))
+		g.round(closeR.left, closeR.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.mica, 10))
 	}
 	titleX := dp(16)
 	bi := -1
 	if pn.search {
 		bi = hit(backR, phBack, 0)
 		if pn.hot == bi {
-			g.round(backR.left, backR.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.layer, 10))
+			g.round(backR.left, backR.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.mica, 10))
 		}
 		titleX = backR.right + dp(6)
 	}
 	g.round(0, 0, 1, pn.h, 0, 0, 0, 0, pal.line)
-	pn.sc.paint(g, pn.w, pn.h, pal.layer)
+	pn.sc.paint(g, pn.w, pn.h, pal.mica)
 	g.free()
 
 	for _, op := range texts {
@@ -460,7 +459,7 @@ func paintPanel(target uintptr) {
 		c.text(op.s, op.r, op.col, op.flags)
 	}
 	// the bar's own ground again over text that scrolled into it, then its labels
-	c.fill(rect{1, 0, pn.w, bar}, pal.layer)
+	c.fill(rect{1, 0, pn.w, bar}, pal.mica)
 	title := "Informacje"
 	if pn.search {
 		title = "Szukaj w rozmowie"
@@ -473,7 +472,7 @@ func paintPanel(target uintptr) {
 		if pn.hot == bi {
 			r = backR
 		}
-		hg.round(r.left, r.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.layer, 10))
+		hg.round(r.left, r.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.mica, 10))
 		hg.free()
 		if pn.hot == bi {
 			c.font(fnt.icon)
