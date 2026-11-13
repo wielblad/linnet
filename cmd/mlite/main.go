@@ -110,7 +110,7 @@ var (
 		hbInfo, hbSearch                                        rect // buttons at the right end of the conversation header
 		back, navBar                                            rect
 		stripText                                               string
-		stripClick                                              bool // the bar leads to the settings
+		stripClick                                              bool  // the bar leads to the settings
 		top                                                     int32 // what the band about a new version takes from the top
 		band, bandGo, bandX                                     rect
 		tabs                                                    rect // the strip of tabs in the panel of a head
@@ -888,7 +888,7 @@ func paintMain(target uintptr) {
 			}
 			if !hdrPhoto {
 				c.font(fnt.avSm)
-				c.text(initials(threadTitle(t)), rect{lay.header.left + hx + dp(14), ht + (hh - ht - dp(36)) / 2, lay.header.left + hx + dp(50), ht + (hh - ht + dp(36)) / 2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+				c.text(initials(threadTitle(t)), rect{lay.header.left + hx + dp(14), ht + (hh-ht-dp(36))/2, lay.header.left + hx + dp(50), ht + (hh-ht+dp(36))/2}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 			}
 			sub := ""
 			switch {

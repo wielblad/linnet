@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"go.mau.fi/mautrix-meta/pkg/messagix/securehistory"
 	"go.mau.fi/mautrix-meta/pkg/messagix/socket"
 	"go.mau.fi/mautrix-meta/pkg/messagix/table"
@@ -28,7 +30,37 @@ const (
 	threadBatchDelay  = 2 * time.Second
 	threadBatchLimit  = 40
 	encryptedMaxPages = 10
+	// olderEmptyPages is how many pages in a row may bring nothing to show before the reader
+	// is handed back the wheel: records the program does not show still fill a page.
+	olderEmptyPages = 5
 )
+
+// ErrHistoryLocked says that the older messages of an encrypted chat cannot be asked for:
+// the copy that keeps them has not been unlocked with its PIN on this computer. It is not
+// the beginning of the conversation, and must not be shown as one.
+var ErrHistoryLocked = errors.New("encrypted history is not unlocked")
+
+// historyDebug writes one line for every page of encrypted history, to find out what the
+// server answers for a chat that will not page back.
+var historyDebug = os.Getenv("MLITE_HISTORY_DEBUG") != ""
+
+func debugHistoryPage(what string, thread store.Thread, asked int64, page *securehistory.MessageRange, decrypted, stored int) {
+	if !historyDebug || page == nil {
+		return
+	}
+	more, next := false, int64(0)
+	if page.Range != nil {
+		more = page.Range.HasMoreBefore != nil && *page.Range.HasMoreBefore
+		next = page.Range.Before
+	}
+	epochs := 0
+	if page.Epochs != nil {
+		epochs = len(page.Epochs.Edges)
+	}
+	log.Warn().Str("what", what).Int64("thread", thread.ID).Int64("type", int64(thread.ThreadType)).
+		Int64("asked_before_ms", asked).Int("records", len(page.Messages)).Int("decrypted", decrypted).Int("stored", stored).
+		Bool("has_more_before", more).Int64("next_before_ms", next).Int("epoch_edges", epochs).Msg("history page")
+}
 
 func (c *Client) loadHistoryDevice() error {
 	device, err := session.LoadHistoryDevice(c.dataDir)
@@ -215,48 +247,109 @@ func (c *Client) FetchOlder(ctx context.Context, s *store.Store, thread store.Th
 func (c *Client) fetchOlderEncrypted(ctx context.Context, s *store.Store, thread store.Thread) (bool, error) {
 	device := c.HistoryDevice()
 	if device == nil || device.ID == "" {
-		return false, nil
+		return false, ErrHistoryLocked
 	}
-	timestamp := time.Now().Add(time.Minute).UnixMilli()
+	oldestMS := time.Now().Add(time.Minute).UnixMilli()
 	oldest, err := s.OldestMessage(ctx, thread.ID)
 	switch {
 	case err == nil:
-		timestamp = oldest.Timestamp.UnixMilli()
+		oldestMS = oldest.Timestamp.UnixMilli()
 	case errors.Is(err, sql.ErrNoRows):
 	default:
 		return false, err
 	}
+	// Pages are followed by the place the server names for the next one, as the library
+	// this is built on does. Asking "before the oldest stored message" every time stood
+	// still whenever a page held nothing the program shows, and that was taken for the
+	// beginning of the conversation.
+	timestamp := oldestMS
+	c.historyMu.Lock()
+	if cur, ok := c.historyCursor[thread.ID]; ok && cur > 0 && cur < timestamp {
+		timestamp = cur
+	}
+	c.historyMu.Unlock()
+	remember := func(at int64) {
+		c.historyMu.Lock()
+		if c.historyCursor == nil {
+			c.historyCursor = map[int64]int64{}
+		}
+		if at > 0 {
+			c.historyCursor[thread.ID] = at
+		} else {
+			delete(c.historyCursor, thread.ID)
+		}
+		c.historyMu.Unlock()
+	}
 	threadID := strconv.FormatInt(thread.ID, 10)
 	isGroup := table.ThreadType(thread.ThreadType) == table.ENCRYPTED_OVER_WA_GROUP
-	rangeResp, err := c.mx.GetSecureHistoryClient().FetchMessages(ctx, device, threadID, true, timestamp, historyPageSize)
-	if err != nil {
-		return false, fmt.Errorf("fetch encrypted history %d: %w", thread.ID, err)
-	}
-	if rangeResp.Epochs != nil && len(rangeResp.Epochs.Edges) > 0 {
-		updated, err := device.WithEpochs(rangeResp.Epochs)
-		if err != nil {
-			return false, fmt.Errorf("apply history epochs: %w", err)
+	for page := 0; page < olderEmptyPages; page++ {
+		if page > 0 {
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-time.After(300 * time.Millisecond):
+			}
 		}
-		if err := c.saveHistoryDevice(updated); err != nil {
+		rangeResp, err := c.mx.GetSecureHistoryClient().FetchMessages(ctx, device, threadID, true, timestamp, historyPageSize)
+		if err != nil {
+			return false, fmt.Errorf("fetch encrypted history %d: %w", thread.ID, err)
+		}
+		if rangeResp.Epochs != nil && len(rangeResp.Epochs.Edges) > 0 {
+			updated, err := device.WithEpochs(rangeResp.Epochs)
+			if err != nil {
+				return false, fmt.Errorf("apply history epochs: %w", err)
+			}
+			if err := c.saveHistoryDevice(updated); err != nil {
+				return false, err
+			}
+			device = updated
+		}
+		messages, err := rangeResp.Decrypt(device, threadID, c.AccountID(), isGroup)
+		if err != nil {
+			return false, fmt.Errorf("decrypt encrypted history %d: %w", thread.ID, err)
+		}
+		stored := 0
+		if err := s.InTx(ctx, func(s *store.Store) error {
+			n, err := storeArchivePage(ctx, s, thread, messages)
+			stored = n
+			return err
+		}); err != nil {
 			return false, err
 		}
-		device = updated
+		debugHistoryPage("older", thread, timestamp, rangeResp, len(messages), stored)
+		more, next := false, int64(0)
+		if rangeResp.Range != nil {
+			more = rangeResp.Range.HasMoreBefore != nil && *rangeResp.Range.HasMoreBefore
+			next = rangeResp.Range.Before
+		}
+		moved := false
+		if after, err := s.OldestMessage(ctx, thread.ID); err == nil && after.Timestamp.UnixMilli() < oldestMS {
+			moved = true
+		}
+		verdict, cursor, again := olderVerdict(more, next, timestamp, moved)
+		remember(cursor)
+		if !again {
+			return verdict, nil
+		}
+		timestamp = next
 	}
-	messages, err := rangeResp.Decrypt(device, threadID, c.AccountID(), isGroup)
-	if err != nil {
-		return false, fmt.Errorf("decrypt encrypted history %d: %w", thread.ID, err)
+	return true, nil // pages of nothing to show, and more behind them: the reader may go on
+}
+
+// olderVerdict decides what one page of older encrypted messages means: whether the
+// conversation has more before it, where the next page starts (0 for "ask before the oldest
+// stored message"), and whether the next page should be fetched at once because this one
+// brought nothing to show.
+func olderVerdict(more bool, next, asked int64, moved bool) (verdict bool, cursor int64, again bool) {
+	switch {
+	case !more: // the server says this was the first page of the conversation
+		return false, 0, false
+	case next <= 0 || next >= asked: // the server did not move back: the same page would come again
+		return moved, 0, false
+	case moved:
+		return true, next, false
 	}
-	if err := s.InTx(ctx, func(s *store.Store) error {
-		return storeArchivePage(ctx, s, thread, messages)
-	}); err != nil {
-		return false, err
-	}
-	more := rangeResp.Range != nil && rangeResp.Range.HasMoreBefore != nil && *rangeResp.Range.HasMoreBefore
-	// A page that brought nothing older would be asked for again and again.
-	if after, err := s.OldestMessage(ctx, thread.ID); err == nil && after.Timestamp.UnixMilli() >= timestamp {
-		more = false
-	}
-	return more, nil
+	return true, next, true
 }
 
 func (c *Client) fetchOlderSocket(ctx context.Context, s *store.Store, thread store.Thread) (bool, error) {
@@ -343,18 +436,28 @@ func (c *Client) SyncRecentEncrypted(ctx context.Context, s *store.Store) error 
 	if err != nil {
 		return err
 	}
+	failed := 0
 	for _, thread := range threads {
 		if !table.ThreadType(thread.ThreadType).IsWhatsApp() {
 			continue
 		}
 		if err := c.syncEncryptedPages(ctx, s, thread, 1); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			// One chat that cannot be fetched (not in the copy, a key that is missing) used to
+			// end the pass, and every chat after it kept an old last message.
+			log.Warn().Err(err).Msg("newest page of an encrypted chat")
+			failed++
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(300 * time.Millisecond):
 		}
+	}
+	if failed > 0 {
+		log.Warn().Int("chats", failed).Msg("encrypted chats whose newest page could not be fetched")
 	}
 	return nil
 }
@@ -393,11 +496,15 @@ func (c *Client) syncEncryptedPages(ctx context.Context, s *store.Store, thread 
 		if err != nil {
 			return fmt.Errorf("decrypt encrypted history %d: %w", thread.ID, err)
 		}
+		stored := 0
 		if err := s.InTx(ctx, func(s *store.Store) error {
-			return storeArchivePage(ctx, s, thread, messages)
+			n, err := storeArchivePage(ctx, s, thread, messages)
+			stored = n
+			return err
 		}); err != nil {
 			return err
 		}
+		debugHistoryPage("newest", thread, timestamp, rangeResp, len(messages), stored)
 		if rangeResp.Range == nil || rangeResp.Range.HasMoreBefore == nil || !*rangeResp.Range.HasMoreBefore {
 			return nil
 		}
@@ -462,16 +569,20 @@ func (c *Client) syncSocketThread(ctx context.Context, s *store.Store, thread st
 	return nil
 }
 
-func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, messages []*securehistory.DecryptedMessage) error {
+// storeArchivePage stores the messages of a page that the program can show, and says how
+// many those were: a page may be full of records and still bring nothing to read.
+func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, messages []*securehistory.DecryptedMessage) (int, error) {
 	var newestPreview string
 	var newestTS time.Time
+	stored := 0
 	for _, msg := range messages {
 		plain, ok := archivePlainMessage(msg)
 		if !ok {
 			continue
 		}
+		stored++
 		if err := s.EnsureThread(ctx, thread.ID); err != nil {
-			return err
+			return stored, err
 		}
 		if err := s.UpsertMessage(ctx, store.Message{
 			ID:              plain.ID,
@@ -488,7 +599,7 @@ func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, 
 			LinkTitle:       plain.LinkTitle,
 			LinkRef:         plain.LinkRef,
 		}); err != nil {
-			return err
+			return stored, err
 		}
 		if plain.TimestampMS >= newestTS.UnixMilli() {
 			newestTS = time.UnixMilli(plain.TimestampMS)
@@ -499,9 +610,9 @@ func storeArchivePage(ctx context.Context, s *store.Store, thread store.Thread, 
 		}
 	}
 	if newestPreview == "" {
-		return nil
+		return stored, nil
 	}
-	return s.UpsertThread(ctx, store.Thread{
+	return stored, s.UpsertThread(ctx, store.Thread{
 		ID:          thread.ID,
 		Title:       thread.Title,
 		LastPreview: newestPreview,

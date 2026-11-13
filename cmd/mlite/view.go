@@ -306,6 +306,8 @@ func layoutView() {
 			label = "Wczytywanie starszych wiadomości"
 		case 2:
 			label = "Początek rozmowy"
+		case 3:
+			label = "Starsze są w kopii z PIN-em: Ustawienia → Konto"
 		}
 		items = append(items, vitem{kind: itTop, y: y, h: sp(40), label: label})
 		y += sp(40)
@@ -600,6 +602,8 @@ func olderStateFor(localMore bool) int {
 		return 1
 	case !localMore && older.done[mv.thread.ID]:
 		return 2
+	case !localMore && older.locked[mv.thread.ID]:
+		return 3
 	}
 	return 0
 }

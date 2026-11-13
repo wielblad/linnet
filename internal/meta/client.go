@@ -40,6 +40,7 @@ type Client struct {
 	newDevice     bool
 	historyMu     sync.Mutex
 	historyDevice *securehistory.Device
+	historyCursor map[int64]int64 // per chat: where the server said the next older page starts
 	mediaMu       sync.Mutex
 	tempMedia     []string
 	cookieUserID  int64

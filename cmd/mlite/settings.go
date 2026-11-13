@@ -97,7 +97,7 @@ type setRow struct {
 	action      func()
 	whole       bool   // the whole row acts, not only its button: a choice that is easily undone
 	key         string // a name for a row that code needs to find
-	btn         rect // where that button was drawn
+	btn         rect   // where that button was drawn
 	get         func() bool
 	set         func(bool)
 	y, h        int32
@@ -105,13 +105,13 @@ type setRow struct {
 }
 
 var sv struct {
-	hwnd   uintptr
-	rows   []setRow
-	w, h   int32
-	scroll int32
-	total  int32
-	focus  int
-	active bool
+	hwnd    uintptr
+	rows    []setRow
+	w, h    int32
+	scroll  int32
+	total   int32
+	focus   int
+	active  bool
 	hotRow  int // row whose button is under the pointer, -1 when none
 	hotLine int // row under the pointer that acts as a whole, -1 when none
 }
@@ -546,7 +546,7 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmMouseWheel:
 		lines := uint32(3)
 		pSystemParametersInfo.Call(0x0068, 0, uintptr(unsafe.Pointer(&lines)), 0) // SPI_GETWHEELSCROLLLINES
-		if lines == 0 || lines > 20 { // "nothing" and "a page at a time" both become a sensible step
+		if lines == 0 || lines > 20 {                                             // "nothing" and "a page at a time" both become a sensible step
 			lines = 3
 		}
 		sv.scroll -= int32(int16(wp>>16)) * int32(lines) * sp(20) / 120
