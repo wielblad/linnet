@@ -84,6 +84,23 @@ func youtubeID(raw string) string {
 	return id
 }
 
+// embedURL is the address of the video alone, without the page around it: YouTube's player,
+// or Facebook's own player plugin. Empty when no such player is known for the address.
+func embedURL(raw string) string {
+	if id := youtubeID(raw); id != "" {
+		return "https://www.youtube.com/embed/" + id + "?autoplay=1&rel=0&playsinline=1"
+	}
+	host := linkHost(raw)
+	if host != "fb.watch" && host != "facebook.com" && !strings.HasSuffix(host, ".facebook.com") {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || strings.HasPrefix(u.Path, "/plugins/") {
+		return ""
+	}
+	return "https://www.facebook.com/plugins/video.php?show_text=false&autoplay=true&allowfullscreen=true&href=" + url.QueryEscape(raw)
+}
+
 // playableLink reports whether the address is a video page worth a window of its own.
 func playableLink(raw string) bool {
 	host := linkHost(raw)

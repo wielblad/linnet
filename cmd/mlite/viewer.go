@@ -104,6 +104,7 @@ func closeViewer() {
 		vw.web.Close()
 		vw.web = nil
 	}
+	playerStop()
 	vw.video = ""
 	h := vw.hwnd
 	vw.hwnd = 0
@@ -478,6 +479,20 @@ func openVideo(u string) {
 		playExternal(u)
 		return
 	}
+	play := u // the video alone where its service has a player for it; else the whole page
+	if e := embedURL(u); e != "" {
+		play = e
+		if id := youtubeID(u); id != "" {
+			// YouTube refuses to play when its player is opened as a page of its own
+			// (error 153), so it goes into a frame on a small page written here.
+			if p, err := playerPage(id); err != nil {
+				log.Warn().Err(err).Msg("player page")
+				play = u
+			} else {
+				play = p
+			}
+		}
+	}
 	closeViewer()
 	vw.video, vw.webMsg = u, "Ładowanie odtwarzacza…"
 	vw.list, vw.hot, vw.note = nil, -1, ""
@@ -491,7 +506,7 @@ func openVideo(u string) {
 			invalidate(vw.hwnd)
 		}
 	}
-	view, err := webview.Open(vw.hwnd, [4]int32{0, dp(56), vw.w, vw.h}, filepath.Join(dataDir, "webview"), u, videoCookies(u), func(err error) {
+	view, err := webview.Open(vw.hwnd, [4]int32{0, dp(56), vw.w, vw.h}, filepath.Join(dataDir, "webview"), play, videoCookies(u), func(err error) {
 		if err != nil {
 			failed(err)
 		}

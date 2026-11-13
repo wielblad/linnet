@@ -193,6 +193,7 @@ msg(106, 106, 44 * MIN, "Tu masz regulamin wyjazdu.", id="att-file", media_kind=
 msg(106, ME, 42 * MIN, "A to z Facebooka https://www.facebook.com/reel/1234567890 :D", id="reel",
     link_url="https://www.facebook.com/reel/1234567890", link_title="Zachód słońca nad Morskim Okiem",
     link_image="https://pictures.invalid/p/reel.jpg")
+msg(106, 106, 41 * MIN, "Publiczne wideo z FB: https://www.facebook.com/facebook/videos/10153231379946729/", id="fbvid")
 msg(106, 106, 40 * MIN, "Mapa trasy: https://mapy.example.org/trasa/tatry-2026 <3", id="mapa",
     link_url="https://mapy.example.org/trasa/tatry-2026", link_title="Trasa: Dolina Pięciu Stawów – Zawrat",
     link_image="https://pictures.invalid/p/mapa.jpg")
