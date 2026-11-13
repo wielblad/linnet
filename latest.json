@@ -1,8 +1,8 @@
 {
-  "version": "0.6",
+  "version": "0.7",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29635072,
-  "sha256": "97bbe35f0b9962b496d2d44e8228981b94d859ce0fd16ebe1939971378842dbd",
-  "signature": "3ARI/FR13YyFYAX8RomMj+5kKj5bxMQ1PWX0mHU1nMuf6gj0e3wcdpX2Ra+xib/h/C6IJLrPyNo19usP3SBmDQ==",
-  "notes": "Zielony pasek o nowej wersji na górze okna, główki pokazują, że rozmówca pisze albo przeczytał, uporządkowane ustawienia z obsługą klawiatury i czytników ekranu, znacznik przeczytania idzie za wiadomościami rozmówcy, bezpieczniejsze wczytywanie historii czatów szyfrowanych."
+  "size": 29704704,
+  "sha256": "4a2110720576c6fd90a06d0f541732ee958f4e1a828ebe157b18e13ce70a571e",
+  "signature": "xYZinXrzQc2F2vIHyWRjSsKpuO1m5AjWlbGCJTWGidozDQ8W7SwMzKnR6LyQzqcUH+GTRX2hfddZGiEYnga0AQ==",
+  "notes": "Rozmowy przy główkach na cztery sposoby do wyboru w ustawieniach: jedna naraz, zakładki, kolumny albo dok. W kolumnach i doku do trzech rozmów naraz, każda z odpowiadaniem, edycją, załącznikami, reakcjami i dużym podglądem zdjęć."
 }
