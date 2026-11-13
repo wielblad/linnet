@@ -20,3 +20,7 @@ cookies.json
 # Screenshots: some show real conversations, so they stay on this computer only
 /zrzuty/
 .impeccable/config.local.json
+
+# Releases built for publishing, and the test release
+/dist/
+/dist-test/

@@ -125,6 +125,7 @@ func main() {
 	installFlag := flag.Bool("install", false, "zainstaluj dla bieżącego użytkownika")
 	uninstallFlag := flag.Bool("uninstall", false, "odinstaluj")
 	quietFlag := flag.Bool("quiet", false, "instaluj i odinstalowuj bez pytań")
+	launchFlag := flag.Bool("launch", false, "uruchom program po instalacji (używane przy aktualizacji)")
 	nameFlag := flag.String("name", "", "inna nazwa programu (do testów instalacji)")
 	flag.Parse()
 	if *nameFlag != "" {
@@ -142,6 +143,7 @@ func main() {
 
 	// A file named like "Linnet-Setup.exe" is the installer; so is -install.
 	setup := strings.Contains(strings.ToLower(filepath.Base(os.Args[0])), "setup")
+	launchAfter = *launchFlag
 	if *installFlag || *uninstallFlag || setup {
 		pSetProcessDpiCtx.Call(^uintptr(3))
 		enableVisualStyles()
@@ -202,6 +204,7 @@ func main() {
 	}
 	be.hwnd.Store(hMain)
 	toastStart()
+	updateStart()
 	if *loginDemo > 0 {
 		showLogin(false)
 		if *loginDemo >= 2 {
@@ -1357,6 +1360,11 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if pn.open {
 			invalidate(pn.hwnd)
 		}
+		return 0
+	case wmAppUpdate:
+		layoutSettings() // the row grows and shrinks with its text
+		clampSettingsScroll()
+		invalidate(hSet)
 		return 0
 	case wmAppToast:
 		toastArrived()

@@ -76,12 +76,16 @@ const (
 	srHeader = iota
 	srToggle
 	srInfo
+	srAction // a row with a button on the right
 )
 
 type setRow struct {
 	kind        int
 	title, desc string
 	live        func() string // description computed at paint time
+	label       func() string // text of the button of an action row, "" for none
+	action      func()
+	btn         rect          // where that button was drawn
 	get         func() bool
 	set         func(bool)
 	y, h        int32
@@ -96,9 +100,11 @@ var sv struct {
 	total  int32
 	focus  int
 	active bool
+	hotRow int // row whose button is under the pointer, -1 when none
 }
 
 func buildSettings() {
+	sv.hotRow = -1
 	sv.rows = []setRow{
 		{kind: srHeader, title: "Powiadomienia"},
 		{kind: srToggle, title: "Powiadomienia Windows", desc: "Nowa wiadomość pojawia się w rogu ekranu.",
@@ -124,6 +130,8 @@ func buildSettings() {
 		{kind: srInfo, title: "Motyw, kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
 		{kind: srToggle, title: "Pokaż zużycie pamięci na pasku bocznym",
 			get: func() bool { return cfg.ShowMem }, set: func(v bool) { cfg.ShowMem = v }},
+		{kind: srHeader, title: "Aktualizacje"},
+		{kind: srAction, title: "Wersja " + appVersion, live: updateLine, label: updateButton, action: updateAction},
 		{kind: srHeader, title: "O aplikacji " + appName},
 		{kind: srInfo, title: appName + " " + appVersion, desc: "Klient wiadomości Messenger na Windows. Linnet jest niezależną aplikacją i nie jest powiązana z Meta Platforms, Inc. Messenger i Facebook są znakami ich właścicieli."},
 		{kind: srInfo, title: "Pamięć", live: func() string {
@@ -144,6 +152,9 @@ func layoutSettings() {
 			avail := settingsWidth() - dp(32)
 			if r.kind == srToggle {
 				avail -= dp(52)
+			}
+			if r.kind == srAction && r.label() != "" {
+				withFont(fnt.name, func(c canvas) { avail -= c.width(r.label()) + dp(44) })
 			}
 			if avail < dp(80) {
 				avail = dp(80)
@@ -175,7 +186,7 @@ func layoutSettings() {
 		}
 	}
 	sv.total = y + dp(24)
-	if sv.focus == 0 || sv.rows[sv.focus].kind != srToggle {
+	if sv.focus == 0 || sv.rows[sv.focus].kind == srHeader || sv.rows[sv.focus].kind == srInfo {
 		sv.focus = 1
 	}
 }
@@ -218,6 +229,20 @@ func paintSettings(target uintptr) {
 		}
 		g.round(x, y, w, r.h, dp(8), dp(8), dp(8), dp(8), pal.line)
 		g.round(x+1, y+1, w-2, r.h-2, dp(7), dp(7), dp(7), dp(7), pal.card)
+		if r.kind == srAction {
+			r.btn = rect{}
+			if label := r.label(); label != "" {
+				var bw int32
+				withFont(fnt.name, func(c canvas) { bw = c.width(label) + dp(32) })
+				bh := dp(32)
+				r.btn = rect{x + w - dp(16) - bw, y + (r.h-bh)/2, x + w - dp(16), y + (r.h+bh)/2}
+				fill := pal.accent
+				if sv.hotRow == i {
+					fill = pal.accentHover
+				}
+				g.round(r.btn.left, r.btn.top, bw, bh, dp(8), dp(8), dp(8), dp(8), fill)
+			}
+		}
 		if r.kind == srToggle {
 			tx, ty := x+w-dp(16)-dp(40), y+(r.h-dp(20))/2
 			if r.get() {
@@ -248,6 +273,11 @@ func paintSettings(target uintptr) {
 		if r.kind == srToggle {
 			right -= dp(52)
 		}
+		if r.kind == srAction && r.btn.right > r.btn.left {
+			right = r.btn.left - dp(12)
+			c.font(fnt.name)
+			c.text(r.label(), r.btn, pal.onAccent, dtCenter|dtVCenter|dtSingleLine)
+		}
 		desc := r.desc
 		if r.live != nil {
 			desc = r.live()
@@ -270,7 +300,18 @@ func paintSettings(target uintptr) {
 }
 
 func toggleSetting(i int) {
-	if i < 0 || i >= len(sv.rows) || sv.rows[i].kind != srToggle {
+	if i < 0 || i >= len(sv.rows) {
+		return
+	}
+	if r := &sv.rows[i]; r.kind == srAction {
+		if r.label() != "" {
+			sv.focus = i
+			r.action()
+			invalidate(sv.hwnd)
+		}
+		return
+	}
+	if sv.rows[i].kind != srToggle {
 		return
 	}
 	r := &sv.rows[i]
@@ -288,7 +329,7 @@ func moveSettingsFocus(d int) {
 		if i < 0 || i >= len(sv.rows) {
 			return
 		}
-		if sv.rows[i].kind == srToggle {
+		if k := sv.rows[i].kind; k == srToggle || (k == srAction && sv.rows[i].label() != "") {
 			sv.focus = i
 			r := sv.rows[i]
 			if r.y-sv.scroll < 0 {
@@ -323,6 +364,34 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		layoutSettings()
 		clampSettingsScroll()
 		return 0
+	case wmMouseMove:
+		x, y := lpPoint(lp)
+		hot := -1
+		for i := range sv.rows {
+			if b := sv.rows[i].btn; b.right > b.left && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
+				hot = i
+			}
+		}
+		if hot != sv.hotRow {
+			sv.hotRow = hot
+			invalidate(hwnd)
+			if hot >= 0 {
+				trackLeave(hwnd)
+			}
+		}
+		return 0
+	case wmMouseLeave:
+		if sv.hotRow != -1 {
+			sv.hotRow = -1
+			invalidate(hwnd)
+		}
+		return 0
+	case wmSetCursor:
+		if lp&0xFFFF == 1 && sv.hotRow >= 0 {
+			cur, _, _ := pLoadCursorW.Call(0, idcHand)
+			pSetCursor.Call(cur)
+			return 1
+		}
 	case wmMouseWheel:
 		sv.scroll -= int32(int16(wp>>16)) * dp(60) / 120
 		clampSettingsScroll()
@@ -369,7 +438,7 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if x >= dp(28) && x < dp(28)+settingsWidth() {
 			for i := range sv.rows {
 				r := sv.rows[i]
-				if r.kind == srToggle && y >= r.y && y < r.y+r.h {
+				if (r.kind == srToggle || r.kind == srAction) && y >= r.y && y < r.y+r.h {
 					toggleSetting(i)
 					break
 				}

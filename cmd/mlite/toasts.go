@@ -21,7 +21,10 @@ import (
 	"lazyfmess/internal/toast"
 )
 
-const wmAppToast = wmApp + 11
+const (
+	wmAppToast  = wmApp + 11
+	wmAppUpdate = wmApp + 12
+)
 
 var (
 	toastOn    bool

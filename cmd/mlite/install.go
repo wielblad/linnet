@@ -70,6 +70,9 @@ func ask(text string, flags uintptr) uintptr {
 }
 
 // runInstall is the whole of "setup": a question, the work, and an offer to start.
+// launchAfter starts the installed program when the installation ends; an update uses it.
+var launchAfter bool
+
 func runInstall(quiet bool) {
 	const yes = 6
 	if !quiet && ask("Zainstalować "+appName+" dla bieżącego użytkownika?\n\nProgram zostanie skopiowany do:\n"+installDir()+
@@ -82,8 +85,12 @@ func runInstall(quiet bool) {
 		}
 		os.Exit(1)
 	}
-	if !quiet && ask(appName+" jest zainstalowany.\n\nUruchomić teraz?", 0x24) == yes {
-		shellOpen(installedExe(), "")
+	if launchAfter || (!quiet && ask(appName+" jest zainstalowany.\n\nUruchomić teraz?", 0x24) == yes) {
+		args := ""
+		if appName != "Linnet" { // a test installation keeps its own name
+			args = `-name "` + appName + `"`
+		}
+		shellOpen(installedExe(), args)
 	}
 }
 
