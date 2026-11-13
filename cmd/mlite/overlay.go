@@ -8,8 +8,11 @@ package main
 // writing, pictures, the panel of the conversation.
 
 import (
+	"fmt"
 	"runtime/debug"
 	"unsafe"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -42,6 +45,8 @@ const (
 	dwmDefaultColour     = 0xFFFFFFFF // DWMWA_COLOR_DEFAULT
 	wsThickFrame         = 0x00040000
 	wmNcCalcSize         = 0x0083
+	wmNcPaint            = 0x0085
+	wmNcActivate         = 0x0086
 )
 
 func windowLong(h, which uintptr) uintptr {
@@ -80,6 +85,13 @@ func setOverlay(on bool) {
 		pShowWindow.Call(hMain, swShow)
 	}
 	overlayRound()
+	// Rare and worth a line: a frame that came back when it should not have is hard to
+	// catch afterwards, and this says what the window really was at the time.
+	var r rect
+	pGetWindowRect.Call(hMain, uintptr(unsafe.Pointer(&r)))
+	log.Warn().Bool("panel", on).Str("style", fmt.Sprintf("0x%08X", windowLong(hMain, gwlStyle))).
+		Str("exstyle", fmt.Sprintf("0x%08X", windowLong(hMain, gwlExStyle))).
+		Int("w", int(r.right-r.left)).Int("h", int(r.bottom-r.top)).Msg("overlay styles")
 }
 
 // overlayRound asks Windows for the rounded corners, the shadow and the thin edge of a

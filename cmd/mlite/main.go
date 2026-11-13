@@ -1238,6 +1238,16 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		// every point of it is content — no title bar to drag, no edges to pull.
 		return htClient
 	}
+	if compact.on {
+		// The panel has no frame of its own. Whatever happens to the styles, the system
+		// must never draw a title bar or a border over what the panel has painted.
+		switch msg {
+		case wmNcPaint:
+			return 0
+		case wmNcActivate:
+			return 1
+		}
+	}
 	if msg == showMsg && showMsg != 0 { // a second start of the program asks this one to come forward
 		showMain()
 		return 0

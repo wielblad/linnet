@@ -355,6 +355,27 @@ func panelPlaceAt(hr rect) (x, y, w, ht int32) {
 	return x, y, w, ht
 }
 
+// windowToRestore is the place the ordinary window comes back to when the panel is left.
+// A window that has never been seen at its own size — or one that is somehow already the
+// size of a panel — would come back unusably small, so it is given a place of its own.
+func windowToRestore() rect {
+	var r, work rect
+	pGetWindowRect.Call(hMain, uintptr(unsafe.Pointer(&r)))
+	if r.right-r.left >= dp(640) && r.bottom-r.top >= dp(420) {
+		return r
+	}
+	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	w, h := dp(1020), dp(720)
+	if w > work.right-work.left-dp(80) {
+		w = work.right - work.left - dp(80)
+	}
+	if h > work.bottom-work.top-dp(80) {
+		h = work.bottom - work.top - dp(80)
+	}
+	x, y := work.left+(work.right-work.left-w)/2, work.top+(work.bottom-work.top-h)/2
+	return rect{x, y, x + w, y + h}
+}
+
 // panelFollow keeps the open panel beside its head while the head is dragged.
 func panelFollow(h *head) {
 	if !compact.on || compact.forID != h.id {
@@ -413,7 +434,7 @@ func openHead(h *head) {
 		return
 	}
 	if !compact.on {
-		pGetWindowRect.Call(hMain, uintptr(unsafe.Pointer(&compact.restore)))
+		compact.restore = windowToRestore()
 		compact.on = true
 		setOverlay(true)
 	}
