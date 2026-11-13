@@ -18,6 +18,7 @@ import (
 const (
 	wmAppLogin     = wmApp + 7
 	wmAppLoginStep = wmApp + 8
+	wmAppHistory   = wmApp + 13 // Meta answered whether there is a history backup
 
 	idLoginNext   = 340
 	idLoginCancel = 341
@@ -67,6 +68,21 @@ var lg struct {
 	card, headR, textR, errR, brandR, footR rect
 	labelR, fieldR                          []rect
 	text                                    string
+}
+
+// loginOptionsAbout reports whether any choice of this step carries a line of explanation.
+func loginOptionsAbout() bool {
+	for i := range lg.opts {
+		if len(lg.opts[i]) == 0 || i >= len(lg.step.Fields) {
+			continue
+		}
+		for _, v := range lg.step.Fields[i].Options {
+			if optionAbout(v) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // secretField is the field of this step that is typed blind, or -1 when there is none.
@@ -141,44 +157,6 @@ func fieldLabel(f meta.LoginField) string {
 	return f.Name
 }
 
-// loginPhrase puts into Polish what the core writes in English. What Meta's own page says
-// comes in the language of the account, so it is left alone.
-func loginPhrase(s string) string {
-	switch strings.TrimSpace(s) {
-	case "Choose how to finish signing in":
-		return "Wybierz, jak potwierdzić logowanie."
-	case "Enter your Facebook credentials. The Messenger network will only work with Facebook accounts.":
-		return "Podaj dane konta na Facebooku. Messenger działa tylko z kontami Facebooka."
-	case "Choose the Facebook account to connect":
-		return "Wybierz konto Facebooka, z którym ma się połączyć program."
-	case "Sign in with your Google account.":
-		return "To konto loguje się przez Google, czego program nie obsługuje. Dodaj inny sposób potwierdzania w ustawieniach Facebooka."
-	}
-	return s
-}
-
-// optionLabel names a way of confirming the login the way a person would say it.
-func optionLabel(s string) string {
-	n := strings.ToLower(strings.Join(strings.Fields(s), " "))
-	switch {
-	case strings.Contains(n, "authentication app"), strings.Contains(n, "authenticator app"):
-		return "Aplikacja uwierzytelniająca"
-	case strings.Contains(n, "text message"), strings.Contains(n, "sms"):
-		return "Kod SMS-em"
-	case strings.Contains(n, "backup code"):
-		return "Kod zapasowy"
-	case strings.Contains(n, "whatsapp"):
-		return "Kod przez WhatsApp"
-	case strings.Contains(n, "another device"):
-		return "Potwierdzenie na innym urządzeniu"
-	case strings.Contains(n, "notification"):
-		return "Powiadomienie w aplikacji Facebook"
-	case n == "email", strings.Contains(n, "email code"):
-		return "Kod e-mailem"
-	}
-	return s
-}
-
 // loginFields rebuilds what the current step asks for: a text field, or a row of choices
 // where the step offers a list (which way to confirm the login, for one).
 func loginFields() {
@@ -236,7 +214,7 @@ func loginText() string {
 	case lg.step.Kind == meta.LoginUnsupported:
 		return "To logowanie wymaga dodatkowej strony w przeglądarce, której program nie potrafi pokazać. Dokończ je w przeglądarce lub w oficjalnej aplikacji i spróbuj ponownie."
 	case lg.step.Instructions != "":
-		return loginPhrase(lg.step.Instructions)
+		return plLogin(lg.step.Instructions)
 	}
 	return "Podaj dane swojego konta."
 }
@@ -258,7 +236,11 @@ func loginLayout() {
 		withFont(fnt.small, func(c canvas) { _, eh = c.measure(lg.err, cw-2*in-dp(42)) })
 		eh += dp(16) // the error sits in a box of its own, below the fields it belongs to
 	}
-	fieldH, labelH, optH, optGap := dp(36), sp(20), dp(44), dp(8)
+	fieldH, labelH, optGap := dp(36), sp(20), dp(8)
+	optH := dp(44)
+	if loginOptionsAbout() {
+		optH = dp(58)
+	}
 	body := int32(0)
 	for i := range lg.edits {
 		body += labelH + dp(14)
@@ -462,24 +444,67 @@ func signOutButton() string {
 	return "Wyloguj się"
 }
 
+var historyBusy bool // the settings are asking Meta about the backup
+
 func historyLine() string {
-	if session.HaveHistoryDevice(dataDir) {
-		return "Odblokowana na tym komputerze: starsze wiadomości z rozmów szyfrowanych są pobierane."
+	switch {
+	case historyBusy:
+		return "Pytam Messengera o kopię historii…"
+	case session.HaveHistoryDevice(dataDir):
+		return "Wczytana na tym komputerze: starsze wiadomości z rozmów szyfrowanych są pobierane."
 	}
-	return "Messenger trzyma starsze wiadomości z rozmów szyfrowanych w kopii zabezpieczonej kodem PIN. Bez niego widać tylko to, co przyjdzie od teraz."
+	return "Messenger trzyma starsze wiadomości z rozmów szyfrowanych w kopii zabezpieczonej kodem PIN. " +
+		"Bez niej widać tylko to, co przyjdzie od teraz. Wczytuj ją spokojnie dopiero jakiś czas po zalogowaniu: " +
+		"zgłoszenie nowego urządzenia zaraz po logowaniu potrafi zablokować konto."
 }
 
 func historyButton() string {
-	if session.HaveHistoryDevice(dataDir) {
+	switch {
+	case historyBusy:
+		return ""
+	case session.HaveHistoryDevice(dataDir):
 		return ""
 	}
-	return "Podaj PIN"
+	return "Wczytaj"
 }
 
-func historyAction() {
+// historyAction asks Meta whether there is a backup at all, and only then asks for the PIN.
+// Nothing of this happens by itself: it is the person who asks, from the settings.
+func historyAction() { historyAsk() }
+
+func historyAsk() {
+	if historyBusy {
+		return
+	}
+	historyBusy = true
+	layoutSettings()
+	invalidate(sv.hwnd)
+	go be.offerHistory()
+}
+
+// historyChecked runs on the window thread with Meta's answer about the backup.
+func historyChecked() {
+	var msg string
+	select {
+	case msg = <-historyChecks:
+	default:
+		return
+	}
+	historyBusy = false
+	layoutSettings()
+	invalidate(sv.hwnd)
+	if msg != "" {
+		historyNone(msg)
+		return
+	}
 	promptBox("Historia rozmów szyfrowanych",
 		"Podaj PIN kopii zapasowej z Messengera (ten, którym odblokowujesz wiadomości na nowym urządzeniu). Trafia wyłącznie do Mety; program go nigdzie nie zapisuje.",
-		"PIN z Messengera", "Odblokuj", true, be.unlockHistory)
+		"PIN z Messengera", "Wczytaj", true, be.unlockHistory)
+}
+
+// historyNone says why there is nothing to load, without asking anything.
+func historyNone(msg string) {
+	infoBox("Historia rozmów szyfrowanych", msg)
 }
 
 func signOutAction() {
@@ -530,9 +555,9 @@ func drawLoginButton(d *drawItem, label string, primary bool) {
 	buf.flush(0, 0)
 }
 
-// drawLoginOption draws one way of confirming the login: a row with a mark on the left, the
-// way the official application lists them.
-func drawLoginOption(d *drawItem, label string, picked bool) {
+// drawLoginOption draws one way of confirming the login as a tile: the mark, the name, a
+// line saying what it means, and an arrow — the way the official application lists them.
+func drawLoginOption(d *drawItem, value string, picked bool) {
 	w, h := d.rcItem.right, d.rcItem.bottom
 	buf := newBuffer(d.hDC, w, h)
 	c := canvas{buf.hdc}
@@ -542,9 +567,9 @@ func drawLoginOption(d *drawItem, label string, picked bool) {
 	case picked:
 		edge, fill, inset = pal.accent, mix(pal.accent, pal.card, 12), 2
 	case d.itemState&odsSelected != 0:
-		fill = mix(pal.fg, pal.card, 90)
+		fill = mix(pal.fg, pal.card, 12)
 	case hotBtn == d.hwndItem:
-		fill = mix(pal.fg, pal.card, 95)
+		fill = mix(pal.fg, pal.card, 7)
 	}
 	g := newGfx(buf.hdc)
 	rr := dp(8)
@@ -563,8 +588,19 @@ func drawLoginOption(d *drawItem, label string, picked bool) {
 		g.round(mx+4, my+4, dot, dot, dot/2, dot/2, dot/2, dot/2, pal.accent)
 	}
 	g.free()
-	c.font(fnt.body)
-	c.text(label, rect{mx + s + dp(12), 0, w - dp(12), h}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	label, about := optionLabel(value), optionAbout(value)
+	tx, right := mx+s+dp(12), w-dp(26)
+	if about == "" {
+		c.font(fnt.body)
+		c.text(label, rect{tx, 0, right, h}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	} else {
+		c.font(fnt.bodySemi)
+		c.text(label, rect{tx, dp(8), right, dp(8) + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+		c.font(fnt.small)
+		c.text(about, rect{tx, dp(8) + sp(19), right, h - dp(6)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	}
+	c.font(fnt.iconSm)
+	c.text(gChevron, rect{w - dp(24), 0, w - dp(8), h}, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
 	if focusCue(d) {
 		fr := rect{3, 3, w - 3, h - 3}
 		drawFocus(buf.hdc, &fr)
@@ -790,7 +826,7 @@ func loginProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		case d.ctlID >= idLoginOption:
 			i, j := int(d.ctlID-idLoginOption)/optionsPerField, int(d.ctlID-idLoginOption)%optionsPerField
 			if i < len(lg.step.Fields) && j < len(lg.step.Fields[i].Options) {
-				drawLoginOption(d, optionLabel(lg.step.Fields[i].Options[j]), i < len(lg.choice) && lg.choice[i] == j)
+				drawLoginOption(d, lg.step.Fields[i].Options[j], i < len(lg.choice) && lg.choice[i] == j)
 			}
 		}
 		return 1

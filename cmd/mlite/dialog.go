@@ -41,6 +41,14 @@ func promptBox(title, text, label, ok string, secret bool, then func(string)) {
 	openDialog(title, text, ok, false, nil, label, secret, then)
 }
 
+// infoBox says one thing and asks nothing: a single button closes it.
+func infoBox(title, text string) {
+	openDialog(title, text, "Rozumiem", false, nil, "", false, nil)
+	dlg.cancel = ""
+	dlg.focus = 1
+	invalidate(dlg.hwnd)
+}
+
 func openDialog(title, text, ok string, danger bool, then func(), label string, secret bool, onText func(string)) {
 	if dlg.hwnd != 0 {
 		return
@@ -138,7 +146,10 @@ func paintDialog(target uintptr) {
 	bh := dp(36)
 	c.font(fnt.name)
 	bwOK := c.width(dlg.ok) + dp(36)
-	bwNo := c.width(dlg.cancel) + dp(36)
+	bwNo := int32(0)
+	if dlg.cancel != "" {
+		bwNo = c.width(dlg.cancel) + dp(36)
+	}
 	labelH, fieldH, extra := int32(0), int32(0), int32(0)
 	if dlg.field != 0 {
 		labelH, fieldH = sp(20), dp(36)
@@ -158,7 +169,10 @@ func paintDialog(target uintptr) {
 	}
 	by := y + ch - dp(20) - bh
 	dlg.btn[1] = rect{x + cw - pad - bwOK, by, x + cw - pad, by + bh}
-	dlg.btn[0] = rect{dlg.btn[1].left - dp(8) - bwNo, by, dlg.btn[1].left - dp(8), by + bh}
+	dlg.btn[0] = rect{}
+	if bwNo > 0 {
+		dlg.btn[0] = rect{dlg.btn[1].left - dp(8) - bwNo, by, dlg.btn[1].left - dp(8), by + bh}
+	}
 
 	g := newGfx(buf.hdc)
 	if dlg.snap != 0 {
@@ -180,8 +194,10 @@ func paintDialog(target uintptr) {
 	if dlg.hot == 0 {
 		noFill = mix(pal.fg, pal.card, 7)
 	}
-	g.round(b0.left, b0.top, b0.right-b0.left, bh, dp(8), dp(8), dp(8), dp(8), mix(pal.fg2, pal.line, 65))
-	g.round(b0.left+1, b0.top+1, b0.right-b0.left-2, bh-2, dp(7), dp(7), dp(7), dp(7), noFill)
+	if b0.right > b0.left {
+		g.round(b0.left, b0.top, b0.right-b0.left, bh, dp(8), dp(8), dp(8), dp(8), mix(pal.fg2, pal.line, 65))
+		g.round(b0.left+1, b0.top+1, b0.right-b0.left-2, bh-2, dp(7), dp(7), dp(7), dp(7), noFill)
+	}
 	okFill, okInk := pal.accent, pal.onAccent
 	if dlg.hot == 1 {
 		okFill = pal.accentHover
@@ -214,7 +230,9 @@ func paintDialog(target uintptr) {
 		c.text(dlg.label, dlg.labelR, pal.fg, dtSingleLine|dtVCenter)
 	}
 	c.font(fnt.name)
-	c.text(dlg.cancel, b0, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	if b0.right > b0.left {
+		c.text(dlg.cancel, b0, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	}
 	c.text(dlg.ok, b1, okInk, dtCenter|dtVCenter|dtSingleLine)
 	fr := dlg.btn[dlg.focus]
 	fr = rect{fr.left - dp(3), fr.top - dp(3), fr.right + dp(3), fr.bottom + dp(3)}
@@ -224,7 +242,7 @@ func paintDialog(target uintptr) {
 
 func dialogHit(x, y int32) int {
 	for i, b := range dlg.btn {
-		if x >= b.left && x < b.right && y >= b.top && y < b.bottom {
+		if b.right > b.left && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			return i
 		}
 	}
@@ -282,7 +300,9 @@ func dialogProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		case vkEscape:
 			closeDialog(false)
 		case 0x09, vkLeft, vkRight: // Tab and the arrows move between the two answers
-			dlg.focus = 1 - dlg.focus
+			if dlg.cancel != "" {
+				dlg.focus = 1 - dlg.focus
+			}
 			invalidate(hwnd)
 		case vkReturn, vkSpace:
 			closeDialog(dlg.focus == 1)

@@ -59,7 +59,6 @@ type backend struct {
 	refreshPending atomic.Bool
 	mediaRetry     atomic.Bool // pictures that failed may be tried again (the connection came back)
 	armed          atomic.Bool
-	pinNeeded      atomic.Bool // the encrypted history waits for Messenger's PIN
 	done           chan struct{}
 }
 
@@ -112,23 +111,37 @@ func (b *backend) stop() {
 	b.logF.Close()
 }
 
-// historyLocked reports that the older messages of the encrypted conversations are still
-// behind Messenger's PIN: without it this computer sees only what arrives from now on.
-func (b *backend) historyLocked() bool { return b.pinNeeded.Load() }
+// historyChecks carries the answer of offerHistory to the window: "" when the PIN is what
+// is needed next, otherwise what to say instead.
+var historyChecks = make(chan string, 1)
 
-// checkHistoryPIN asks, once connected, whether this account keeps a PIN-locked history.
-func (b *backend) checkHistoryPIN() {
+// offerHistory asks Meta whether this account keeps a history backup at all. It runs only
+// when the person asks for it from the settings, never by itself: registering a device for
+// that history moments after a fresh sign-in has had an account locked by Meta as a
+// break-in attempt.
+func (b *backend) offerHistory() {
+	msg := ""
 	client := b.current()
-	if client == nil {
-		return
+	switch {
+	case client == nil:
+		msg = "Program nie jest połączony z Messengerem."
+	default:
+		need, err := client.NeedsHistoryPIN(b.ctx)
+		switch {
+		case err != nil:
+			log.Warn().Err(err).Msg("check history backup")
+			msg = "Nie można sprawdzić kopii historii: " + err.Error()
+		case !need:
+			msg = "To konto nie ma kopii historii chronionej PIN-em, więc nie ma czego wczytać."
+		}
 	}
-	need, err := client.NeedsHistoryPIN(b.ctx)
-	if err != nil {
-		log.Warn().Err(err).Msg("history pin")
-		return
+	select {
+	case historyChecks <- msg:
+	default:
 	}
-	b.pinNeeded.Store(need)
-	b.requestRefresh()
+	if h := b.hwnd.Load(); h != 0 {
+		postMsg(h, wmAppHistory, 0, 0)
+	}
 }
 
 // unlockHistory hands Messenger's PIN over once, to fetch the key to the stored history. The
@@ -144,7 +157,6 @@ func (b *backend) unlockHistory(pin string) {
 			b.notice("Nie udało się odblokować historii. Sprawdź PIN i spróbuj jeszcze raz.")
 			return
 		}
-		b.pinNeeded.Store(false)
 		b.notice("Historia odblokowana. Pobieram starsze wiadomości…")
 		if err := client.SyncRecentEncrypted(b.ctx, b.db); err != nil {
 			log.Warn().Err(err).Msg("sync recent encrypted after unlock")
@@ -347,7 +359,6 @@ func (b *backend) run() {
 	b.armed.Store(true)
 	b.requestRefresh()
 	b.setStatus("Połączono")
-	b.checkHistoryPIN() // without the PIN the encrypted conversations start empty here
 	// Encrypted chats: the server does not know their last message, so fetch the newest
 	// page of each in the background and let the list reorder itself.
 	if err := client.SyncRecentEncrypted(b.ctx, b.db); err != nil {

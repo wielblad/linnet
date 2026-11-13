@@ -32,6 +32,10 @@ type config struct {
 	// SoundFile is which sound that is: a file of the Windows sounds, a path to one of your
 	// own, or empty for whatever the system sets for a message.
 	SoundFile string `json:"sound_file"`
+	// Tone is one of the program's own sounds; it comes before SoundFile when set.
+	Tone string `json:"tone"`
+	// Theme is "" to follow Windows, "light" or "dark".
+	Theme string `json:"theme"`
 }
 
 var (
@@ -114,7 +118,8 @@ func buildSettings() {
 			get: func() bool { return cfg.Toasts }, set: func(v bool) { cfg.Toasts = v }},
 		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Krótki dźwięk razem z powiadomieniem.",
 			get: func() bool { return cfg.Sound }, set: func(v bool) { cfg.Sound = v }},
-		{kind: srAction, title: soundRowTitle, live: soundLine, label: soundButton, action: soundPick},
+		{kind: srAction, title: soundRowTitle, desc: "Wybrany dźwięk od razu zagra, żeby go posłuchać.",
+			live: soundLine, label: soundLabel, action: pickSound},
 		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
 			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
 			{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
@@ -131,7 +136,8 @@ func buildSettings() {
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",
 			get: func() bool { return cfg.Background }, set: func(v bool) { cfg.Background = v }},
 		{kind: srHeader, title: "Wygląd"},
-		{kind: srInfo, title: "Motyw, kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
+		{kind: srAction, title: "Motyw", desc: "Auto: tak jak w ustawieniach Windows.", label: themeLabel, action: pickTheme},
+		{kind: srInfo, title: "Kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
 		{kind: srToggle, title: "Pokaż zużycie pamięci na pasku bocznym",
 			get: func() bool { return cfg.ShowMem }, set: func(v bool) { cfg.ShowMem = v }},
 		{kind: srHeader, title: "Konto"},
@@ -145,6 +151,67 @@ func buildSettings() {
 			return fmt.Sprintf("Teraz: %d MB.", workingSetMB())
 		}},
 	}
+}
+
+var themes = []struct{ id, label string }{{"", "Auto"}, {"light", "Jasny"}, {"dark", "Ciemny"}}
+
+func themeLabel() string {
+	for _, t := range themes {
+		if t.id == cfg.Theme {
+			return t.label + " ▾"
+		}
+	}
+	return themes[0].label + " ▾"
+}
+
+// settingsPick shows a list of choices under the button of the row, the current one ticked,
+// and gives back the chosen index or -1. A line goes before each index in breaks.
+func settingsPick(labels []string, current int, breaks ...int) int {
+	const idFirst = 1
+	menu, _, _ := pCreatePopupMenu.Call()
+	for i, l := range labels {
+		for _, b := range breaks {
+			if b == i {
+				pAppendMenuW.Call(menu, mfSeparator, 0, 0)
+			}
+		}
+		flags := uintptr(mfString)
+		if i == current {
+			flags |= mfChecked
+		}
+		pAppendMenuW.Call(menu, flags, uintptr(idFirst+i), uintptr(unsafe.Pointer(u16(l))))
+	}
+	pt := point{dp(28), 0}
+	if sv.focus >= 0 && sv.focus < len(sv.rows) {
+		if b := sv.rows[sv.focus].btn; b.right > b.left {
+			pt = point{b.left, b.bottom + dp(4)}
+		}
+	}
+	pClientToScreen.Call(sv.hwnd, uintptr(unsafe.Pointer(&pt)))
+	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, hMain, 0)
+	pDestroyMenu.Call(menu)
+	if cmd == 0 {
+		return -1
+	}
+	return int(cmd) - idFirst
+}
+
+// pickTheme lists the themes; the chosen one repaints everything as after a change in Windows.
+func pickTheme() {
+	labels, current := []string{}, 0
+	for i, t := range themes {
+		labels = append(labels, t.label)
+		if t.id == cfg.Theme {
+			current = i
+		}
+	}
+	i := settingsPick(labels, current)
+	if i < 0 || themes[i].id == cfg.Theme {
+		return
+	}
+	cfg.Theme = themes[i].id
+	saveConfig()
+	sendMsg(hMain, wmSettingChange, 0, 0)
 }
 
 func layoutSettings() {

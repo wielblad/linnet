@@ -407,6 +407,9 @@ func createMainWindow(visible bool) {
 	pShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&tray)))
 
 	layout()
+	if v := os.Getenv("MLITE_LOGINPREVIEW"); v != "" { // for looking at the sign-in steps only
+		loginPreview(v)
+	}
 	memMB = workingSetMB()
 	pSetTimer.Call(hMain, timerMem, 5000, 0)
 	if visible {
@@ -576,13 +579,8 @@ func layout() {
 
 	lay.stripText, lay.stripClick, stripDo = statusLine(), false, nil
 	if lay.stripText == "" && !settings {
-		switch {
-		case be.historyLocked():
-			lay.stripText, lay.stripClick, stripDo = "Starsze wiadomości z rozmów szyfrowanych czekają na PIN z Messengera. Kliknij, aby je odblokować.", true, historyAction
-		default:
-			if n := updateNotice(); n != "" {
-				lay.stripText, lay.stripClick, stripDo = n, true, goToUpdates
-			}
+		if n := updateNotice(); n != "" {
+			lay.stripText, lay.stripClick, stripDo = n, true, goToUpdates
 		}
 	}
 	lay.strip = rect{}
@@ -1441,6 +1439,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmAppLoginStep:
 		loginStepArrived()
 		return 0
+	case wmAppHistory:
+		historyChecked()
+		return 0
 	case wmAppAvatar:
 		avatarArrived(int64(lp), wp != 0)
 		return 0
@@ -1950,7 +1951,9 @@ func refresh() {
 		if cfg.Body {
 			body = oneLine(previewText(notify.LastPreview), 200)
 		}
-		playMessageSound()
+		if !fg { // the window in front already shows the message: no sound over it
+			playMessageSound()
+		}
 		notifyAbout(*notify, oneLine(threadTitle(*notify), 60), body)
 		if !fg {
 			pFlashWindow.Call(hMain, 1)

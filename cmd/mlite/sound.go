@@ -42,7 +42,7 @@ var messageSounds = []struct{ name, file string }{
 	{"Kalendarz", "Windows Notify Calendar.wav"},
 	{"Ogólny sygnał", "Windows Notify System Generic.wav"},
 	{"Szturchnięcie", "Windows Message Nudge.wav"},
-	{"Dzwoneczek", "Windows Ding.wav"},
+	{"Dzwonek Windows", "Windows Ding.wav"},
 	{"Kuranty", "chimes.wav"},
 	{"Krótkie ding", "ding.wav"},
 	{"Stare „notify”", "notify.wav"},
@@ -87,6 +87,9 @@ func playMessageSound() bool {
 	if !cfg.Sound {
 		return false
 	}
+	if cfg.Tone != "" {
+		return playTone(cfg.Tone)
+	}
 	const async, noDefault, alias, filename = 0x0001, 0x0002, 0x00010000, 0x00020000
 	if path := soundPath(cfg.SoundFile); path != "" {
 		if r, _, _ := pPlaySoundW.Call(uintptr(unsafe.Pointer(u16(path))), 0, filename|async|noDefault); r != 0 {
@@ -103,64 +106,84 @@ func playMessageSound() bool {
 	return false
 }
 
-// soundLine tells which sound is chosen, and says when its file is not on this computer.
-func soundLine() string {
-	name := soundName()
-	if path := soundPath(cfg.SoundFile); path != "" {
-		if _, err := os.Stat(path); err != nil {
-			return name + " — nie ma takiego pliku, zagra dźwięk systemowy."
-		}
+// playTone plays one of the program's own sounds, made as it is first needed and kept in
+// memory afterwards, because Windows plays it from there after the call has returned.
+func playTone(id string) bool {
+	const async, noDefault, memory = 0x0001, 0x0002, 0x0004
+	wav := toneWAV(id)
+	if wav == nil {
+		return false
 	}
-	return name + ". Kliknij „Zmień”, żeby wybrać inny i od razu go usłyszeć."
+	r, _, _ := pPlaySoundW.Call(uintptr(unsafe.Pointer(&wav[0])), 0, memory|async|noDefault)
+	soundPlayed = id
+	return r != 0
 }
 
-func soundButton() string { return "Zmień" }
+// soundLine tells which sound is chosen, and says when its file is not on this computer.
+func soundLine() string {
+	if cfg.Tone == "" {
+		if path := soundPath(cfg.SoundFile); path != "" {
+			if _, err := os.Stat(path); err != nil {
+				return soundName() + " — nie ma takiego pliku, zagra dźwięk systemowy."
+			}
+		}
+	}
+	return "Wybrany dźwięk od razu zagra, żeby go posłuchać."
+}
 
-// soundPick offers the sounds in a menu beside the row, and plays the one chosen.
-func soundPick() {
-	row := -1
-	for i := range sv.rows {
-		if sv.rows[i].title == soundRowTitle {
-			row = i
+// soundLabel names the chosen sound on the button of the row.
+func soundLabel() string {
+	if cfg.Tone != "" {
+		for _, t := range tones {
+			if t.id == cfg.Tone {
+				return t.label + " ▾"
+			}
+		}
+	}
+	if cfg.SoundFile == "" {
+		return "Systemowy ▾"
+	}
+	return soundName() + " ▾"
+}
+
+// pickSound offers everything the message sound can be, in three groups: the system sound
+// and the program's own short ones, the sounds Windows keeps in its Media folder, and a
+// file of one's own. The chosen one plays at once.
+func pickSound() {
+	type choice struct {
+		tone, file string
+		own        bool // the entry that asks for a file of one's own
+	}
+	labels, choices, breaks := []string{}, []choice{}, []int{}
+	for _, t := range tones {
+		labels, choices = append(labels, t.label), append(choices, choice{tone: t.id})
+	}
+	breaks = append(breaks, len(labels))
+	for _, w := range messageSounds[1:] {
+		labels, choices = append(labels, w.name), append(choices, choice{file: w.file})
+	}
+	breaks = append(breaks, len(labels))
+	labels, choices = append(labels, "Własny plik .wav…"), append(choices, choice{own: true})
+	current := 0
+	for i, c := range choices {
+		if !c.own && c.tone == cfg.Tone && c.file == cfg.SoundFile {
+			current = i
 			break
 		}
 	}
-	menu, _, _ := pCreatePopupMenu.Call()
-	own := cfg.SoundFile != "" && filepath.IsAbs(cfg.SoundFile)
-	for i, s := range messageSounds {
-		flags := uintptr(mfString)
-		if !own && s.file == cfg.SoundFile {
-			flags |= mfChecked
-		}
-		pAppendMenuW.Call(menu, flags, uintptr(idSoundFirst+i), uintptr(unsafe.Pointer(u16(s.name))))
-	}
-	pAppendMenuW.Call(menu, mfSeparator, 0, 0)
-	flags := uintptr(mfString)
-	if own {
-		flags |= mfChecked
-	}
-	pAppendMenuW.Call(menu, flags, idSoundCustom, uintptr(unsafe.Pointer(u16("Własny plik .wav…"))))
-
-	pt := point{dp(24), dp(24)}
-	if row >= 0 {
-		b := sv.rows[row].btn
-		pt = point{b.left, b.bottom + dp(4)}
-	}
-	pClientToScreen.Call(sv.hwnd, uintptr(unsafe.Pointer(&pt)))
-	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, hMain, 0)
-	pDestroyMenu.Call(menu)
-	switch {
-	case cmd == 0:
-		return
-	case cmd == idSoundCustom:
-		if path := pickSoundFile(); path != "" {
-			cfg.SoundFile = path
-		}
-	case cmd >= idSoundFirst && int(cmd)-idSoundFirst < len(messageSounds):
-		cfg.SoundFile = messageSounds[int(cmd)-idSoundFirst].file
-	default:
+	i := settingsPick(labels, current, breaks...)
+	if i < 0 {
 		return
 	}
+	c := choices[i]
+	if c.own {
+		path := pickSoundFile()
+		if path == "" {
+			return
+		}
+		c = choice{file: path}
+	}
+	cfg.Tone, cfg.SoundFile = c.tone, c.file
 	saveConfig()
 	layoutSettings()
 	invalidate(sv.hwnd)
