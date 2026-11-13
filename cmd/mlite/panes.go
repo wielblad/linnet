@@ -45,6 +45,7 @@ type pane struct {
 	appR, findR       rect  // the buttons to the ordinary window of the program, and to the search
 	side              int32 // where its row stands: 1 to the right of the heads, -1 to the left
 	last              bool  // the one furthest from the heads: its outer edge changes the size
+	under             bool  // behind the ordinary window of the program, which comes first
 	hot               int   // which of its buttons is under the pointer
 	active            bool
 }
@@ -192,6 +193,7 @@ func paneOpen(id int64) {
 	be.openThread(t, true)
 	paneFront(p)
 	headsSync(false)
+	headsZ()
 }
 
 // paneOldest is the pane that has gone unused the longest.
@@ -768,6 +770,7 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmExitSizeMove: // the size it was dragged to is the size of them all from now on
 		panelSized(hwnd)
 		panesPlace()
+		headsZ()
 		return 0
 	case wmNcPaint:
 		return 0
@@ -803,6 +806,7 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 				}
 			}
 			headsSync(false)
+			headsZ() // brought forward by a click, it still gives way to the ordinary window
 		}
 		return 0
 	case wmMouseMove:

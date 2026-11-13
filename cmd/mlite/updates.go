@@ -128,7 +128,7 @@ func updateNotice() string {
 	upd.mu.Lock()
 	version := upd.manifest.Version
 	upd.mu.Unlock()
-	return "Jest nowsza wersja " + version + ". Kliknij, aby zaktualizować."
+	return "Jest nowsza wersja " + version + ". Kliknij, aby przejść do aktualizacji."
 }
 
 // goToUpdates opens the settings on the row about updates: where the bar leads.
@@ -335,11 +335,13 @@ func bandText() string {
 	if version == "" || version == bandHidden {
 		return ""
 	}
-	return "Jest nowa wersja " + version + " — kliknij, aby zaktualizować"
+	return "Jest nowa wersja " + version + ". Zainstalujesz ją w ustawieniach."
 }
 
-// paintBand draws the band: what it says, a button that starts the update, and a cross
-// that puts the band away until the next version.
+// paintBand draws the band: what it says, a button that leads to the settings, and a cross
+// that puts the band away until the next version. Nothing here installs anything: the
+// program only tells that a release is there, and the button that installs it is in the
+// settings, pressed by the person.
 func paintBand(c canvas, hdc uintptr) {
 	b := lay.band
 	if b.bottom <= b.top {
@@ -348,7 +350,7 @@ func paintBand(c canvas, hdc uintptr) {
 	c.fill(b, bandGreen)
 	h := b.bottom - b.top
 	c.font(fnt.smallSemi)
-	label := "Aktualizuj"
+	label := "Przejdź do ustawień"
 	pw, ph := c.width(label)+dp(24), dp(24)
 	lay.bandX = rect{b.right - dp(40), b.top, b.right, b.bottom}
 	lay.bandGo = rect{lay.bandX.left - dp(4) - pw, b.top + (h-ph)/2, lay.bandX.left - dp(4), b.top + (h+ph)/2}
@@ -369,8 +371,8 @@ func onBand(x, y int32) bool {
 	return b.bottom > b.top && x >= b.left && x < b.right && y >= b.top && y < b.bottom
 }
 
-// bandClick: the cross puts the band away, the button starts the update, and anywhere else
-// leads to the settings, where the update is.
+// bandClick: the cross puts the band away; the button and anywhere else lead to the
+// settings, where the update is. The update itself starts only from its button there.
 func bandClick(x, y int32) {
 	in := func(r rect) bool { return x >= r.left && x < r.right && y >= r.top && y < r.bottom }
 	switch {
@@ -382,9 +384,6 @@ func bandClick(x, y int32) {
 			upd.mu.Unlock()
 		}
 		layout()
-	case in(lay.bandGo):
-		goToUpdates()
-		updateAction()
 	default:
 		goToUpdates()
 	}

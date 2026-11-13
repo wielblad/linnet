@@ -701,7 +701,7 @@ func headsZ() {
 			pGetWindowRect.Call(hMain, uintptr(unsafe.Pointer(&mr)))
 		}
 	}
-	if normal && len(heads) > 0 {
+	if normal && len(heads)+len(panes) > 0 {
 		pSetTimer.Call(hMain, timerHeadsZ, 1000, 0)
 	} else {
 		pKillTimer.Call(hMain, timerHeadsZ)
@@ -724,6 +724,40 @@ func headsZ() {
 			pSetWindowPos.Call(h.hwnd, hwndTopmost, 0, 0, 0, 0, flags)
 		}
 	}
+	// The same for the conversations beside the heads: where the ordinary window shows, it
+	// is the window that is seen, and a conversation that reaches into it goes under.
+	for _, p := range panes {
+		var r rect
+		pGetWindowRect.Call(p.hwnd, uintptr(unsafe.Pointer(&r)))
+		// the middle of what the two share is where one of them has to give way
+		ix, iy := (maxI(r.left, mr.left)+minI(r.right, mr.right))/2, (maxI(r.top, mr.top)+minI(r.bottom, mr.bottom))/2
+		under := normal && r.left < mr.right && r.right > mr.left && r.top < mr.bottom && r.bottom > mr.top &&
+			mainShowsAt(point{ix, iy})
+		if !under && !p.under {
+			continue
+		}
+		p.under = under
+		if under {
+			pSetWindowPos.Call(p.hwnd, hwndNoTop, 0, 0, 0, 0, flags)
+			pSetWindowPos.Call(p.hwnd, hMain, 0, 0, 0, 0, flags)
+		} else {
+			pSetWindowPos.Call(p.hwnd, hwndTopmost, 0, 0, 0, 0, flags)
+		}
+	}
+}
+
+func maxI(a, b int32) int32 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minI(a, b int32) int32 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // headOpenNow reports whether the conversation of a head is open beside it.
