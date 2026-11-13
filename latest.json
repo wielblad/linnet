@@ -1,8 +1,8 @@
 {
-  "version": "0.7",
+  "version": "0.8",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29704704,
-  "sha256": "4a2110720576c6fd90a06d0f541732ee958f4e1a828ebe157b18e13ce70a571e",
-  "signature": "xYZinXrzQc2F2vIHyWRjSsKpuO1m5AjWlbGCJTWGidozDQ8W7SwMzKnR6LyQzqcUH+GTRX2hfddZGiEYnga0AQ==",
-  "notes": "Rozmowy przy główkach na cztery sposoby do wyboru w ustawieniach: jedna naraz, zakładki, kolumny albo dok. W kolumnach i doku do trzech rozmów naraz, każda z odpowiadaniem, edycją, załącznikami, reakcjami i dużym podglądem zdjęć."
+  "size": 29775872,
+  "sha256": "11a22873473027790632494ba7fa1e0e3740edf46fc2a4ab62211482eefb01db",
+  "signature": "a6HB/M5fPvPmPZ1O9vK6izHqxFuNF4fHjnNvQ5lYYhRZW5SLxn9Brwzws0a/Wa/HZHFnUKNnIlbjKUlZ5C84Dg==",
+  "notes": "Główki można spinać w grupy, a każda grupa ma własny rząd okien rozmów. Rozmiar główek i okien do wyboru, zdjęcia i filmy na pełnym ekranie, wyszukiwanie w każdej rozmowie, klikalny dymek, przycisk przejścia do okna programu, powiadomienie Windows o aktualizacji i poprawione doczytywanie historii rozmów szyfrowanych."
 }
