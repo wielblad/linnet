@@ -101,6 +101,8 @@ func overlayRound() {
 	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.line))
 	if !compact.on {
 		round, border = dwmRoundNone, dwmDefaultColour
+	} else if cfg.HeadMode == headModeCols { // columns stand shoulder to shoulder
+		round = dwmRoundNone
 	}
 	pDwmSetWindowAttribute.Call(hMain, dwmaCornerPreference, uintptr(unsafe.Pointer(&round)), 4)
 	pDwmSetWindowAttribute.Call(hMain, dwmaBorderColour, uintptr(unsafe.Pointer(&border)), 4)
@@ -116,6 +118,8 @@ func hideOverlay() {
 	closeViewer()
 	closePanel()
 	pShowWindow.Call(hMain, swHide)
+	panesPlace() // the panes close the gap the panel left
+	headsSync(false)
 	dwRelease() // nothing is drawn while hidden; give the text engine's memory back
 	debug.FreeOSMemory()
 	mediaDropThumbs()

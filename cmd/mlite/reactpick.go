@@ -68,7 +68,7 @@ func actRect(it *vitem, k int32) rect {
 // viewHover notes which message and which of its actions the pointer is over.
 func viewHover(x, y int32) {
 	item, act := -1, -1
-	if x >= 0 && pick.hwnd == 0 {
+	if x >= 0 && pick.hwnd == 0 && !inPane() { // the actions of a message belong to the window's own view
 		for i := range mv.items {
 			it := &mv.items[i]
 			if !hoverable(it) || y+mv.scroll < it.y || y+mv.scroll >= it.y+it.h {

@@ -111,4 +111,5 @@ func olderArrived(thread int64, res uintptr) {
 		mv.limit += windowStep // the page just stored joins the window
 		loadView(true)
 	}
+	panesOlder(thread)
 }

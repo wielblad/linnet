@@ -200,6 +200,9 @@ func paintPeek(hwnd, target uintptr) {
 // conversationShown reports whether the conversation is on screen in the program's window,
 // whatever its size: then a bubble beside its head would only repeat what is already seen.
 func conversationShown(id int64) bool {
+	if paneShown(id) {
+		return true
+	}
 	if id == 0 || selectedID != id || nav == navSettings || (lay.narrow && !lay.chat) || lg.active {
 		return false
 	}

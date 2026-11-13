@@ -29,7 +29,7 @@ type linkSpan struct {
 }
 
 // sel is the dragged selection: inside one message, in UTF-16 units of its text.
-var sel struct {
+type selState struct {
 	id      string
 	a, b    int
 	drag    bool
@@ -37,6 +37,8 @@ var sel struct {
 	x0, y0  int32
 	started bool
 }
+
+var sel = &mainBank.sel
 
 type hitMetrics struct {
 	pos, length              uint32

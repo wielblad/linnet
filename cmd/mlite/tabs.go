@@ -17,6 +17,8 @@ const (
 var headModes = []struct{ id, label string }{
 	{headModeOne, "Jedna naraz"},
 	{headModeTabs, "Zakładki"},
+	{headModeCols, "Kolumny"},
+	{headModeDock, "Dok"},
 }
 
 var headTabs struct {
@@ -53,6 +55,11 @@ func pickHeadMode() {
 		headTabs.ids, headTabs.drafts = nil, nil
 	}
 	saveConfig()
+	panesCloseAll() // each way has its own windows; the panel stays and takes its new shape
+	overlayRound()
+	if h := heads[compact.forID]; h != nil {
+		panelFollow(h)
+	}
 	layout()
 	invalidate(hMain)
 	invalidate(sv.hwnd)

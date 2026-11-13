@@ -287,6 +287,9 @@ func headMark(id int64) int {
 	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && vis != 0 && (compact.forID == id || (tabsMode() && tabIndex(id) >= 0)) {
 		return markNone
 	}
+	if p := paneFor(id); p != nil && !p.min { // open in a pane of its own
+		return markNone
+	}
 	if until, ok := typingUntil[id]; ok {
 		if time.Now().Before(until) {
 			return markTyping
@@ -467,6 +470,10 @@ func panelPlace(h *head) (x, y, w, ht int32) {
 // dragged, both windows are moved together and the old place is of no use.
 func panelPlaceAt(hr rect) (x, y, w, ht int32) {
 	w, ht = dp(380), dp(580)
+	dock := cfg.HeadMode == headModeDock
+	if dock { // a row of smaller panes along the bottom of the screen
+		w, ht = dp(340), dp(470)
+	}
 	var work rect
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
 	// The side is settled when the panel opens and kept while it is open: a panel that
@@ -496,6 +503,9 @@ func panelPlaceAt(hr rect) (x, y, w, ht int32) {
 		x = work.left + dp(4)
 	}
 	y = hr.top - dp(120)
+	if dock {
+		y = work.bottom - dp(8) - ht
+	}
 	if y+ht > work.bottom-dp(8) {
 		y = work.bottom - dp(8) - ht
 	}
@@ -580,6 +590,25 @@ func openHead(h *head) {
 	}
 	hidePeek(h)
 	vis, _, _ := pIsWindowVisible.Call(hMain)
+	if multiMode() {
+		// Several conversations at once. The head of one that is open puts it away, as the
+		// head of the panel does; a folded one is opened again. While the panel is up, the
+		// head of another conversation opens it beside the panel.
+		if p := paneFor(h.id); p != nil {
+			if p.min {
+				paneFront(p)
+				headsSync(false)
+			} else {
+				paneClose(p)
+			}
+			return
+		}
+		if compact.on && vis != 0 && compact.forID != h.id {
+			paneOpen(h.id)
+			return
+		}
+		defer panesPlace()
+	}
 	if tabsMode() && compact.on && vis != 0 {
 		// The panel is up: the head adds its conversation as a tab, or goes to it. The panel
 		// stays where it is; a click on the head of the conversation being read puts it away.
@@ -648,6 +677,7 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		if h.dragging {
 			moveWithPanel(h, h.originX+dx, h.originY+dy) // the panel is anchored to the head
+			panesPlace()
 		}
 		return 0
 	case wmLButtonUp:

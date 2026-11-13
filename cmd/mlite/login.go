@@ -516,6 +516,7 @@ func signOutAction() {
 }
 
 func signOut() {
+	panesCloseAll()
 	be.signOut()
 	if err := session.ForgetCookies(dataDir); err != nil {
 		be.notice("Nie można usunąć sesji: " + err.Error())

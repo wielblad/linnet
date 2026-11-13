@@ -107,6 +107,9 @@ func messageAt(x, y int32) (store.Message, bool) {
 // viewMenu opens the menu of a message: under the pointer, or for the newest visible message
 // when it was asked for from the keyboard.
 func viewMenu(x, y int32, keyboard bool) {
+	if inPane() {
+		return
+	}
 	var m store.Message
 	ok := false
 	if keyboard {

@@ -134,7 +134,7 @@ func buildSettings() {
 		{kind: srHeader, title: "Główki rozmów"},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},
-		{kind: srAction, title: "Rozmowy przy główkach", desc: "Jedna naraz: kolejna główka podmienia rozmowę. Zakładki: otwarte rozmowy zostają na pasku u góry panelu.",
+		{kind: srAction, title: "Rozmowy przy główkach", desc: "Jedna naraz: kolejna główka podmienia rozmowę. Zakładki: rozmowy na pasku u góry panelu. Kolumny: do trzech rozmów obok siebie. Dok: do trzech mniejszych okien u dołu ekranu.",
 			label: headModeLabel, action: pickHeadMode, whole: true},
 		{kind: srInfo, title: "Rozmowę przypniesz jako główkę prawym przyciskiem na liście rozmów."},
 		{kind: srHeader, title: "Uruchamianie i tło"},

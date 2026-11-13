@@ -72,7 +72,10 @@ type vitem struct {
 	timeS      string
 }
 
-var mv struct {
+// viewState is everything one view of a conversation keeps: what it shows, where it is
+// scrolled to, what the pointer is over. There is one for the window and one for each extra
+// conversation open beside the heads.
+type viewState struct {
 	hwnd      uintptr
 	items     []vitem
 	total     int32
@@ -100,6 +103,32 @@ var mv struct {
 	hotJump   bool   // the pointer is on the button that returns to the newest message
 	hotAct    int    // which of its actions is under the pointer
 }
+
+// viewBank holds the state of one view together with its selection. The code of the view
+// works on mv and sel, which point into the bank of the view a message is being handled
+// for: the window's own, unless a view of another conversation says otherwise.
+type viewBank struct {
+	mv  viewState
+	sel selState
+}
+
+var (
+	mainBank    viewBank
+	mv          = &mainBank.mv
+	bankByView  = map[uintptr]*viewBank{}
+	pendingBank *viewBank // the bank of a view that is being created and has no handle yet
+)
+
+// enterBank makes a bank the one the view code works on and gives back the way out.
+func enterBank(b *viewBank) func() {
+	pm, ps := mv, sel
+	mv, sel = &b.mv, &b.sel
+	return func() { mv, sel = pm, ps }
+}
+
+// inPane reports whether the view being handled belongs to an extra conversation rather
+// than to the window: such a view reads and scrolls, and leaves the rest to the window.
+func inPane() bool { return mv != &mainBank.mv }
 
 func isGroup(t store.Thread) bool { return !table.ThreadType(t.ThreadType).IsOneToOne() }
 func isE2EE(t store.Thread) bool  { return table.ThreadType(t.ThreadType).IsWhatsApp() }
@@ -175,7 +204,9 @@ func oneLine(s string, max int) string {
 
 // loadView reads the selected thread from the store and lays it out when something changed.
 func loadView(force bool) {
-	defer panelSync()
+	if !inPane() {
+		defer panelSync()
+	}
 	if !mv.has {
 		if len(mv.items) > 0 || force {
 			mv.items, mv.total, mv.scroll, mv.key = nil, 0, 0, 0
@@ -993,6 +1024,16 @@ func viewClick(x, y int32) {
 }
 
 func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	b := bankByView[hwnd]
+	if b == nil && pendingBank != nil && hwnd != hView {
+		b = pendingBank
+	}
+	if b == nil {
+		b = &mainBank
+	}
+	if &b.mv != mv {
+		defer enterBank(b)()
+	}
 	switch msg {
 	case wmEraseBkgnd:
 		return 1

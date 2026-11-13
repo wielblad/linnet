@@ -200,6 +200,7 @@ func main() {
 	registerClass("MliteSettings", settingsProc)
 	registerClass("MliteHead", headProc)
 	registerClass("MlitePeek", peekProc)
+	registerClass("MlitePane", paneProc)
 	createMainWindow(!*trayFlag)
 	refresh()
 	if dir := os.Getenv("MLITE_ICONDUMP"); dir != "" {
@@ -253,6 +254,27 @@ func main() {
 // handleKey takes the keys that the dialog manager would otherwise swallow or misroute.
 func handleKey(m *msgT) bool {
 	ctrl := keyDown(vkControl)
+	if p := paneOf(m.hwnd); p != nil { // a pane beside the heads has few keys of its own
+		switch {
+		case m.hwnd == p.input && m.wParam == vkReturn:
+			if m.lParam&(1<<30) == 0 {
+				paneSend(p)
+			}
+			return true
+		case m.wParam == vkEscape:
+			paneClose(p)
+			return true
+		case ctrl && m.wParam == 'C' && m.hwnd == p.view:
+			done := enterBank(p.bank)
+			if s := selText(); s != "" {
+				copyText(s)
+				viewToast("Skopiowano zaznaczenie")
+			}
+			done()
+			return true
+		}
+		return false
+	}
 	switch {
 	case m.hwnd == hInput && m.wParam == vkReturn && !keyDown(vkShift) && !ctrl:
 		if m.lParam&(1<<30) == 0 {
@@ -1253,6 +1275,9 @@ func inputChanged() {
 }
 
 func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if inPane() { // called from inside the view of a pane: the window works on its own view
+		defer enterBank(&mainBank)()
+	}
 	if msg == wmNcCalcSize && compact.on && wp != 0 {
 		return 0 // the whole window is its content; the frame stays only for the rounding
 	}
@@ -1418,6 +1443,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		setWindowIcons()
 		trayRefresh()
 		headsRedraw()
+		panesInvalidate()
 		layout()
 		layoutSettings()
 		listKey = 0
@@ -1492,6 +1518,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			relayoutView()
 		}
 		mediaArrived()
+		panesMedia()
 		viewerRefresh()
 		if pn.open {
 			invalidate(pn.hwnd)
@@ -1826,6 +1853,7 @@ func unreadNow(t *store.Thread) bool {
 }
 
 func refresh() {
+	defer panesRefresh()
 	retryRead := false
 	if be.mediaRetry.CompareAndSwap(true, false) { // the connection came back: failed pictures get another try
 		for id := range md.failed {
@@ -1867,6 +1895,9 @@ func refresh() {
 		t := &threads[i]
 		stamp := t.UpdatedAt.UnixMilli()
 		prev, seen := prevUpdated[t.ID]
+		if paneShown(t.ID) { // being read in a pane beside the heads
+			seenLocal[t.ID] = stamp
+		}
 		if retryRead && t.Unread() && seenLocal[t.ID] >= stamp {
 			be.openThread(*t, true) // seen while Messenger could not be told: tell it now
 		}

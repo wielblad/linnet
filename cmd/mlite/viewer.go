@@ -70,6 +70,10 @@ var (
 
 // openViewer shows the picture of a message large, inside the window.
 func openViewer(m store.Message) {
+	if inPane() { // the large picture covers the window, which an extra conversation is not in
+		viewToast("Zdjęcie otworzysz w pierwszej rozmowie")
+		return
+	}
 	if vw.video != "" {
 		closeViewer()
 	}
@@ -475,7 +479,7 @@ func openVideo(u string) {
 	if err != nil || pu.Scheme != "https" || strings.ContainsAny(u, "\" ") {
 		return
 	}
-	if dryOpen || !webview.Available() {
+	if dryOpen || !webview.Available() || inPane() {
 		playExternal(u)
 		return
 	}
