@@ -40,6 +40,8 @@ Ustawieniach pokazuje przycisk **Aktualizuj**. Aktualizacja pobiera instalator z
 repozytorium, sprawdza jego sumę kontrolną i podpis wydawcy (Ed25519), po czym podmienia
 program i uruchamia go ponownie. Plik niezgodny z podpisem jest odrzucany.
 
+Krótka instrukcja do przesłania komuś innemu: [docs/dla-kolegi.md](docs/dla-kolegi.md).
+
 ## Ryzyko
 
 - **Konto.** Meta wykrywa nietypową aktywność. Każda metoda logowania może skończyć się
