@@ -57,6 +57,7 @@ type rowData struct {
 	t                         store.Thread
 	person                    *meta.Person
 	title, preview, when, sub string
+	icon                      string // sign before the preview when the last message is an attachment
 	unread                    int
 	seen                      []int64 // who has read up to our last message
 }
@@ -183,6 +184,7 @@ func main() {
 	registerClass("MliteView", viewProc)
 	registerClass("MliteViewer", viewerProc)
 	registerClass("MlitePanel", panelProc)
+	registerClass("MliteDialog", dialogProc)
 	registerClass("MliteList", listWndProc)
 	registerClass("MliteReact", pickerProc)
 	registerClass("MliteLogin", loginProc)
@@ -463,6 +465,13 @@ func layout() {
 	pGetClientRect.Call(hMain, uintptr(unsafe.Pointer(&rc)))
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
+	if dlg.hwnd != 0 { // a question covers everything; the window as it was is drawn dimmed behind it
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet, pn.hwnd, lg.hwnd} {
+			show(c, false)
+		}
+		moveTo(dlg.hwnd, rect{0, 0, w, h})
+		return
+	}
 	if lg.active { // the sign-in screen covers everything else
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet} {
 			show(c, false)
@@ -1012,7 +1021,14 @@ func drawRow(d *drawItem) {
 		} else if seenW > 0 {
 			right -= seenW + dp(6)
 		}
-		c.text(row.preview, rect{x0, top + sp(21), right, top + sp(40)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+		px := x0
+		if row.icon != "" {
+			c.font(fnt.iconSm)
+			c.text(row.icon, rect{x0, top + sp(21), x0 + dp(16), top + sp(40)}, pal.fg2, dtSingleLine|dtVCenter)
+			c.font(fnt.prev)
+			px += dp(20)
+		}
+		c.text(row.preview, rect{px, top + sp(21), right, top + sp(40)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 		if badge != "" {
 			c.font(fnt.smallSemi)
 			col := pal.onAccent
@@ -1650,6 +1666,7 @@ func refresh() {
 	if last, err := be.db.LastSenders(be.ctx); err == nil {
 		lastSender = last
 	}
+	lastMedia, _ := be.db.LastAttachments(be.ctx)
 	now := time.Now()
 	fg := isForeground()
 	self := be.accountID()
@@ -1703,6 +1720,9 @@ func refresh() {
 		}
 		known[t.ID] = true
 		row := rowData{t: t, title: title, sub: sub, preview: oneLine(emojify(previewText(t.LastPreview)), 90), when: whenLabel(t.UpdatedAt), unread: unreadBy[t.ID]}
+		if icon, label := previewIcon(t.LastPreview, lastMedia[t.ID]); icon != "" {
+			row.icon, row.preview = icon, label
+		}
 		if row.unread == 0 {
 			row.seen = seenBy(t, self)
 		}

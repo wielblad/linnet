@@ -192,6 +192,29 @@ func (s *Store) AllReceipts(ctx context.Context) (map[int64][]Receipt, error) {
 }
 
 // LastSenders returns who sent the newest stored message of each thread.
+// LastAttachments returns, for each thread whose newest message is an attachment, its kind
+// and file name.
+func (s *Store) LastAttachments(ctx context.Context) (map[int64][2]string, error) {
+	rows, err := s.q.QueryContext(ctx, `SELECT thread_id, media_kind, media_name, unsent, MAX(timestamp_ms) FROM messages WHERE pending = 0 GROUP BY thread_id`)
+	if err != nil {
+		return nil, fmt.Errorf("last attachments: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64][2]string{}
+	for rows.Next() {
+		var thread, ts int64
+		var kind, name string
+		var unsent bool
+		if err := rows.Scan(&thread, &kind, &name, &unsent, &ts); err != nil {
+			return nil, fmt.Errorf("scan last attachment: %w", err)
+		}
+		if kind != "" && !unsent {
+			out[thread] = [2]string{kind, name}
+		}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) LastSenders(ctx context.Context) (map[int64]int64, error) {
 	rows, err := s.q.QueryContext(ctx, `SELECT thread_id, sender_id, MAX(timestamp_ms) FROM messages WHERE pending = 0 GROUP BY thread_id`)
 	if err != nil {

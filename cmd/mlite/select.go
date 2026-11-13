@@ -330,6 +330,11 @@ func paintTextMarks(g gfx, it *vitem, fill uint32) {
 // viewCursor picks the pointer for a place of the view: a hand over what opens on a click,
 // the text bar over text, the arrow elsewhere. It reports whether it set one.
 func viewCursor(x, y int32) bool {
+	if onJump(x, y) {
+		cur, _, _ := pLoadCursorW.Call(0, idcHand)
+		pSetCursor.Call(cur)
+		return true
+	}
 	id := uintptr(0)
 	sy := y + mv.scroll
 	for i := range mv.items {

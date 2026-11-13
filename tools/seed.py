@@ -82,8 +82,8 @@ for tid, title, ttype, prev, ago in (
     (106, "Tomek Zieliński", 15, "Wyślę Ci to wieczorem.", 2 * DAY + 3 * HOUR),
     (107, "Rodzina", 2, "Mama: Obiad w niedzielę o 14.", 3 * DAY),
     (108, "Ola Wiśniewska", 15, "Ty: Jasne, pasuje mi.", 4 * DAY + 2 * HOUR),
-    (109, "Piotr Lewandowski", 1, "Zdjęcie", 9 * DAY),
-    (110, "Magda Kamińska", 15, "Wszystkiego najlepszego!", 20 * DAY),
+    (109, "Piotr Lewandowski", 1, "[image]", 9 * DAY),
+    (110, "Magda Kamińska", 15, "[file]", 20 * DAY),
 ):
     msg(tid, tid if ttype != 2 else 105, ago, prev)
     thread(tid, title, ttype, prev, ago)
@@ -227,6 +227,9 @@ for i in range(1, 701):
     extra = " To jest trochę dłuższa wiadomość, żeby zawijała się w dymku na dwie linijki albo więcej." if i % 7 == 0 else ""
     msg(120, 120 if i % 3 else ME, 4 * DAY + (700 - i) * 7 * MIN, "Wiadomość %d.%s" % (i, extra))
 thread(120, "Historia Długa", 1, "Wiadomość 700.", 4 * DAY)
+
+msg(109, 109, 9 * DAY, "", media_kind="image", media_mime="image/jpeg", media_name="image", media_url="https://pictures.invalid/m/p109.jpg")
+msg(110, ME, 20 * DAY - MIN, "", media_kind="file", media_mime="application/pdf", media_name="faktura-2026-11.pdf", media_url="https://pictures.invalid/m/f110.pdf")
 
 c.commit()
 print("threads:", c.execute("select count(*) from threads").fetchone()[0], "messages:", c.execute("select count(*) from messages").fetchone()[0])

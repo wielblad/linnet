@@ -100,6 +100,7 @@ try {
     if ($step -match "^(\w+):(.*)$") { $verb = $matches[1]; $arg = $matches[2] }
     switch ($verb) {
       "wait" { Start-Sleep -Milliseconds ([int]$arg) }
+      "menukey" { [CK]::PostMessage($h, 0x0100, [IntPtr][int][char]$arg.ToUpper(), [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 700 }
       "screen" { [CK]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x0043) | Out-Null; Start-Sleep -Milliseconds 400; $r = New-Object CK+RECT; [CK]::GetWindowRect($h, [ref]$r) | Out-Null; $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size); $g.Dispose(); $bmp.Save((Join-Path (Split-Path $Out) "$arg.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); [CK]::SetWindowPos($h, [IntPtr](-2), 0, 0, 0, 0, 0x0013) | Out-Null }
       "procs" { $n = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count; $p.Refresh(); "procesy przegladarki [{0}]: {1}, pamiec programu {2:N1} MB" -f $arg, $n, ((Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter "IDProcess=$($p.Id)").WorkingSetPrivate/1MB) }
       "type" { $pan = [CK]::FindWindowEx($h, [IntPtr]::Zero, "MlitePanel", [NullString]::Value); $ed = [CK]::FindWindowEx($pan, [IntPtr]::Zero, "EDIT", [NullString]::Value); [CK]::SendText($ed, 0x00C2, [IntPtr]1, $arg) | Out-Null; Start-Sleep -Milliseconds 400 }

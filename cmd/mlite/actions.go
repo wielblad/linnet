@@ -205,11 +205,9 @@ func messageAction(id int) {
 		copyText(selText())
 		viewToast("Skopiowano zaznaczenie")
 	case id == idMsgUnsend:
-		text := "Usunąć tę wiadomość u wszystkich?\n\nZniknie także u rozmówców. Tego nie da się cofnąć."
-		r, _, _ := pMessageBoxW.Call(hMain, uintptr(unsafe.Pointer(u16(text))), uintptr(unsafe.Pointer(u16("Usuwanie wiadomości"))), 0x4|0x30|0x100) // Yes/No, warning, No is default
-		if r == 6 {
+		confirmBox("Usunąć tę wiadomość u wszystkich?", "Zniknie także u rozmówców. Tego nie da się cofnąć.", "Usuń u wszystkich", true, func() {
 			be.unsend(t, m)
-		}
+		})
 	case id == idMsgRetry:
 		be.retry(t, m)
 	case id == idMsgDrop:

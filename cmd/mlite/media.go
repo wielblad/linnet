@@ -78,10 +78,38 @@ func placeholderLabel(text string) string {
 		return "Wideo"
 	case "[sticker]":
 		return "Naklejka"
-	case "[audio]":
+	case "[audio]", "[voice]":
 		return "Nagranie głosowe"
+	case "[file]":
+		return "Plik"
+	case "[gif]":
+		return "GIF"
 	}
 	return ""
+}
+
+// previewIcon is the small sign shown before the preview of a conversation whose last
+// message is an attachment, and the words that go with it.
+func previewIcon(preview string, last [2]string) (string, string) {
+	kind := ""
+	if strings.HasPrefix(preview, "[") && strings.HasSuffix(preview, "]") && placeholderLabel(preview) != "" {
+		kind = strings.Trim(preview, "[]")
+	}
+	if kind == "" {
+		return "", ""
+	}
+	switch kind {
+	case "image", "sticker", "gif":
+		return gPhoto, placeholderLabel(preview)
+	case "video":
+		return gVideo, "Wideo"
+	case "audio", "voice":
+		return gMic, "Nagranie głosowe"
+	}
+	if name := last[1]; last[0] == "file" && name != "" && name != "file" { // a file is best told by its name
+		return gDoc, name
+	}
+	return gDoc, "Plik"
 }
 
 // previewText is the last message as shown in lists and notifications.

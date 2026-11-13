@@ -130,27 +130,76 @@ func drawable(path string) (string, int32, int32) {
 
 // ---- the preview beside a chat head: an ordinary small window, so emoji are in colour
 
+type peekData struct {
+	title, text, link string
+	hot               bool // the pointer is on "Otwórz link"
+}
+
 var (
 	pSetLayeredAttrs = user32.NewProc("SetLayeredWindowAttributes")
-	peeks            = map[uintptr][2]string{} // window -> title, text
+	peeks            = map[uintptr]*peekData{} // by window
 )
 
-func peekSize() (int32, int32) { return dp(260), dp(20) + sp(38) }
+// peekSize is the size of the bubble; with a link it has one more line, the one that opens it.
+func peekSize(link bool) (int32, int32) {
+	h := dp(20) + sp(38)
+	if link {
+		h += sp(28)
+	}
+	return dp(260), h
+}
+
+// peekLinkRect is the line that opens the link, in the bubble's own coordinates.
+func peekLinkRect() rect {
+	w, h := peekSize(true)
+	return rect{1, h - sp(28) - dp(4), w - 1, h - 1}
+}
 
 func paintPeek(hwnd, target uintptr) {
-	w, h := peekSize()
+	p := peeks[hwnd]
+	if p == nil {
+		return
+	}
+	w, h := peekSize(p.link != "")
 	buf := newBuffer(target, w, h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, w, h}, pal.line)
 	g := newGfx(buf.hdc)
 	g.round(1, 1, w-2, h-2, dp(9), dp(9), dp(9), dp(9), pal.card)
+	lr := peekLinkRect()
+	if p.link != "" {
+		if p.hot {
+			g.round(lr.left+dp(4), lr.top+dp(2), lr.right-lr.left-dp(8), lr.bottom-lr.top-dp(4), dp(6), dp(6), dp(6), dp(6), mix(pal.accent, pal.card, 14))
+		}
+		g.round(dp(12), lr.top, w-dp(24), 1, 0, 0, 0, 0, pal.line)
+	}
 	g.free()
-	p := peeks[hwnd]
 	c.font(fnt.smallSemi)
-	c.text(p[0], rect{dp(12), dp(8), w - dp(12), dp(8) + sp(18)}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.text(p.title, rect{dp(12), dp(8), w - dp(12), dp(8) + sp(18)}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.small)
-	c.text(p[1], rect{dp(12), dp(8) + sp(18), w - dp(12), h - dp(8)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.text(p.text, rect{dp(12), dp(8) + sp(18), w - dp(12), dp(8) + sp(38)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	if p.link != "" {
+		c.font(fnt.iconSm)
+		c.text(gLink, rect{dp(12), lr.top, dp(30), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter)
+		c.font(fnt.smallSemi)
+		c.text("Otwórz link · "+linkHost(p.link), rect{dp(32), lr.top, w - dp(12), lr.bottom}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+	}
 	buf.flush(0, 0)
+}
+
+// peekOpen opens the link of a bubble: a video inside the main window, anything else in
+// the browser.
+func peekOpen(hwnd uintptr) {
+	p := peeks[hwnd]
+	if p == nil || p.link == "" {
+		return
+	}
+	link := p.link
+	pShowWindow.Call(hwnd, swHide)
+	if youtubeID(link) != "" || playableLink(link) {
+		showMain()
+	}
+	openLink(link)
 }
 
 // ---- screen readers: the list tells them which conversation the keyboard is on

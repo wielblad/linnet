@@ -193,7 +193,7 @@ func headsSync(announce bool) {
 			pShowWindow.Call(h.hwnd, swShowNA)
 		}
 		if announce && known && unread > h.unread && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) {
-			showPeek(h, title, oneLine(previewText(t.LastPreview), 110))
+			showPeek(h, title, oneLine(previewText(t.LastPreview), 110), firstURL(t.LastPreview))
 		}
 		if unread == 0 {
 			hidePeek(h)
@@ -228,13 +228,18 @@ func headsClose() {
 }
 
 // showPeek shows the newest message beside the head for a few seconds.
-func showPeek(h *head, title, text string) {
+func showPeek(h *head, title, text, link string) {
 	if text == "" {
 		text = "Nowa wiadomość"
 	}
-	w, ht := peekSize()
+	hidePeek(h) // made anew each time: its size and whether it takes clicks depend on the message
+	w, ht := peekSize(link != "")
 	if h.peek == 0 {
-		h.peek = createWindow(wsExLayered|wsExTopmost|wsExToolWindow|wsExNoActivate|wsExTransparent, "MlitePeek", "Nowa wiadomość", wsPopup, 0, 0)
+		ex := uint32(wsExLayered | wsExTopmost | wsExToolWindow | wsExNoActivate)
+		if link == "" {
+			ex |= wsExTransparent // nothing to press: clicks go through to what is underneath
+		}
+		h.peek = createWindow(ex, "MlitePeek", "Nowa wiadomość", wsPopup, 0, 0)
 		if h.peek == 0 {
 			return
 		}
@@ -242,7 +247,7 @@ func showPeek(h *head, title, text string) {
 		rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(w+1), uintptr(ht+1), uintptr(dp(20)), uintptr(dp(20)))
 		pSetWindowRgn.Call(h.peek, rgn, 0)
 	}
-	peeks[h.peek] = [2]string{title, emojify(text)}
+	peeks[h.peek] = &peekData{title: title, text: emojify(text), link: link}
 	var r, work rect
 	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
@@ -254,7 +259,11 @@ func showPeek(h *head, title, text string) {
 	pSetWindowPos.Call(h.peek, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), 0x0004|0x0010)
 	pShowWindow.Call(h.peek, swShowNA)
 	invalidate(h.peek)
-	pSetTimer.Call(h.hwnd, 1, 6000, 0)
+	stay := uintptr(6000)
+	if link != "" {
+		stay = 10000 // long enough to reach for the link
+	}
+	pSetTimer.Call(h.hwnd, 1, stay, 0)
 }
 
 func hidePeek(h *head) {
@@ -397,6 +406,42 @@ func peekProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		hdc, _, _ := pBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 		paintPeek(hwnd, hdc)
 		pEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
+		return 0
+	case 0x0021: // WM_MOUSEACTIVATE: a click here never takes the keyboard from another program
+		return 3
+	case wmMouseMove:
+		if p := peeks[hwnd]; p != nil && p.link != "" {
+			x, y := lpPoint(lp)
+			r := peekLinkRect()
+			hot := x >= r.left && x < r.right && y >= r.top && y < r.bottom
+			if hot != p.hot {
+				p.hot = hot
+				invalidate(hwnd)
+				if hot {
+					trackLeave(hwnd)
+				}
+			}
+		}
+		return 0
+	case wmMouseLeave:
+		if p := peeks[hwnd]; p != nil && p.hot {
+			p.hot = false
+			invalidate(hwnd)
+		}
+		return 0
+	case wmSetCursor:
+		if p := peeks[hwnd]; p != nil && p.hot {
+			cur, _, _ := pLoadCursorW.Call(0, idcHand)
+			pSetCursor.Call(cur)
+			return 1
+		}
+	case wmLButtonUp:
+		if p := peeks[hwnd]; p != nil && p.link != "" {
+			x, y := lpPoint(lp)
+			if r := peekLinkRect(); x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+				peekOpen(hwnd)
+			}
+		}
 		return 0
 	}
 	r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wp, lp)

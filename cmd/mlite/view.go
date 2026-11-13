@@ -97,6 +97,7 @@ var mv struct {
 	limitFor  int64 // the thread that limit belongs to
 	localMore bool  // the store holds older messages than the loaded ones
 	spin      int   // step of the fetching mark
+	hotJump   bool  // the pointer is on the button that returns to the newest message
 	hotAct   int // which of its actions is under the pointer
 }
 
@@ -821,12 +822,30 @@ func paintView(target uintptr) {
 	bar := newGfx(buf.hdc)
 	paintActions(bar, c, true)
 	mv.sc.paint(bar, mv.w, mv.h, pal.layer)
+	jump, showJump := jumpRect()
+	if showJump {
+		s := jump.right - jump.left
+		fill := pal.card
+		if mv.hotJump {
+			fill = mix(pal.fg, pal.card, 8)
+		}
+		bar.ellipseA(jump.left, jump.top+dp(2), s, s, 0x33000000)
+		bar.ellipse(jump.left, jump.top, s, s, mix(pal.fg2, pal.line, 65))
+		bar.ellipse(jump.left+1, jump.top+1, s-2, s-2, fill)
+		if mv.hasNew { // something new is waiting below
+			bar.ellipse(jump.right-dp(12), jump.top-dp(2), dp(12), dp(12), pal.accent)
+		}
+	}
 	if mv.toast != "" { // drawn over the messages: it takes no room of its own
 		bar.pill(toast.left, toast.top+1, toast.right-toast.left, toast.bottom-toast.top, shadow)
 		bar.pill(toast.left, toast.top, toast.right-toast.left, toast.bottom-toast.top, mix(pal.fg, pal.layer, 92))
 	}
 	bar.free()
 	paintActions(0, c, false)
+	if showJump {
+		c.font(fnt.icon)
+		c.text(gDown, jump, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	}
 	if mv.toast != "" {
 		c.font(fnt.small)
 		c.text(mv.toast, toast, pal.layer, dtCenter|dtVCenter|dtSingleLine)
@@ -867,7 +886,25 @@ func viewToast(text string) {
 	invalidate(mv.hwnd)
 }
 
+// jumpRect is the round button, over the lower right corner of the conversation, that
+// returns to the newest message; it is there only while the reader is further back.
+func jumpRect() (rect, bool) {
+	s := dp(40)
+	r := rect{mv.w - dp(20) - s, mv.h - dp(16) - s, mv.w - dp(20), mv.h - dp(16)}
+	return r, mv.has && len(mv.items) > 0 && mv.total-mv.h-mv.scroll > mv.h/2
+}
+
+func onJump(x, y int32) bool {
+	r, ok := jumpRect()
+	return ok && x >= r.left && x < r.right && y >= r.top && y < r.bottom
+}
+
 func viewClick(x, y int32) {
+	if onJump(x, y) {
+		mv.sc.stop()
+		mv.sc.by(mv.total)
+		return
+	}
 	if actionClick() {
 		return
 	}
@@ -949,6 +986,14 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		x, y := lpPoint(lp)
 		if sel.drag {
 			selMove(x, y)
+			return 0
+		}
+		if hot := onJump(x, y); hot != mv.hotJump {
+			mv.hotJump = hot
+			invalidate(hwnd)
+		}
+		if mv.hotJump { // the button is over the messages: they do not react under it
+			viewHover(-1, -1)
 			return 0
 		}
 		if !mv.sc.mouse(msg, x, y, mv.w, mv.h) {
