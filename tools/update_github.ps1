@@ -78,7 +78,8 @@ function FindButton($bmp) {
     $run = 0
     for ($x = 560; $x -lt $bmp.Width - 40; $x++) {
       $c = $bmp.GetPixel($x, $y)
-      if ($c.B -gt 140 -and $c.B - $c.R -gt 60) {
+      $up = $bmp.GetPixel($x, $y - 10)   # a button is tall; the outline of a focused row is a thin line
+      if ($c.B -gt 140 -and $c.B - $c.R -gt 60 -and $up.B -gt 140 -and $up.B - $up.R -gt 60) {
         $run++
         if ($run -ge 60) { return @(($x - 30), $y) }
       } else { $run = 0 }
@@ -93,7 +94,7 @@ Clean
 $install = Join-Path $root "cmd\mlite\install.go"
 $orig = [IO.File]::ReadAllText($install)
 try {
-  [IO.File]::WriteAllText($install, ($orig -replace 'appVersion = "0\.1"', 'appVersion = "0.0.9"'), (New-Object Text.UTF8Encoding $false))
+  [IO.File]::WriteAllText($install, ($orig -replace 'appVersion = "[^"]+"', 'appVersion = "0.0.9"'), (New-Object Text.UTF8Encoding $false))
   & $sh "$root/tools/build.sh" | Out-Null
   Copy-Item (Join-Path $root "build\Linnet-Setup.exe") (Join-Path $env:TEMP "Linnet-Setup-009.exe") -Force
 } finally {
@@ -102,6 +103,7 @@ try {
 & $sh "$root/tools/build.sh" | Out-Null
 "zbudowano wersje 0.0.9 do instalacji; opublikowana jest {0}" -f ((Get-Content (Join-Path $root "latest.json") -Raw | ConvertFrom-Json).version)
 
+$published = (Get-Content (Join-Path $root "latest.json") -Raw | ConvertFrom-Json).version
 $i = Start-Process -FilePath (Join-Path $env:TEMP "Linnet-Setup-009.exe") -ArgumentList @("-install", "-quiet", "-name", "`"$name`"") -PassThru -Wait
 "instalacja 0.0.9: kod {0}, wersja: {1}" -f $i.ExitCode, (Version)
 
@@ -136,7 +138,7 @@ Shot $h "github-3-pobieranie.png"
 $ok = $false
 for ($k = 0; $k -lt 180 -and -not $ok; $k++) {
   Start-Sleep -Seconds 1
-  if ((Version) -eq "0.1") { $ok = $true }
+  if ((Version) -eq $published) { $ok = $true }
 }
 $p.Refresh()
 "stara wersja zakonczona: {0} | wersja po aktualizacji: {1} | program dziala: {2}" -f $p.HasExited, (Version), [bool](Get-Process $slug -ErrorAction SilentlyContinue)
