@@ -1,4 +1,4 @@
-param([string]$Exe, [string]$DataDir, [string]$Out, [int]$Select = 2, [string]$Clicks = "", [int]$Width = 1020, [int]$Height = 760, [string]$Extra = "")
+param([string]$Exe, [string]$DataDir, [string]$Out, [int]$Select = 2, [string]$Clicks = "", [int]$Width = 1020, [int]$Height = 760, [string]$Extra = "", [switch]$Real)
 # Starts the program on test data with MLITE_DRYOPEN (nothing is really opened), selects a
 # conversation, clicks at the given points and saves a picture of the window.
 # -Clicks "x,y;x,y" are coordinates in the saved picture (window-relative).
@@ -26,6 +26,7 @@ public class CK {
   [DllImport("user32.dll")] public static extern bool GetKeyboardState(byte[] s);
   [DllImport("user32.dll")] public static extern bool SetKeyboardState(byte[] s);
   [DllImport("user32.dll")] public static extern IntPtr GetFocus();
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   public struct RECT { public int L, T, R, B; }
@@ -33,7 +34,7 @@ public class CK {
 }
 "@
 [CK]::SetProcessDPIAware() | Out-Null
-$env:MLITE_DRYOPEN = "1"; $env:MLITE_KEEPHOVER = "1"
+if (-not $Real) { $env:MLITE_DRYOPEN = "1" }; $env:MLITE_KEEPHOVER = "1"
 $argList = @("-data-dir", "`"$DataDir`"", "-self", "999", "-offline")
 if ($Extra -ne "") { $argList += $Extra.Split(" ") }
 $p = Start-Process -FilePath $Exe -ArgumentList $argList -PassThru
@@ -99,6 +100,8 @@ try {
     if ($step -match "^(\w+):(.*)$") { $verb = $matches[1]; $arg = $matches[2] }
     switch ($verb) {
       "wait" { Start-Sleep -Milliseconds ([int]$arg) }
+      "screen" { [CK]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x0043) | Out-Null; Start-Sleep -Milliseconds 400; $r = New-Object CK+RECT; [CK]::GetWindowRect($h, [ref]$r) | Out-Null; $bmp = New-Object System.Drawing.Bitmap ($r.R - $r.L), ($r.B - $r.T); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size); $g.Dispose(); $bmp.Save((Join-Path (Split-Path $Out) "$arg.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); [CK]::SetWindowPos($h, [IntPtr](-2), 0, 0, 0, 0, 0x0013) | Out-Null }
+      "procs" { $n = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue).Count; $p.Refresh(); "procesy przegladarki [{0}]: {1}, pamiec programu {2:N1} MB" -f $arg, $n, ((Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter "IDProcess=$($p.Id)").WorkingSetPrivate/1MB) }
       "type" { $pan = [CK]::FindWindowEx($h, [IntPtr]::Zero, "MlitePanel", [NullString]::Value); $ed = [CK]::FindWindowEx($pan, [IntPtr]::Zero, "EDIT", [NullString]::Value); [CK]::SendText($ed, 0x00C2, [IntPtr]1, $arg) | Out-Null; Start-Sleep -Milliseconds 400 }
       "clip" { "schowek [{0}]: {1}" -f $arg, [Windows.Forms.Clipboard]::GetText() }
       "shot" { Shot (Join-Path (Split-Path $Out) "$arg.png") }

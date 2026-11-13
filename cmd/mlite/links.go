@@ -146,9 +146,12 @@ func openURL(raw string) {
 	}
 }
 
-// playInWindow shows a video page in a small window without browser chrome. The window
-// belongs to Microsoft Edge: it costs this program no memory and is gone when closed.
-func playInWindow(raw string) {
+// playInWindow plays a video page inside the program's own window.
+func playInWindow(raw string) { openVideo(raw) }
+
+// playExternal shows a video page in a small Edge window without browser chrome, or in the
+// default browser: the way out when no browser can be embedded.
+func playExternal(raw string) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || strings.ContainsAny(raw, "\" ") {
 		return

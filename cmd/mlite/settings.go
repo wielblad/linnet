@@ -25,10 +25,12 @@ type config struct {
 	// Quiet are the conversations this program does not notify about (its own switch,
 	// separate from muting in Messenger).
 	Quiet []int64 `json:"quiet"`
+	// VideoSession hands the embedded video player this program's Facebook session.
+	VideoSession bool `json:"video_session"`
 }
 
 var (
-	cfg     = config{Toasts: true, Body: true, Background: true, ShowMem: true, HeadPreview: true}
+	cfg     = config{Toasts: true, Body: true, Background: true, ShowMem: true, HeadPreview: true, VideoSession: true}
 	cfgPath string
 	dataDir string
 )
@@ -107,6 +109,9 @@ func buildSettings() {
 		{kind: srInfo, title: "Przypinanie rozmowy do pulpitu", desc: "Prawy przycisk na rozmowie na liście, potem „Przypnij jako główkę”."},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},
+		{kind: srHeader, title: "Filmy"},
+		{kind: srToggle, title: "Filmy z Facebooka jako zalogowany", desc: "Odtwarzacz w oknie programu dostaje Twoją sesję Facebooka, żeby rolki nie zatrzymywały się na logowaniu. Po wyłączeniu gra tylko to, co publiczne.",
+			get: func() bool { return cfg.VideoSession }, set: func(v bool) { cfg.VideoSession = v }},
 		{kind: srHeader, title: "Uruchamianie"},
 		{kind: srToggle, title: "Uruchamiaj razem z Windows", get: autostartOn, set: setAutostart},
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",

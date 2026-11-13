@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,11 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/rs/zerolog/log"
+
+	"lazyfmess/internal/session"
 	"lazyfmess/internal/store"
+	"lazyfmess/internal/webview"
 )
 
 const (
@@ -57,11 +62,17 @@ var (
 		note   string
 		btn    [vbCount]rect
 		pic    rect
+		video  string // address played in the embedded browser; "" while pictures are shown
+		web    *webview.View
+		webMsg string // what the player area says until the browser covers it
 	}
 )
 
 // openViewer shows the picture of a message large, inside the window.
 func openViewer(m store.Message) {
+	if vw.video != "" {
+		closeViewer()
+	}
 	vw.list = vw.list[:0]
 	vw.idx = 0
 	for i := range mv.items {
@@ -78,7 +89,7 @@ func openViewer(m store.Message) {
 	}
 	vw.hot, vw.note = -1, ""
 	if vw.hwnd == 0 {
-		vw.hwnd = createWindow(0, "MliteViewer", "Podgląd zdjęcia", wsChild|wsVisible|wsTabStop, hMain, 0)
+		vw.hwnd = createWindow(0, "MliteViewer", "Podgląd zdjęcia", wsChild|wsVisible|wsTabStop|wsClipChildren, hMain, 0)
 	}
 	viewerLoad()
 	layout()
@@ -89,6 +100,11 @@ func closeViewer() {
 	if vw.hwnd == 0 {
 		return
 	}
+	if vw.web != nil { // the browser goes first: its processes end with it
+		vw.web.Close()
+		vw.web = nil
+	}
+	vw.video = ""
 	h := vw.hwnd
 	vw.hwnd = 0
 	viewerDrop()
@@ -188,6 +204,9 @@ func viewerLayout(c canvas) {
 }
 
 func viewerHas(id int) bool {
+	if vw.video != "" {
+		return id == vbOpen || id == vbClose
+	}
 	switch id {
 	case vbPrev:
 		return vw.idx > 0
@@ -316,7 +335,9 @@ func viewerAct(id int) {
 	case vbNext:
 		viewerStep(1)
 	case vbOpen:
-		if p, ok := mediaFile(vw.list[vw.idx]); ok {
+		if vw.video != "" {
+			openURL(vw.video)
+		} else if p, ok := mediaFile(vw.list[vw.idx]); ok {
 			safeOpen(p)
 		}
 	case vbSave:
@@ -326,6 +347,9 @@ func viewerAct(id int) {
 
 // viewerSave asks where to put a copy of the picture and writes it there.
 func viewerSave() {
+	if vw.video != "" || vw.idx >= len(vw.list) {
+		return
+	}
 	m := vw.list[vw.idx]
 	src, ok := mediaFile(m)
 	if !ok {
@@ -375,7 +399,9 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmPaint:
 		var ps paintStruct
 		hdc, _, _ := pBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-		if vw.hwnd == hwnd && len(vw.list) > 0 {
+		if vw.hwnd == hwnd && vw.video != "" {
+			paintVideo(hdc)
+		} else if vw.hwnd == hwnd && len(vw.list) > 0 {
 			paintViewer(hdc)
 		}
 		pEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
@@ -384,6 +410,9 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		var rc rect
 		pGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 		vw.w, vw.h = rc.right, rc.bottom
+		if vw.web != nil {
+			vw.web.SetBounds(0, dp(56), vw.w, vw.h)
+		}
 		invalidate(hwnd)
 		return 0
 	case wmMouseMove:
@@ -406,7 +435,7 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		x, y := lpPoint(lp)
 		if id := viewerHit(x, y); id >= 0 {
 			viewerAct(id)
-		} else if p := vw.pic; !(x >= p.left && x < p.right && y >= p.top && y < p.bottom) && y > dp(56) {
+		} else if p := vw.pic; vw.video == "" && !(x >= p.left && x < p.right && y >= p.top && y < p.bottom) && y > dp(56) {
 			closeViewer() // a click on the dark ground closes, like in other viewers
 		}
 		return 0
@@ -434,4 +463,103 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	}
 	r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wp, lp)
 	return r
+}
+
+// ---- a video page played inside the window
+
+// openVideo plays a video page in a browser embedded in the window, the way a picture is
+// shown large. Without such a browser on this computer the page opens in a browser window.
+func openVideo(u string) {
+	pu, err := url.Parse(u)
+	if err != nil || pu.Scheme != "https" || strings.ContainsAny(u, "\" ") {
+		return
+	}
+	if dryOpen || !webview.Available() {
+		playExternal(u)
+		return
+	}
+	closeViewer()
+	vw.video, vw.webMsg = u, "Ładowanie odtwarzacza…"
+	vw.list, vw.hot, vw.note = nil, -1, ""
+	vw.hwnd = createWindow(0, "MliteViewer", "Odtwarzacz", wsChild|wsVisible|wsTabStop|wsClipChildren, hMain, 0)
+	layout()
+	pSetFocus.Call(vw.hwnd)
+	failed := func(err error) {
+		log.Warn().Err(err).Msg("video player")
+		if vw.video == u {
+			vw.webMsg = "Nie udało się uruchomić odtwarzacza. Użyj przycisku „Otwórz w przeglądarce”."
+			invalidate(vw.hwnd)
+		}
+	}
+	view, err := webview.Open(vw.hwnd, [4]int32{0, dp(56), vw.w, vw.h}, filepath.Join(dataDir, "webview"), u, videoCookies(u), func(err error) {
+		if err != nil {
+			failed(err)
+		}
+	})
+	if err != nil {
+		failed(err)
+		return
+	}
+	vw.web = view
+}
+
+// videoCookies hands the embedded browser the Facebook session this program is signed in
+// with, so that Facebook videos play as for a signed-in person. Only for Facebook's own
+// addresses, and only while the setting allows it.
+func videoCookies(u string) []webview.Cookie {
+	host := linkHost(u)
+	if !cfg.VideoSession || !(host == "facebook.com" || strings.HasSuffix(host, ".facebook.com") || host == "fb.watch") {
+		return nil
+	}
+	creds, err := session.LoadCookies(dataDir)
+	if err != nil || creds == nil || creds.Platform != "facebook" {
+		return nil
+	}
+	var out []webview.Cookie
+	for name, value := range creds.Values {
+		if name == "" || value == "" {
+			continue
+		}
+		out = append(out, webview.Cookie{Name: name, Value: value, Domain: ".facebook.com", Path: "/", Secure: true, HTTPOnly: name == "xs" || name == "datr" || name == "sb" || name == "fr"})
+	}
+	return out
+}
+
+func paintVideo(target uintptr) {
+	buf := newBuffer(target, vw.w, vw.h)
+	c := canvas{buf.hdc}
+	c.fill(rect{0, 0, vw.w, vw.h}, viewerGround)
+	bar, pad, s := dp(56), dp(12), dp(36)
+	x := vw.w - pad
+	vw.btn[vbClose] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
+	x -= s + dp(8)
+	c.font(fnt.body)
+	label := "Otwórz w przeglądarce"
+	w := dp(14) + dp(20) + dp(6) + c.width(label) + dp(14)
+	vw.btn[vbOpen] = rect{x - w, (bar - s) / 2, x, (bar + s) / 2}
+	hotFill := mix(viewerInk, viewerGround, 16)
+	g := newGfx(buf.hdc)
+	if r := vw.btn[vbClose]; vw.hot == vbClose {
+		g.round(r.left, r.top, s, s, dp(6), dp(6), dp(6), dp(6), hotFill)
+	}
+	r := vw.btn[vbOpen]
+	g.round(r.left, r.top, r.right-r.left, s, dp(6), dp(6), dp(6), dp(6), mix(viewerInk, viewerGround, 26))
+	fill := uint32(viewerGround)
+	if vw.hot == vbOpen {
+		fill = hotFill
+	}
+	g.round(r.left+1, r.top+1, r.right-r.left-2, s-2, dp(5), dp(5), dp(5), dp(5), fill)
+	g.free()
+	textRight := r.left - dp(16)
+	c.font(fnt.bodySemi)
+	c.text("Wideo · "+linkHost(vw.video), rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.font(fnt.small)
+	c.text(strings.TrimPrefix(vw.video, "https://"), rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.font(fnt.icon)
+	c.text(gCloseBig, vw.btn[vbClose], viewerInk, dtCenter|dtVCenter|dtSingleLine)
+	c.text(gOpenOut, rect{r.left + dp(14), r.top, r.left + dp(34), r.bottom}, viewerInk, dtSingleLine|dtVCenter)
+	c.font(fnt.body)
+	c.text(label, rect{r.left + dp(40), r.top, r.right - dp(10), r.bottom}, viewerInk, dtSingleLine|dtVCenter)
+	c.text(vw.webMsg, rect{dp(24), bar, vw.w - dp(24), vw.h}, viewerInk2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
+	buf.flush(0, 0)
 }
