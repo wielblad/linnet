@@ -16,7 +16,7 @@ const (
 	gwlStyle    = ^uintptr(15) // GWL_STYLE (-16)
 	gwlExStyle  = ^uintptr(19) // GWL_EXSTYLE (-20)
 	wmNcHitTest = 0x0084
-	htCaption   = 2
+	htClient    = 1
 	hwndTopmost = ^uintptr(0) // HWND_TOPMOST (-1)
 	hwndNoTop   = ^uintptr(1) // HWND_NOTOPMOST (-2)
 	swpFrame    = 0x0020
@@ -88,26 +88,6 @@ func overlayRound() {
 	}
 	pDwmSetWindowAttribute.Call(hMain, dwmaCornerPreference, uintptr(unsafe.Pointer(&round)), 4)
 	pDwmSetWindowAttribute.Call(hMain, dwmaBorderColour, uintptr(unsafe.Pointer(&border)), 4)
-}
-
-// overlayHit lets the panel be dragged by the empty part of its header, the way a title bar
-// would, without swallowing the buttons drawn there.
-func overlayHit(lp uintptr) (uintptr, bool) {
-	if !compact.on {
-		return 0, false
-	}
-	pt := point{int32(int16(lp)), int32(int16(lp >> 16))}
-	pScreenToClient.Call(hMain, uintptr(unsafe.Pointer(&pt)))
-	h := lay.header
-	if pt.y < h.top || pt.y >= h.bottom || pt.x < h.left {
-		return 0, false
-	}
-	for _, b := range []rect{lay.back, lay.hbSearch, lay.hbInfo} {
-		if b.right > b.left && pt.x >= b.left && pt.x < b.right && pt.y >= b.top && pt.y < b.bottom {
-			return 0, false
-		}
-	}
-	return htCaption, true
 }
 
 // hideOverlay puts the panel away and leaves the head on the desktop; the program itself

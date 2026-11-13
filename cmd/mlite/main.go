@@ -1233,10 +1233,10 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	if msg == wmNcCalcSize && compact.on && wp != 0 {
 		return 0 // the whole window is its content; the frame stays only for the rounding
 	}
-	if msg == wmNcHitTest {
-		if hit, ok := overlayHit(lp); ok {
-			return hit
-		}
+	if msg == wmNcHitTest && compact.on {
+		// The panel belongs to its head: it is moved by the head and by nothing else, so
+		// every point of it is content — no title bar to drag, no edges to pull.
+		return htClient
 	}
 	if msg == showMsg && showMsg != 0 { // a second start of the program asks this one to come forward
 		showMain()

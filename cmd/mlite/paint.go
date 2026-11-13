@@ -134,13 +134,20 @@ func loadPalette() {
 
 var fnt struct {
 	body, bodySemi, small, smallSemi, prev, name, nameBold, title, head, icon, iconSm, iconLg uintptr
+	bodyIt                                                                                    uintptr // a message taken back
 	av, avSm                                                                                  uintptr // initials inside avatars: sized with the circle, not with the text setting
 	emoji                                                                                     uintptr // the reaction bar
 	lineH                                                                                     int32
 }
 
-func makeFont(px int32, weight int, face string) uintptr {
-	h, _, _ := pCreateFontW.Call(uintptr(-int(px)), 0, 0, 0, uintptr(weight), 0, 0, 0, 1, 0, 0, 5, 0,
+func makeFont(px int32, weight int, face string) uintptr { return makeFontStyle(px, weight, face, false) }
+
+func makeFontStyle(px int32, weight int, face string, italic bool) uintptr {
+	slant := uintptr(0)
+	if italic {
+		slant = 1
+	}
+	h, _, _ := pCreateFontW.Call(uintptr(-int(px)), 0, 0, 0, uintptr(weight), slant, 0, 0, 1, 0, 0, 5, 0,
 		uintptr(unsafe.Pointer(u16(face))))
 	return h
 }
@@ -165,7 +172,7 @@ func pickFace(hwnd uintptr, faces ...string) string {
 
 func loadFonts(hwnd uintptr) {
 	dwForgetFonts()
-	for _, h := range []uintptr{fnt.body, fnt.bodySemi, fnt.small, fnt.smallSemi, fnt.prev, fnt.name, fnt.nameBold, fnt.title, fnt.head, fnt.icon, fnt.iconSm, fnt.iconLg, fnt.av, fnt.avSm, fnt.emoji} {
+	for _, h := range []uintptr{fnt.body, fnt.bodyIt, fnt.bodySemi, fnt.small, fnt.smallSemi, fnt.prev, fnt.name, fnt.nameBold, fnt.title, fnt.head, fnt.icon, fnt.iconSm, fnt.iconLg, fnt.av, fnt.avSm, fnt.emoji} {
 		if h != 0 {
 			pDeleteObject.Call(h)
 		}
@@ -174,6 +181,7 @@ func loadFonts(hwnd uintptr) {
 	display := pickFace(hwnd, "Segoe UI Variable Display", "Segoe UI")
 	icons := pickFace(hwnd, "Segoe Fluent Icons", "Segoe MDL2 Assets")
 	fnt.body = regFont(sp(14), 400, text)
+	fnt.bodyIt = regFontStyle(sp(14), 400, text, true)
 	fnt.bodySemi = regFont(sp(12), 600, text)
 	fnt.small = regFont(sp(12), 400, text)
 	fnt.smallSemi = regFont(sp(12), 600, text)

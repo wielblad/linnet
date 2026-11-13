@@ -49,6 +49,8 @@ type Client struct {
 	savedNative   *session.NativeSession
 	ready         chan struct{}
 	connectErr    error
+	stopMu        sync.Mutex
+	stop          func() // ends this client's own background work when it is disconnected
 }
 
 func New(sess *session.Cookies, dataDir string, logWriter io.Writer, handler EventHandler) (*Client, error) {
@@ -213,8 +215,15 @@ func (c *Client) connect(ctx context.Context) error {
 	if err := c.e2ee.Connect(); err != nil {
 		return fmt.Errorf("connect e2ee: %w", err)
 	}
-	go c.persistStateLoop(ctx)
-	go c.e2eeWatchdog(ctx)
+	// The background work belongs to this client, not to the program: a client that has been
+	// disconnected (signing out, signing in again) must stop watching, or it keeps waking a
+	// connection whose database is already closed and throws the new client's socket off.
+	own, stop := context.WithCancel(ctx)
+	c.stopMu.Lock()
+	c.stop = stop
+	c.stopMu.Unlock()
+	go c.persistStateLoop(own)
+	go c.e2eeWatchdog(own)
 	return nil
 }
 
@@ -249,6 +258,13 @@ func (c *Client) e2eeWatchdog(ctx context.Context) {
 func (c *Client) Disconnect() {
 	if c == nil {
 		return
+	}
+	c.stopMu.Lock()
+	stop := c.stop
+	c.stop = nil
+	c.stopMu.Unlock()
+	if stop != nil {
+		stop() // first the watching, then the connections it would otherwise wake again
 	}
 	if state, err := c.mx.DumpState(); err == nil && len(state) > 0 {
 		_ = session.SaveState(c.dataDir, state)

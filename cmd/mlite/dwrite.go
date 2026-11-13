@@ -38,6 +38,7 @@ type fontSpec struct {
 	px     int32
 	weight int
 	face   string
+	slant  uintptr // DWRITE_FONT_STYLE: 0 upright, 2 italic
 }
 
 var dw struct {
@@ -64,11 +65,20 @@ func com(obj uintptr, idx int, args ...uintptr) uintptr {
 
 // regFont creates a GDI font and remembers how to build its DirectWrite twin.
 func regFont(px int32, weight int, face string) uintptr {
-	h := makeFont(px, weight, face)
+	return regFontStyle(px, weight, face, false)
+}
+
+// regFontStyle is the same, upright or slanted: a message taken back is written in italics.
+func regFontStyle(px int32, weight int, face string, italic bool) uintptr {
+	h := makeFontStyle(px, weight, face, italic)
 	if dw.specs == nil {
 		dw.specs = map[uintptr]fontSpec{}
 	}
-	dw.specs[h] = fontSpec{px, weight, face}
+	slant := uintptr(0)
+	if italic {
+		slant = 2
+	}
+	dw.specs[h] = fontSpec{px, weight, face, slant}
 	return h
 }
 
@@ -135,7 +145,7 @@ func dwFormat(f uintptr) uintptr {
 		return 0
 	}
 	var p, sign uintptr
-	hr := com(dw.dwf, 15, uintptr(unsafe.Pointer(u16(spec.face))), 0, uintptr(spec.weight), 0, 5,
+	hr := com(dw.dwf, 15, uintptr(unsafe.Pointer(u16(spec.face))), 0, uintptr(spec.weight), spec.slant, 5,
 		uintptr(math.Float32bits(float32(spec.px))), uintptr(unsafe.Pointer(u16("pl-pl"))), uintptr(unsafe.Pointer(&p))) // CreateTextFormat
 	if hr != 0 || p == 0 {
 		return 0

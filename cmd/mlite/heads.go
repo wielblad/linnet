@@ -138,6 +138,21 @@ func layer(hwnd uintptr, w, h int32, draw func(g gfx)) {
 	pReleaseDC.Call(0, screen)
 }
 
+// glow lays a soft round light on the ground: rings of barely visible colour, so that the
+// edge melts away instead of cutting a disc out of the background.
+func (g gfx) glow(cx, cy, r int32, argb uint32) {
+	const steps = 16
+	a, rgb := (argb>>24)&0xFF, argb&0xFFFFFF
+	step := a / steps
+	if step == 0 {
+		step = 1
+	}
+	for i := int32(steps); i >= 1; i-- {
+		rr := r * i / steps
+		g.ellipseA(cx-rr, cy-rr, 2*rr, 2*rr, step<<24|rgb)
+	}
+}
+
 func (g gfx) ellipseA(x, y, w, h int32, argb uint32) {
 	var br uintptr
 	pGdipCreateSolidFill.Call(uintptr(argb), uintptr(unsafe.Pointer(&br)))

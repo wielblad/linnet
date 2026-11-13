@@ -403,7 +403,7 @@ func layoutView() {
 		if me && it.state != stFailed {
 			it.metaW += dp(18)
 		}
-		c.font(fnt.body)
+		c.font(bodyFont(m.Unsent))
 		it.textW, it.textH = c.measure(it.body, inner)
 		it.links = findLinks(&it)
 		contentW := it.textW
@@ -557,6 +557,22 @@ func olderStateFor(localMore bool) int {
 	return 0
 }
 
+// bodyFont is the type a message is written in: one taken back is in italics.
+func bodyFont(unsent bool) uintptr {
+	if unsent && fnt.bodyIt != 0 {
+		return fnt.bodyIt
+	}
+	return fnt.body
+}
+
+// inner1 is the corner radius one pixel inside a rounded shape.
+func inner1(r int32) int32 {
+	if r > 1 {
+		return r - 1
+	}
+	return 0
+}
+
 func paintView(target uintptr) {
 	buf := newBuffer(target, mv.w, mv.h)
 	c := canvas{buf.hdc}
@@ -625,8 +641,16 @@ func paintView(target uintptr) {
 			if mv.flash != "" && it.m.ID == mv.flash { // found by the search: a frame for a moment
 				g.round(it.bx-dp(3), by-dp(3), it.bw+dp(6), it.bh+dp(6), tl+dp(3), tr+dp(3), br+dp(3), bl+dp(3), pal.accent)
 			}
-			g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
-			g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
+			if it.m.Unsent {
+				// A message taken back is no longer a message: an empty outline, no colour
+				// of its own and no shadow, so that the eye passes over it.
+				fill = pal.layer
+				g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, mix(pal.fg2, pal.layer, 42))
+				g.round(it.bx+1, by+1, it.bw-2, it.bh-2, inner1(tl), inner1(tr), inner1(br), inner1(bl), fill)
+			} else {
+				g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
+				g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
+			}
 			paintTextMarks(g, it, fill)
 			if it.og != "" {
 				ogKick(it.og)
@@ -715,8 +739,12 @@ func paintView(target uintptr) {
 			}
 			cy := by + padT
 			if it.showName {
+				nameCol := pal.accentText
+				if it.m.Unsent {
+					nameCol = mix(pal.fg2, pal.layer, 70)
+				}
 				c.font(fnt.bodySemi)
-				c.text(senderName(it.m), rect{x0, cy, x1, cy + sp(18)}, pal.accentText, dtSingleLine|dtEndEllipsis)
+				c.text(senderName(it.m), rect{x0, cy, x1, cy + sp(18)}, nameCol, dtSingleLine|dtEndEllipsis)
 				cy += sp(18)
 			}
 			if it.m.ReplyText != "" {
@@ -752,9 +780,9 @@ func paintView(target uintptr) {
 			}
 			col := ink
 			if it.m.Unsent {
-				col = ink2
+				col = mix(pal.fg2, pal.layer, 78)
 			}
-			c.font(fnt.body)
+			c.font(bodyFont(it.m.Unsent))
 			c.text(it.body, rect{x0, cy, x0 + it.textW + 1, cy + it.textH}, col, dtWordBreak|dtEditControl)
 			if it.chip != "" {
 				ty := cy

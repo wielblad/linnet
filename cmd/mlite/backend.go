@@ -295,6 +295,16 @@ func (b *backend) retry(thread store.Thread, m store.Message) {
 }
 
 func (b *backend) run() {
+	// Signing in again (after signing out, or after the session expired) starts this over.
+	// Whatever was connected before has to go first: two clients on one account throw each
+	// other's connection off, and the older one writes to a database it has already closed.
+	if old := b.current(); old != nil {
+		b.mu.Lock()
+		b.client = nil
+		b.mu.Unlock()
+		b.armed.Store(false)
+		old.Disconnect()
+	}
 	creds, err := session.LoadCookies(b.dir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
