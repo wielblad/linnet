@@ -29,6 +29,7 @@ const (
 
 	idFind     = 333
 	idInfo     = 334
+	idClose    = 335
 	timerFlash = 23
 	timerToast = 24
 	idPanelEdit = 360
@@ -70,7 +71,7 @@ var pn struct {
 	forCount    int
 }
 
-var hFind, hInfo uintptr // the header buttons that open the panel
+var hFind, hInfo, hClose uintptr // the buttons at the right end of the conversation header
 
 // drawHeaderBtn draws one of the two buttons at the right end of the conversation header.
 func drawHeaderBtn(d *drawItem) {
@@ -80,6 +81,13 @@ func drawHeaderBtn(d *drawItem) {
 	c.fill(rect{0, 0, w, h}, pal.card)
 	search := d.ctlID == idFind
 	fill := pal.card
+	if d.ctlID == idClose { // the panel of the overlay: only this one is there
+		if d.itemState&odsSelected != 0 {
+			fill = mix(pal.fg, pal.card, 14)
+		} else if hotBtn == d.hwndItem {
+			fill = mix(pal.signal, pal.card, 70) // closing is the red button of a title bar
+		}
+	}
 	switch {
 	case pn.open && pn.search == search: // the panel it opened is showing
 		fill = mix(pal.accent, pal.card, 22)
@@ -94,11 +102,18 @@ func drawHeaderBtn(d *drawItem) {
 		g.free()
 	}
 	glyph := gInfo
-	if search {
+	switch {
+	case d.ctlID == idClose:
+		glyph = gClose
+	case search:
 		glyph = gSearch
 	}
+	ink := pal.fg
+	if d.ctlID == idClose && hotBtn == d.hwndItem {
+		ink = 0xFFFFFF
+	}
 	c.font(fnt.icon)
-	c.text(glyph, rect{0, 0, w, h}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	c.text(glyph, rect{0, 0, w, h}, ink, dtCenter|dtVCenter|dtSingleLine)
 	if focusCue(d) {
 		fr := rect{1, 1, w - 1, h - 1}
 		drawFocus(buf.hdc, &fr)

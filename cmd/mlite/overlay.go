@@ -7,7 +7,10 @@ package main
 // and it is dragged by its own header. Everything inside works as usual — reading,
 // writing, pictures, the panel of the conversation.
 
-import "unsafe"
+import (
+	"runtime/debug"
+	"unsafe"
+)
 
 const (
 	gwlStyle    = ^uintptr(15) // GWL_STYLE (-16)
@@ -24,6 +27,16 @@ const (
 
 var pGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
 
+const (
+	dwmaCornerPreference = 33
+	dwmaBorderColour     = 34
+	dwmRoundSmall        = 3          // DWMWCP_ROUNDSMALL
+	dwmRoundNone         = 1          // DWMWCP_DONOTROUND
+	dwmDefaultColour     = 0xFFFFFFFF // DWMWA_COLOR_DEFAULT
+	wsThickFrame         = 0x00040000
+	wmNcCalcSize         = 0x0083
+)
+
 func windowLong(h, which uintptr) uintptr {
 	v, _, _ := pGetWindowLongPtrW.Call(h, which)
 	return v
@@ -36,10 +49,10 @@ func setOverlay(on bool) {
 	style, ex := windowLong(hMain, gwlStyle), windowLong(hMain, gwlExStyle)
 	wantStyle, wantEx := style, ex
 	if on {
-		wantStyle = style&^uintptr(wsOverlappedWindow) | wsPopup
+		wantStyle = style&^uintptr(wsOverlappedWindow) | wsPopup | wsThickFrame
 		wantEx = ex | wsExToolWindow
 	} else {
-		wantStyle = style&^uintptr(wsPopup) | wsOverlappedWindow
+		wantStyle = style&^uintptr(wsPopup|wsThickFrame) | wsOverlappedWindow
 		wantEx = ex &^ uintptr(wsExToolWindow)
 	}
 	if wantStyle == style && wantEx == ex {
@@ -62,23 +75,16 @@ func setOverlay(on bool) {
 	overlayRound()
 }
 
-// overlayRound rounds the corners of the panel, and gives them back to the window when it
-// is an ordinary window again.
+// overlayRound asks Windows for the rounded corners, the shadow and the thin edge of a
+// panel, so that it looks the way the ordinary window does. The frame itself is taken away
+// in wndProc: the window keeps it only for what the system draws around it.
 func overlayRound() {
+	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.line))
 	if !compact.on {
-		pSetWindowRgn.Call(hMain, 0, 1)
-		return
+		round, border = dwmRoundNone, dwmDefaultColour
 	}
-	var rc rect
-	pGetClientRect.Call(hMain, uintptr(unsafe.Pointer(&rc)))
-	if rc.right < 2 || rc.bottom < 2 {
-		return
-	}
-	r := dp(12)
-	rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(rc.right+1), uintptr(rc.bottom+1), uintptr(r), uintptr(r))
-	if rgn != 0 {
-		pSetWindowRgn.Call(hMain, rgn, 1)
-	}
+	pDwmSetWindowAttribute.Call(hMain, dwmaCornerPreference, uintptr(unsafe.Pointer(&round)), 4)
+	pDwmSetWindowAttribute.Call(hMain, dwmaBorderColour, uintptr(unsafe.Pointer(&border)), 4)
 }
 
 // overlayHit lets the panel be dragged by the empty part of its header, the way a title bar
@@ -99,4 +105,19 @@ func overlayHit(lp uintptr) (uintptr, bool) {
 		}
 	}
 	return htCaption, true
+}
+
+// hideOverlay puts the panel away and leaves the head on the desktop; the program itself
+// keeps running whatever the setting about closing the window says.
+func hideOverlay() {
+	if !compact.on {
+		closeWindow()
+		return
+	}
+	closeViewer()
+	closePanel()
+	pShowWindow.Call(hMain, swHide)
+	dwRelease() // nothing is drawn while hidden; give the text engine's memory back
+	debug.FreeOSMemory()
+	mediaDropThumbs()
 }

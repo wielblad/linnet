@@ -362,6 +362,7 @@ func createMainWindow(visible bool) {
 	// the two buttons of the conversation header are real buttons: Tab reaches them
 	hFind = createWindow(0, "BUTTON", "Szukaj w rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idFind)
 	hInfo = createWindow(0, "BUTTON", "Informacje o rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idInfo)
+	hClose = createWindow(0, "BUTTON", "Zamknij panel", wsChild|wsTabStop|bsOwnerDraw, hMain, idClose)
 	hSet = createWindow(0, "MliteSettings", "Ustawienia", wsChild|wsVScroll|wsTabStop, hMain, 0)
 	initLogin()
 	sv.hwnd = hSet
@@ -370,7 +371,7 @@ func createMainWindow(visible bool) {
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
 	initPanel()
-	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo} {
+	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo, hClose} {
 		oldBtnProc = subclass(h, btnProc)
 	}
 	applyTheme()
@@ -476,14 +477,14 @@ func layout() {
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
 	if dlg.hwnd != 0 { // a question covers everything; the window as it was is drawn dimmed behind it
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet, pn.hwnd, lg.hwnd} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet, pn.hwnd, lg.hwnd} {
 			show(c, false)
 		}
 		moveTo(dlg.hwnd, rect{0, 0, w, h})
 		return
 	}
 	if lg.active { // the sign-in screen covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet} {
 			show(c, false)
 		}
 		moveTo(lg.hwnd, rect{0, 0, w, h})
@@ -493,7 +494,7 @@ func layout() {
 	}
 	show(lg.hwnd, false)
 	if vw.hwnd != 0 { // a picture shown large covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hSet} {
 			show(c, false)
 		}
 		moveTo(vw.hwnd, rect{0, 0, w, h})
@@ -597,7 +598,7 @@ func layout() {
 	lay.hbInfo = rect{w - dp(10) - dp(36), (hdrH - dp(36)) / 2, w - dp(10), (hdrH + dp(36)) / 2}
 	lay.hbSearch = rect{lay.hbInfo.left - dp(4) - dp(36), lay.hbInfo.top, lay.hbInfo.left - dp(4), lay.hbInfo.bottom}
 	lay.hx, lay.back = 0, rect{}
-	if chat {
+	if chat && !compact.on {
 		lay.hx, lay.back = dp(34), rect{0, 0, dp(46), hdrH}
 	}
 	lay.comp = rect{cx, h - compH, w, h}
@@ -630,6 +631,7 @@ func layout() {
 	moveTo(hAttach, rect{cx + dp(10), h - dp(10) - dp(36), cx + dp(46), h - dp(10)})
 	moveTo(hFind, lay.hbSearch)
 	moveTo(hInfo, lay.hbInfo)
+	moveTo(hClose, lay.hbInfo)
 	moveTo(hSet, rect{railW, 0, w, h - barH})
 	switch {
 	case pn.side:
@@ -647,10 +649,12 @@ func layout() {
 	show(hInput, showContent && hasSel && !pn.cover)
 	show(hSend, showContent && hasSel && !pn.cover)
 	show(hAttach, showContent && hasSel && !pn.cover)
-	show(hFind, showContent && hasSel && !pn.cover)
-	show(hInfo, showContent && hasSel && !pn.cover)
+	show(hFind, showContent && hasSel && !pn.cover && !compact.on)
+	show(hInfo, showContent && hasSel && !pn.cover && !compact.on)
+	show(hClose, showContent && hasSel && compact.on)
 	invalidate(hFind)
 	invalidate(hInfo)
+	invalidate(hClose)
 	show(pn.hwnd, pn.side || pn.cover)
 	show(pn.edit, (pn.side || pn.cover) && pn.search)
 	show(hSet, settings)
@@ -803,22 +807,21 @@ func paintMain(target uintptr) {
 				}
 			}
 			x := lay.header.left + hx + dp(62)
+			// the panel of the overlay has one button in its header, the window has two
+			titleRight := lay.hbSearch.left - dp(8)
+			if compact.on {
+				titleRight = lay.hbInfo.left - dp(8)
+			}
 			c.font(fnt.head)
 			if sub == "" {
-				c.text(threadTitle(t), rect{x, 0, lay.hbSearch.left - dp(8), hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(threadTitle(t), rect{x, 0, titleRight, hh}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 			} else {
 				top := (hh - sp(38)) / 2
-				c.text(threadTitle(t), rect{x, top, lay.hbSearch.left - dp(8), top + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(threadTitle(t), rect{x, top, titleRight, top + sp(20)}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 				c.font(fnt.small)
-				c.text(sub, rect{x, top + sp(20), lay.hbSearch.left - dp(8), top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+				c.text(sub, rect{x, top + sp(20), titleRight, top + sp(38)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 			}
 		}
-	}
-	if compact.on { // the panel has no frame: a thin edge tells it from what is underneath
-		c.fill(rect{0, 0, lay.w, 1}, pal.line)
-		c.fill(rect{0, lay.h - 1, lay.w, lay.h}, pal.line)
-		c.fill(rect{0, 0, 1, lay.h}, pal.line)
-		c.fill(rect{lay.w - 1, 0, lay.w, lay.h}, pal.line)
 	}
 	if cfg.ShowMem && !lay.narrow {
 		c.font(fnt.small)
@@ -1184,6 +1187,9 @@ func inputChanged() {
 }
 
 func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if msg == wmNcCalcSize && compact.on && wp != 0 {
+		return 0 // the whole window is its content; the frame stays only for the rounding
+	}
 	if msg == wmNcHitTest {
 		if hit, ok := overlayHit(lp); ok {
 			return hit
@@ -1225,7 +1231,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			drawSend(d)
 		case d.ctlID == idAttach:
 			drawAttach(d)
-		case d.ctlID == idFind || d.ctlID == idInfo:
+		case d.ctlID == idFind || d.ctlID == idInfo || d.ctlID == idClose:
 			drawHeaderBtn(d)
 		case d.ctlID == idList:
 			drawRow(d)
@@ -1238,7 +1244,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmCtlColorLB:
 		return brMica
 	case 0x0135: // WM_CTLCOLORBTN: what a button is erased with before it is drawn
-		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo {
+		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo || lp == hClose {
 			return brCard
 		}
 		return brMica
@@ -1259,6 +1265,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			}
 		case (id == idFind || id == idInfo) && code == 0:
 			showPanel(id == idFind)
+		case id == idClose && code == 0:
+			hideOverlay()
 		case id == idAttach && code == 0:
 			pickFile()
 		case id == idSend && code == 0:

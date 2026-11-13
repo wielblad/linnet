@@ -13,6 +13,7 @@ public class OV {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string t);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern IntPtr GetWindowLongPtrW(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   public struct RECT { public int L, T, R, B; }
 }
@@ -57,6 +58,32 @@ try {
   Start-Sleep -Seconds 2
   "po otwarciu rozmowy z glowki:"; Styles $main
   Shot $main "overlay-panel.png"
+  # a real screen capture, with what Windows draws around the panel
+  $mr0 = New-Object OV+RECT; [OV]::GetWindowRect($main, [ref]$mr0) | Out-Null
+  $pad = 12
+  $bmp2 = New-Object System.Drawing.Bitmap (($mr0.R - $mr0.L) + 2*$pad), (($mr0.B - $mr0.T) + 2*$pad)
+  $g2 = [System.Drawing.Graphics]::FromImage($bmp2)
+  $g2.CopyFromScreen(($mr0.L - $pad), ($mr0.T - $pad), 0, 0, $bmp2.Size)
+  $g2.Dispose()
+  $bmp2.Save((Join-Path $OutDir "overlay-ekran.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+  $bmp2.Dispose()
+  "zrzut z ekranu: overlay-ekran.png"
+  # the X closes the panel and leaves the head on the desktop
+  $btn = [IntPtr]::Zero
+  $w = [IntPtr]::Zero
+  for ($i = 0; $i -lt 50; $i++) {
+    $w = [OV]::FindWindowEx($main, $w, "Button", [NullString]::Value)
+    if ($w -eq [IntPtr]::Zero) { break }
+    if ([OV]::GetWindowLongPtrW($w, -12) -eq 335) { $btn = $w }   # GWL_ID
+  }
+  if ($btn -eq [IntPtr]::Zero) { "nie znalazlem przycisku X" } else {
+    [OV]::PostMessage($btn, 0x0201, [IntPtr]1, [IntPtr]0x000A000A) | Out-Null
+    [OV]::PostMessage($btn, 0x0202, [IntPtr]::Zero, [IntPtr]0x000A000A) | Out-Null
+    Start-Sleep -Seconds 2
+    $visible = [OV]::IsWindowVisible($main)
+    $headLeft = [OV]::IsWindowVisible($head)
+    "po kliknieciu X: panel widoczny {0} | glowka zostala {1}" -f $visible, $headLeft
+  }
   # drag the head and see whether the panel travels with it
   $hr = New-Object OV+RECT; [OV]::GetWindowRect($head, [ref]$hr) | Out-Null
   $mr = New-Object OV+RECT; [OV]::GetWindowRect($main, [ref]$mr) | Out-Null

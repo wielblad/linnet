@@ -337,7 +337,7 @@ func openHead(h *head) {
 	}
 	hidePeek(h)
 	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && compact.forID == h.id && vis != 0 {
-		closeWindow()
+		hideOverlay()
 		return
 	}
 	if !compact.on {
