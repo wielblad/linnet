@@ -288,13 +288,29 @@ func (b *backend) run() {
 	_ = b.db.RepairThreadActivity(b.ctx)
 	b.requestRefresh()
 	debug.FreeOSMemory() // the first synchronisation is over; hand its working memory back
-	// The history of encrypted chats sits in Messenger's backup behind a PIN: ask for it once
-	// a run, or fetch it straight away when this computer already holds the key.
+	// The history of encrypted chats sits in Messenger's backup behind a PIN. It is unlocked
+	// only from the settings, on purpose: Meta has locked an account that registered the
+	// history device right after a fresh sign-in from this client.
 	if client.HasHistoryDevice() {
 		b.syncHistory()
-	} else if need, err := client.NeedsHistoryPIN(b.ctx); err != nil {
+	}
+}
+
+// offerHistory checks whether the account keeps a PIN backup, then shows the PIN card.
+func (b *backend) offerHistory() {
+	client := b.current()
+	if client == nil {
+		b.setStatus("Program nie jest połączony z Messengerem.")
+		return
+	}
+	need, err := client.NeedsHistoryPIN(b.ctx)
+	switch {
+	case err != nil:
 		log.Warn().Err(err).Msg("check history backup")
-	} else if need {
+		b.setStatus("Nie można sprawdzić kopii historii: " + err.Error())
+	case !need:
+		b.setStatus("To konto nie ma kopii historii chronionej PIN-em.")
+	default:
 		if h := b.hwnd.Load(); h != 0 {
 			postMsg(h, wmAppHistory, 0, 0)
 		}

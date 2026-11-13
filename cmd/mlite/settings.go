@@ -128,6 +128,8 @@ func buildSettings() {
 		{kind: srHeader, title: "Filmy"},
 		{kind: srToggle, title: "Filmy z Facebooka jako zalogowany", desc: "Odtwarzacz w oknie programu dostaje Twoją sesję Facebooka, żeby rolki nie zatrzymywały się na logowaniu. Po wyłączeniu gra tylko to, co publiczne.",
 			get: func() bool { return cfg.VideoSession }, set: func(v bool) { cfg.VideoSession = v }},
+		{kind: srHeader, title: "Historia"},
+		{kind: srAction, title: "Historia czatów szyfrowanych", live: historyLine, label: historyButton, action: historyAction},
 		{kind: srHeader, title: "Uruchamianie"},
 		{kind: srToggle, title: "Uruchamiaj razem z Windows", get: autostartOn, set: setAutostart},
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",
@@ -192,6 +194,29 @@ func nextTone() {
 	cfg.Tone = tones[next].id
 	saveConfig()
 	playTone(cfg.Tone)
+}
+
+func historyUnlocked() bool {
+	c := be.current()
+	return c != nil && c.HasHistoryDevice()
+}
+
+func historyLine() string {
+	if historyUnlocked() {
+		return "Wczytana. Starsze wiadomości szyfrowanych czatów są pobierane z kopii Messengera."
+	}
+	return "Bez niej czaty szyfrowane pokazują tylko wiadomości od zalogowania. Wymaga PIN-u kopii zapasowej. Uwaga: Meta może uznać to za podejrzane i zablokować konto do potwierdzenia tożsamości — nie rób tego tuż po zalogowaniu."
+}
+
+func historyButton() string {
+	if historyUnlocked() {
+		return ""
+	}
+	return "Wczytaj"
+}
+
+func historyAction() {
+	go be.offerHistory()
 }
 
 func layoutSettings() {
