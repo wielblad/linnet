@@ -719,6 +719,7 @@ func setNav(n int) {
 	refresh()
 	if n == navSettings {
 		invalidate(hSet)
+		pSetFocus.Call(hSet) // the keyboard goes where the eye went
 	}
 	for _, h := range hNav {
 		invalidate(h)

@@ -29,7 +29,7 @@ const (
 	idSoundFirst  = 700 // plus the index into messageSounds
 	idSoundCustom = 799
 
-	soundRowTitle = "Dźwięk do wyboru"
+	soundRowTitle = "Dźwięk wiadomości"
 )
 
 // messageSounds are the sounds offered for a new message, named the way they sound rather

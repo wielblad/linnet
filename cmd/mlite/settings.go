@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -92,6 +93,8 @@ type setRow struct {
 	live        func() string // description computed at paint time
 	label       func() string // text of the button of an action row, "" for none
 	action      func()
+	whole       bool   // the whole row acts, not only its button: a choice that is easily undone
+	key         string // a name for a row that code needs to find
 	btn         rect // where that button was drawn
 	get         func() bool
 	set         func(bool)
@@ -107,50 +110,86 @@ var sv struct {
 	total  int32
 	focus  int
 	active bool
-	hotRow int // row whose button is under the pointer, -1 when none
+	hotRow  int // row whose button is under the pointer, -1 when none
+	hotLine int // row under the pointer that acts as a whole, -1 when none
 }
 
 func buildSettings() {
-	sv.hotRow = -1
+	sv.hotRow, sv.hotLine = -1, -1
+	// From what the program does every day to what concerns the program itself.
 	sv.rows = []setRow{
 		{kind: srHeader, title: "Powiadomienia"},
 		{kind: srToggle, title: "Powiadomienia Windows", desc: "Nowa wiadomość pojawia się w rogu ekranu.",
 			get: func() bool { return cfg.Toasts }, set: func(v bool) { cfg.Toasts = v }},
+		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
+			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
 		{kind: srToggle, title: "Dźwięk nowej wiadomości", desc: "Krótki dźwięk razem z powiadomieniem.",
 			get: func() bool { return cfg.Sound }, set: func(v bool) { cfg.Sound = v }},
 		{kind: srAction, title: soundRowTitle, desc: "Wybrany dźwięk od razu zagra, żeby go posłuchać.",
-			live: soundLine, label: soundLabel, action: pickSound},
-		{kind: srToggle, title: "Pokazuj treść wiadomości", desc: "Po wyłączeniu widać tylko, kto napisał.",
-			get: func() bool { return cfg.Body }, set: func(v bool) { cfg.Body = v }},
+			live: soundLine, label: soundLabel, action: pickSound, whole: true},
 		{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
 			get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
 		{kind: srHeader, title: "Główki rozmów"},
-		{kind: srInfo, title: "Przypinanie rozmowy do pulpitu", desc: "Prawy przycisk na rozmowie na liście, potem „Przypnij jako główkę”."},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Wymaga włączonej treści w powiadomieniach.",
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},
-		{kind: srHeader, title: "Filmy"},
-		{kind: srToggle, title: "Filmy z Facebooka jako zalogowany", desc: "Odtwarzacz w oknie programu dostaje Twoją sesję Facebooka, żeby rolki nie zatrzymywały się na logowaniu. Po wyłączeniu gra tylko to, co publiczne.",
-			get: func() bool { return cfg.VideoSession }, set: func(v bool) { cfg.VideoSession = v }},
-		{kind: srHeader, title: "Uruchamianie"},
+		{kind: srInfo, title: "Rozmowę przypniesz jako główkę prawym przyciskiem na liście rozmów."},
+		{kind: srHeader, title: "Uruchamianie i tło"},
 		{kind: srToggle, title: "Uruchamiaj razem z Windows", get: autostartOn, set: setAutostart},
 		{kind: srToggle, title: "Po zamknięciu okna działaj w tle", desc: "Program zostaje w zasobniku i dalej odbiera wiadomości.",
 			get: func() bool { return cfg.Background }, set: func(v bool) { cfg.Background = v }},
 		{kind: srHeader, title: "Wygląd"},
-		{kind: srAction, title: "Motyw", desc: "Auto: tak jak w ustawieniach Windows.", label: themeLabel, action: pickTheme},
-		{kind: srInfo, title: "Kolor akcentu i wielkość tekstu", desc: "Zgodne z ustawieniami Windows."},
-		{kind: srToggle, title: "Pokaż zużycie pamięci na pasku bocznym",
+		{kind: srAction, title: "Motyw", desc: "Auto: tak jak w ustawieniach Windows.", label: themeLabel, action: pickTheme, whole: true},
+		{kind: srToggle, title: "Pokazuj zużycie pamięci na pasku bocznym",
 			get: func() bool { return cfg.ShowMem }, set: func(v bool) { cfg.ShowMem = v }},
+		{kind: srAction, title: "Kolor akcentu i wielkość tekstu", desc: "Linnet bierze je z Windows.",
+			label: func() string { return "Otwórz ustawienia Windows" }, action: openWindowsColours},
 		{kind: srHeader, title: "Konto"},
-		{kind: srAction, title: "Zalogowane konto Messengera", live: signOutLine, label: signOutButton, action: signOutAction},
+		{kind: srAction, title: "Konto Messengera", live: signOutLine, label: signOutButton, action: signOutAction},
 		{kind: srAction, title: "Historia rozmów szyfrowanych", live: historyLine, label: historyButton, action: historyAction},
-		{kind: srHeader, title: "Aktualizacje"},
-		{kind: srAction, title: "Wersja " + appVersion, live: updateLine, label: updateButton, action: updateAction},
-		{kind: srHeader, title: "O aplikacji " + appName},
-		{kind: srInfo, title: appName + " " + appVersion, desc: "Klient wiadomości Messenger na Windows. Linnet jest niezależną aplikacją i nie jest powiązana z Meta Platforms, Inc. Messenger i Facebook są znakami ich właścicieli."},
-		{kind: srInfo, title: "Pamięć", live: func() string {
-			return fmt.Sprintf("Teraz: %d MB.", workingSetMB())
+		{kind: srToggle, title: "Odtwarzaj filmy jako zalogowany", desc: "Odtwarzacz używa Twojej sesji Facebooka, więc rolki nie zatrzymują się na logowaniu. Po wyłączeniu zagrają tylko filmy publiczne.",
+			get: func() bool { return cfg.VideoSession }, set: func(v bool) { cfg.VideoSession = v }},
+		{kind: srHeader, title: "O programie " + appName},
+		{kind: srAction, key: "update", title: "Aktualizacje", live: updateLine, label: updateButton, action: updateAction},
+		{kind: srInfo, title: appName + " " + appVersion, desc: "Klient wiadomości Messenger na Windows. Niezależna aplikacja, niepowiązana z Meta Platforms, Inc. Messenger i Facebook są znakami ich właścicieli."},
+		{kind: srInfo, title: "Zużycie pamięci", live: func() string {
+			return fmt.Sprintf("Teraz %d MB.", workingSetMB())
 		}},
 	}
+}
+
+// openWindowsColours opens the page of Windows' own settings where the accent colour is;
+// the size of text is one page away from there.
+func openWindowsColours() {
+	pShellExecuteW.Call(hMain, uintptr(unsafe.Pointer(u16("open"))), uintptr(unsafe.Pointer(u16("ms-settings:colors"))), 0, 0, 1)
+}
+
+// settingLabel is what a screen reader is told about a row: its name, what kind of control
+// it is, and its state.
+func settingLabel(i int) string {
+	if i < 0 || i >= len(sv.rows) {
+		return "Ustawienia"
+	}
+	r := sv.rows[i]
+	switch r.kind {
+	case srToggle:
+		state := "wyłączone"
+		if r.get() {
+			state = "włączone"
+		}
+		return r.title + ", przełącznik, " + state
+	case srAction:
+		if l := strings.TrimSuffix(r.label(), " ▾"); l != "" {
+			return r.title + ", przycisk " + l
+		}
+	}
+	return r.title
+}
+
+// settingsAnnounce names the panel after the row the keyboard is on and reports the change,
+// the way the list of conversations does: that is what a screen reader reads out.
+func settingsAnnounce() {
+	setText(sv.hwnd, settingLabel(sv.focus))
+	pNotifyWinEvent.Call(0x800C, sv.hwnd, ^uintptr(3), 0)
 }
 
 var themes = []struct{ id, label string }{{"", "Auto"}, {"light", "Jasny"}, {"dark", "Ciemny"}}
@@ -220,7 +259,7 @@ func layoutSettings() {
 		r := &sv.rows[i]
 		switch r.kind {
 		case srHeader:
-			r.h = sp(36)
+			r.h = sp(44)
 		default:
 			// Title and description wrap, so the row grows instead of cutting text off.
 			avail := settingsWidth() - dp(32)
@@ -229,6 +268,9 @@ func layoutSettings() {
 			}
 			if r.kind == srAction && r.label() != "" {
 				withFont(fnt.name, func(c canvas) { avail -= c.width(r.label()) + dp(44) })
+			}
+			if r.kind == srInfo { // plain words on the ground: no card, so no room lost to one
+				avail = settingsWidth() - dp(16)
 			}
 			if avail < dp(80) {
 				avail = dp(80)
@@ -260,7 +302,7 @@ func layoutSettings() {
 		}
 	}
 	sv.total = y + dp(24)
-	if sv.focus == 0 || sv.rows[sv.focus].kind == srHeader || sv.rows[sv.focus].kind == srInfo {
+	if sv.focus <= 0 || sv.focus >= len(sv.rows) || sv.rows[sv.focus].kind == srHeader || sv.rows[sv.focus].kind == srInfo {
 		sv.focus = 1
 	}
 }
@@ -298,17 +340,24 @@ func paintSettings(target uintptr) {
 	for i := range sv.rows {
 		r := &sv.rows[i]
 		y := r.y - sv.scroll
-		if r.kind == srHeader || y+r.h < 0 || y > sv.h {
-			continue
+		if r.kind == srHeader || r.kind == srInfo || y+r.h < 0 || y > sv.h {
+			continue // words only: a card would promise something to press
+		}
+		face := pal.card
+		if sv.hotLine == i {
+			face = mix(pal.fg, pal.card, 5)
 		}
 		g.round(x, y, w, r.h, dp(8), dp(8), dp(8), dp(8), pal.line)
-		g.round(x+1, y+1, w-2, r.h-2, dp(7), dp(7), dp(7), dp(7), pal.card)
+		g.round(x+1, y+1, w-2, r.h-2, dp(7), dp(7), dp(7), dp(7), face)
 		if r.kind == srAction {
 			r.btn = rect{}
 			if label := r.label(); label != "" {
 				var bw int32
 				withFont(fnt.name, func(c canvas) { bw = c.width(label) + dp(32) })
 				bh := dp(32)
+				if th := sp(20) + dp(10); th > bh { // the button grows with the size of text
+					bh = th
+				}
 				r.btn = rect{x + w - dp(16) - bw, y + (r.h-bh)/2, x + w - dp(16), y + (r.h+bh)/2}
 				fill := pal.accent
 				if sv.hotRow == i {
@@ -324,7 +373,7 @@ func paintSettings(target uintptr) {
 				g.ellipse(tx+dp(24), ty+dp(4), dp(12), dp(12), pal.onAccent)
 			} else {
 				g.pill(tx, ty, dp(40), dp(20), pal.fg2)
-				g.pill(tx+1, ty+1, dp(40)-2, dp(20)-2, pal.card)
+				g.pill(tx+1, ty+1, dp(40)-2, dp(20)-2, face)
 				g.ellipse(tx+dp(4), ty+dp(4), dp(12), dp(12), pal.fg2)
 			}
 		}
@@ -339,8 +388,25 @@ func paintSettings(target uintptr) {
 			continue
 		}
 		if r.kind == srHeader {
-			c.font(fnt.name)
-			c.text(r.title, rect{x, y, x + w, y + r.h - dp(6)}, pal.fg, dtSingleLine|0x0008) // DT_BOTTOM
+			c.font(fnt.head)
+			c.text(r.title, rect{x, y, x + w, y + r.h - dp(8)}, pal.fg, dtSingleLine|0x0008) // DT_BOTTOM
+			continue
+		}
+		if r.kind == srInfo {
+			desc := r.desc
+			if r.live != nil {
+				desc = r.live()
+			}
+			ink := pal.fg2
+			if desc != "" {
+				ink = pal.fg
+			}
+			c.font(fnt.body)
+			c.text(r.title, rect{x + dp(4), y + dp(10), x + w - dp(12), y + dp(10) + r.th}, ink, dtWordBreak)
+			if desc != "" {
+				c.font(fnt.small)
+				c.text(desc, rect{x + dp(4), y + dp(10) + r.th + sp(1), x + w - dp(12), y + r.h}, pal.fg2, dtWordBreak)
+			}
 			continue
 		}
 		right := x + w - dp(16)
@@ -392,6 +458,7 @@ func toggleSetting(i int) {
 	r.set(!r.get())
 	saveConfig()
 	sv.focus = i
+	settingsAnnounce()
 	invalidate(sv.hwnd)
 	invalidate(hMain)
 }
@@ -413,6 +480,7 @@ func moveSettingsFocus(d int) {
 				sv.scroll = r.y + r.h - sv.h + dp(8)
 			}
 			clampSettingsScroll()
+			settingsAnnounce()
 			return
 		}
 	}
@@ -440,34 +508,44 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmMouseMove:
 		x, y := lpPoint(lp)
-		hot := -1
+		hot, line := -1, -1
 		for i := range sv.rows {
-			if b := sv.rows[i].btn; b.right > b.left && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
+			r := sv.rows[i]
+			if b := r.btn; b.right > b.left && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 				hot = i
 			}
+			if ry := r.y - sv.scroll; x >= dp(28) && x < dp(28)+settingsWidth() && y >= ry && y < ry+r.h &&
+				(r.kind == srToggle || (r.kind == srAction && r.whole && r.label() != "")) {
+				line = i
+			}
 		}
-		if hot != sv.hotRow {
-			sv.hotRow = hot
+		if hot != sv.hotRow || line != sv.hotLine {
+			sv.hotRow, sv.hotLine = hot, line
 			invalidate(hwnd)
-			if hot >= 0 {
+			if hot >= 0 || line >= 0 {
 				trackLeave(hwnd)
 			}
 		}
 		return 0
 	case wmMouseLeave:
-		if sv.hotRow != -1 {
-			sv.hotRow = -1
+		if sv.hotRow != -1 || sv.hotLine != -1 {
+			sv.hotRow, sv.hotLine = -1, -1
 			invalidate(hwnd)
 		}
 		return 0
 	case wmSetCursor:
-		if lp&0xFFFF == 1 && sv.hotRow >= 0 {
+		if lp&0xFFFF == 1 && (sv.hotRow >= 0 || sv.hotLine >= 0) {
 			cur, _, _ := pLoadCursorW.Call(0, idcHand)
 			pSetCursor.Call(cur)
 			return 1
 		}
 	case wmMouseWheel:
-		sv.scroll -= int32(int16(wp>>16)) * dp(60) / 120
+		lines := uint32(3)
+		pSystemParametersInfo.Call(0x0068, 0, uintptr(unsafe.Pointer(&lines)), 0) // SPI_GETWHEELSCROLLLINES
+		if lines == 0 || lines > 20 { // "nothing" and "a page at a time" both become a sensible step
+			lines = 3
+		}
+		sv.scroll -= int32(int16(wp>>16)) * int32(lines) * sp(20) / 120
 		clampSettingsScroll()
 		return 0
 	case wmVScroll:
@@ -498,10 +576,29 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			moveSettingsFocus(1)
 		case vkSpace, vkReturn:
 			toggleSetting(sv.focus)
+		case vkHome:
+			sv.focus = 0
+			moveSettingsFocus(1)
+			sv.scroll = 0
+			clampSettingsScroll()
+		case vkEnd:
+			sv.focus = len(sv.rows)
+			moveSettingsFocus(-1)
+			sv.scroll = sv.total
+			clampSettingsScroll()
+		case vkPrior:
+			sv.scroll -= sv.h * 9 / 10
+			clampSettingsScroll()
+		case vkNext:
+			sv.scroll += sv.h * 9 / 10
+			clampSettingsScroll()
 		}
 		return 0
 	case wmSetFocus, wmKillFocus:
 		sv.active = msg == wmSetFocus
+		if sv.active {
+			settingsAnnounce()
+		}
 		invalidate(hwnd)
 		return 0
 	case wmLButtonDown:
@@ -515,7 +612,7 @@ func settingsProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 				if (r.kind == srToggle || r.kind == srAction) && y >= r.y && y < r.y+r.h {
 					// A row with a button acts only from the button: a click on the words
 					// beside it, to read them, must not sign anyone out or start anything.
-					if b, wy := r.btn, y-sv.scroll; r.kind == srAction && !(x >= b.left && x < b.right && wy >= b.top && wy < b.bottom) {
+					if b, wy := r.btn, y-sv.scroll; r.kind == srAction && !r.whole && !(x >= b.left && x < b.right && wy >= b.top && wy < b.bottom) {
 						break
 					}
 					toggleSetting(i)

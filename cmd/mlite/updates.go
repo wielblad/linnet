@@ -92,7 +92,7 @@ func updateLine() string {
 	case upChecking:
 		return "Sprawdzanie…"
 	case upCurrent:
-		return "Masz najnowszą wersję."
+		return "Masz najnowszą wersję, " + appVersion + "."
 	case upReady:
 		return note
 	case upFetching:
@@ -110,9 +110,9 @@ func updateLine() string {
 		return note
 	}
 	if !updatesOn() {
-		return "Dostępne po zainstalowaniu programu."
+		return "Masz wersję " + appVersion + ". Aktualizacje działają po zainstalowaniu programu."
 	}
-	return "Sprawdź, czy jest nowsza wersja."
+	return "Masz wersję " + appVersion + ". Sprawdź, czy jest nowsza."
 }
 
 // updateNotice is what the bar at the top of the window says when a newer release is
@@ -134,7 +134,7 @@ func updateNotice() string {
 func goToUpdates() {
 	setNav(navSettings)
 	for i := range sv.rows {
-		if sv.rows[i].kind == srAction {
+		if sv.rows[i].key == "update" {
 			sv.focus = i
 			sv.scroll = sv.rows[i].y + sv.rows[i].h - sv.h + dp(24)
 			clampSettingsScroll()
