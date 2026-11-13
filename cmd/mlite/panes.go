@@ -42,7 +42,7 @@ type pane struct {
 	closeR, minR      rect
 	sendR, fieldR     rect
 	attachR, barR     rect
-	appR              rect  // the button to the ordinary window of the program
+	appR, findR       rect  // the buttons to the ordinary window of the program, and to the search
 	side              int32 // where its row stands: 1 to the right of the heads, -1 to the left
 	last              bool  // the one furthest from the heads: its outer edge changes the size
 	hot               int   // which of its buttons is under the pointer
@@ -57,6 +57,7 @@ const (
 	pbtSend
 	pbtBarClose
 	pbtApp
+	pbtFind
 )
 
 var (
@@ -285,6 +286,9 @@ func paneClose(p *pane) {
 	if dlg.hwnd != 0 && dlg.host == p.hwnd {
 		closeDialog(false)
 	}
+	if pn.open && pn.host == p.hwnd {
+		closePanel()
+	}
 	if p.bank.compose.mode == cmFile {
 		dropPasted(p.bank.compose.file)
 	}
@@ -507,6 +511,8 @@ func paneCovered(p *pane) uintptr {
 		return dlg.hwnd
 	case vw.hwnd != 0 && vw.host == p.hwnd:
 		return viewerInner()
+	case pn.open && pn.host == p.hwnd:
+		return pn.hwnd
 	}
 	return 0
 }
@@ -526,10 +532,15 @@ func paneLayout(p *pane) {
 		next = p.minR
 	}
 	p.appR = rect{next.left - dp(4) - dp(36), next.top, next.left - dp(4), next.bottom}
+	p.findR = rect{p.appR.left - dp(4) - dp(36), next.top, p.appR.left - dp(4), next.bottom}
 	if cover := paneCovered(p); cover != 0 && !p.min {
 		show(p.view, false)
 		show(p.input, false)
 		moveTo(cover, rect{0, 0, p.w, p.h})
+		if cover == pn.hwnd {
+			show(pn.hwnd, true)
+			show(pn.edit, pn.search)
+		}
 		return
 	}
 	inH := int32(p.lines) * lay.editH
@@ -596,6 +607,8 @@ func panePaint(p *pane, target uintptr) {
 		hotBack(p.minR)
 	case pbtApp:
 		hotBack(p.appR)
+	case pbtFind:
+		hotBack(p.findR)
 	}
 	if body {
 		c.fill(rect{0, p.h - p.compH, p.w, p.h}, pal.card)
@@ -644,6 +657,10 @@ func panePaint(p *pane, target uintptr) {
 	c.text(gClose, p.closeR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	c.text(gOpenApp, p.appR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	right = p.appR.left - dp(8)
+	if !p.min {
+		c.text(gSearch, p.findR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+		right = p.findR.left - dp(8)
+	}
 	sub := ""
 	switch {
 	case isGroup(t):
@@ -706,6 +723,8 @@ func paneHit(p *pane, x, y int32) int {
 		return pbtMin
 	case in(p.appR):
 		return pbtApp
+	case !p.min && in(p.findR):
+		return pbtFind
 	case !paneOpenBody(p):
 		return pbtNone
 	case in(p.attachR):
@@ -811,6 +830,8 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			paneFront(p)
 		case hit == pbtApp:
 			openInApp(p.id, getText(p.input))
+		case hit == pbtFind:
+			showPanel(true)
 		case hit == pbtNone && y < paneHeaderH(): // twice on the header: as tall as the screen, and back
 			if headerClick(hwnd) {
 				panesPlace()

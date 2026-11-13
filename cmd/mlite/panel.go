@@ -68,6 +68,8 @@ var pn struct {
 	all         []store.Message // every message of the conversation kept on this computer
 	results     []int           // indexes into all, newest first
 	forThread   int64
+	host        uintptr   // the window the panel is in: the program's, or a pane beside a head
+	bank        *viewBank // the view of the conversation it tells about
 	forCount    int
 }
 
@@ -161,17 +163,25 @@ func setQuiet(id int64, on bool) {
 // showPanel opens the panel (in search mode when asked), or closes it when it is already
 // open in that mode.
 func showPanel(search bool) {
-	if _, ok := threadByID(selectedID); !ok {
+	if _, ok := threadByID(hostThreadID()); !ok {
 		return
 	}
-	if pn.open && pn.search == search {
+	here := pn.host == hostWnd() || (pn.host == 0 && hostWnd() == hMain)
+	if pn.open && pn.search == search && here {
 		closePanel()
 		return
+	}
+	if pn.open && !here { // open in another window: there is one panel, and it comes here
+		closePanel()
+	}
+	pn.host, pn.bank = hostWnd(), curBank
+	if pn.host != hMain { // into the pane it was asked from, over its conversation
+		pSetParent.Call(pn.hwnd, pn.host)
 	}
 	pn.open, pn.search, pn.scroll = true, search, 0
 	pn.focus, pn.kbd = 0, false
 	panelCollect()
-	layout()
+	hostLayout()
 	if search {
 		pSetFocus.Call(pn.edit)
 	} else {
@@ -186,8 +196,30 @@ func closePanel() {
 	pn.open, pn.search = false, false
 	pn.all, pn.results = nil, nil
 	panelDropThumbs()
-	layout()
-	pSetFocus.Call(hInput)
+	b := pn.bank
+	if b == nil {
+		b = &mainBank
+	}
+	if b != curBank { // back in the conversation it was opened over
+		defer enterBank(b)()
+	}
+	if pn.host != 0 && pn.host != hMain { // home again, before the pane it was in can take it along
+		show(pn.hwnd, false)
+		pSetParent.Call(pn.hwnd, hMain)
+	}
+	pn.host, pn.bank = hMain, nil
+	hostLayout()
+	pSetFocus.Call(hostInput())
+}
+
+var pSetParent = user32.NewProc("SetParent")
+
+// panelThreadID is the conversation the panel tells about.
+func panelThreadID() int64 {
+	if pn.bank != nil && pn.bank.pane != nil {
+		return pn.bank.pane.id
+	}
+	return selectedID
 }
 
 func panelDropThumbs() {
@@ -281,7 +313,7 @@ func paintPanel(target uintptr) {
 	buf := newBuffer(target, pn.w, pn.h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, pn.w, pn.h}, pal.mica)
-	t, ok := threadByID(selectedID)
+	t, ok := threadByID(panelThreadID())
 	if !ok {
 		buf.flush(0, 0)
 		return
@@ -580,7 +612,7 @@ func panelClick(i int) {
 		return
 	}
 	h := pn.hits[i]
-	t, ok := threadByID(selectedID)
+	t, ok := threadByID(panelThreadID())
 	if !ok {
 		return
 	}
@@ -589,11 +621,11 @@ func panelClick(i int) {
 		closePanel()
 	case phBack:
 		pn.search, pn.scroll = false, 0
-		layout()
+		hostLayout()
 		pSetFocus.Call(pn.hwnd)
 	case phSearch:
 		pn.search, pn.scroll = true, 0
-		layout()
+		hostLayout()
 		pSetFocus.Call(pn.edit)
 	case phPin:
 		if isPinned(t.ID) {
@@ -627,7 +659,7 @@ func panelClick(i int) {
 				mv.limit = need
 				loadView(true)
 			}
-			if pn.cover {
+			if pn.cover || pn.host != hMain {
 				closePanel()
 			}
 			jumpToMessage(id)
@@ -636,6 +668,9 @@ func panelClick(i int) {
 }
 
 func panelProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if pn.bank != nil && pn.bank != curBank {
+		defer enterBank(pn.bank)()
+	}
 	switch msg {
 	case wmEraseBkgnd:
 		return 1

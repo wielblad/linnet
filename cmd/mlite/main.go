@@ -264,6 +264,13 @@ func handleKey(m *msgT) bool {
 			return true
 		case ctrl && m.wParam == 'V' && m.hwnd == p.input:
 			return pasteAttachment()
+		case ctrl && m.wParam == 'F': // search in this conversation, in this window
+			if pn.open && pn.search && pn.host == p.hwnd {
+				pSetFocus.Call(pn.edit)
+			} else {
+				showPanel(true)
+			}
+			return true
 		case pick.hwnd != 0 && m.wParam == vkEscape:
 			closePicker()
 			return true
@@ -282,7 +289,11 @@ func handleKey(m *msgT) bool {
 		}
 		return false
 	}
-	if paneHost(m.hwnd) != nil { // a question or a large picture inside a pane has its own keys
+	if paneHost(m.hwnd) != nil { // a question, a large picture or the search inside a pane has its own keys
+		if m.hwnd == pn.edit && m.wParam == vkEscape {
+			closePanel()
+			return true
+		}
 		return false
 	}
 	switch {
@@ -581,8 +592,9 @@ func layout() {
 	showPane := !settings && !chat
 	showContent := !settings && (!narrow || chat)
 	full := w
-	pn.side = pn.open && hasSel && showContent && !narrow && w >= dp(1040)
-	pn.cover = pn.open && hasSel && showContent && !pn.side
+	inWindow := pn.host == 0 || pn.host == hMain // not in a pane beside a head
+	pn.side = pn.open && inWindow && hasSel && showContent && !narrow && w >= dp(1040)
+	pn.cover = pn.open && inWindow && hasSel && showContent && !pn.side
 	if pn.side {
 		w -= panelWidth()
 		lay.w = w
@@ -740,8 +752,10 @@ func layout() {
 	invalidate(hFind)
 	invalidate(hInfo)
 	invalidate(hClose)
-	show(pn.hwnd, pn.side || pn.cover)
-	show(pn.edit, (pn.side || pn.cover) && pn.search)
+	if inWindow {
+		show(pn.hwnd, pn.side || pn.cover)
+		show(pn.edit, (pn.side || pn.cover) && pn.search)
+	}
 	show(hSet, settings)
 	invalidate(hMain)
 }

@@ -207,7 +207,7 @@ func oneLine(s string, max int) string {
 
 // loadView reads the selected thread from the store and lays it out when something changed.
 func loadView(force bool) {
-	if !inPane() {
+	if pn.bank == curBank || (pn.bank == nil && !inPane()) { // the panel tells about this conversation
 		defer panelSync()
 	}
 	if !mv.has {
