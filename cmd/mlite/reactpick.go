@@ -150,7 +150,7 @@ func showPicker(m store.Message, x, y int32) {
 	pt := point{x, y}
 	pClientToScreen.Call(mv.hwnd, uintptr(unsafe.Pointer(&pt)))
 	var work rect
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	work = workAt(rect{pt.x, pt.y, pt.x + 1, pt.y + 1})
 	px, py := pt.x-pick.w/2, pt.y-pick.h-dp(6)
 	if px+pick.w > work.right-dp(8) {
 		px = work.right - dp(8) - pick.w

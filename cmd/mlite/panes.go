@@ -399,8 +399,6 @@ func panesPlace() {
 		}
 		return
 	}
-	work := workArea()
-	w, ht := panelSize()
 	dock := cfg.HeadMode == headModeDock
 	gap := int32(0)
 	if dock {
@@ -423,9 +421,12 @@ func panesPlace() {
 	for _, k := range order {
 		row := rows[k]
 		er, ok := entityRect(row[0].id)
-		if !ok { // its head was unpinned: the lower right corner of the screen
-			er = rect{work.right - headSize() - dp(16), work.bottom - headSize() - dp(120), work.right - dp(16), work.bottom - dp(120)}
+		if !ok { // its head was unpinned: the lower right corner of the main screen
+			m := workArea()
+			er = rect{m.right - headSize() - dp(16), m.bottom - headSize() - dp(120), m.right - dp(16), m.bottom - dp(120)}
 		}
+		work := workAt(er) // each row on the screen its heads are on
+		w, ht := panelSize(work)
 		need := int32(len(row))*(w+gap) - gap
 		roomR, roomL := work.right-dp(4)-(er.right+dp(10)), er.left-dp(10)-(work.left+dp(4))
 		side := rowSide[k]

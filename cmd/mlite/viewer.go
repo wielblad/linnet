@@ -70,7 +70,6 @@ var (
 		btn    [vbCount]rect
 		pic    rect
 		host   uintptr   // the window it covers: the program's, or a pane
-		inner  uintptr   // while the picture has the whole screen: the viewer left behind in that window
 		full   bool      // the picture has the whole screen
 		idle   bool      // nothing moved for a while: only the picture is shown
 		older  bool      // older messages were asked for, to find older pictures
@@ -101,19 +100,27 @@ func openViewer(m store.Message) {
 	pSetFocus.Call(vw.hwnd)
 }
 
-// viewerInner is the viewer as the window it was opened in knows it: the one that is laid
-// out there, also while the picture itself is on the whole screen.
+// viewerInner is the viewer as the window it was opened in knows it: nothing while the
+// picture or the film has the whole screen, since it is then no part of that window.
 func viewerInner() uintptr {
 	if vw.full {
-		return vw.inner
+		return 0
 	}
 	return vw.hwnd
 }
 
-// viewerFull gives the picture the whole screen the window is on, or takes it back.
+// viewerFull gives the picture or the film the whole screen the window is on, or takes it
+// back. The viewer itself goes out of its window and back in, with whatever it shows: a
+// film is not started again.
 func viewerFull(on bool) {
-	if vw.hwnd == 0 || vw.video != "" || on == vw.full {
+	if vw.hwnd == 0 || on == vw.full {
 		return
+	}
+	h := vw.hwnd
+	style, ex := windowLong(h, gwlStyle), windowLong(h, gwlExStyle)
+	b := vw.bank
+	if b == nil {
+		b = &mainBank
 	}
 	if on {
 		mi := monitorInfo{size: uint32(unsafe.Sizeof(monitorInfo{}))}
@@ -121,28 +128,35 @@ func viewerFull(on bool) {
 		if r, _, _ := pGetMonitorInfoW.Call(mon, uintptr(unsafe.Pointer(&mi))); r == 0 {
 			return
 		}
-		top := createWindow(wsExTopmost|wsExToolWindow, "MliteViewer", "Zdjęcie na pełnym ekranie", wsPopup, 0, 0)
-		if top == 0 {
-			return
-		}
-		vw.inner, vw.hwnd, vw.full, vw.idle = vw.hwnd, top, true, false
+		pSetParent.Call(h, 0)
+		pSetWindowLongPtrW.Call(h, gwlStyle, style&^uintptr(wsChild)|wsPopup)
+		pSetWindowLongPtrW.Call(h, gwlExStyle, ex|wsExToolWindow)
+		vw.full, vw.idle = true, false
 		m := mi.monitor
-		pSetWindowPos.Call(top, hwndTopmost, uintptr(m.left), uintptr(m.top), uintptr(m.right-m.left), uintptr(m.bottom-m.top), 0x0040) // shown
-		pSetForegroundWindow.Call(top)
-		pSetFocus.Call(top)
-		pSetTimer.Call(top, timerViewerIdle, 1800, 0)
+		pSetWindowPos.Call(h, hwndTopmost, uintptr(m.left), uintptr(m.top), uintptr(m.right-m.left), uintptr(m.bottom-m.top), swpFrame|0x0040)
+		done := enterBank(b) // the window it left shows its conversation again
+		hostLayout()
+		done()
+		pSetForegroundWindow.Call(h)
+		pSetFocus.Call(h)
+		if vw.video == "" {
+			pSetTimer.Call(h, timerViewerIdle, 1800, 0)
+		}
 	} else {
-		top := vw.hwnd
-		vw.hwnd, vw.inner, vw.full, vw.idle = vw.inner, 0, false, false
-		pDestroyWindow.Call(top)
-		var rc rect
-		pGetClientRect.Call(vw.hwnd, uintptr(unsafe.Pointer(&rc)))
-		vw.w, vw.h = rc.right, rc.bottom
+		pKillTimer.Call(h, timerViewerIdle)
+		pSetWindowPos.Call(h, hwndNoTop, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoActivate)
+		pSetWindowLongPtrW.Call(h, gwlStyle, style&^uintptr(wsPopup)|wsChild)
+		pSetWindowLongPtrW.Call(h, gwlExStyle, ex&^uintptr(wsExToolWindow))
+		pSetParent.Call(h, vw.host)
+		vw.full, vw.idle = false, false
+		done := enterBank(b)
+		hostLayout()
+		done()
 		pSetForegroundWindow.Call(vw.host)
-		pSetFocus.Call(vw.hwnd)
+		pSetFocus.Call(h)
 	}
 	viewerDrop()
-	invalidate(vw.hwnd)
+	invalidate(h)
 }
 
 type monitorInfo struct {
@@ -401,7 +415,7 @@ func viewerLayout(c canvas) {
 
 func viewerHas(id int) bool {
 	if vw.video != "" {
-		return id == vbOpen || id == vbClose
+		return id == vbOpen || id == vbClose || id == vbFull
 	}
 	if vw.full && vw.idle {
 		return false
@@ -554,6 +568,7 @@ func viewerAct(id int) {
 		viewerFull(!vw.full)
 	case vbOpen:
 		if vw.video != "" {
+			viewerFull(false) // the browser would open behind the film
 			openURL(vw.video)
 		} else if p, ok := mediaFile(vw.list[vw.idx]); ok {
 			viewerFull(false) // the other program would open behind the picture
@@ -816,6 +831,8 @@ func paintVideo(target uintptr) {
 	x := vw.w - pad
 	vw.btn[vbClose] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
 	x -= s + dp(8)
+	vw.btn[vbFull] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
+	x -= s + dp(8)
 	c.font(fnt.body)
 	label := "Otwórz w przeglądarce"
 	w := dp(14) + dp(20) + dp(6) + c.width(label) + dp(14)
@@ -823,6 +840,9 @@ func paintVideo(target uintptr) {
 	hotFill := mix(viewerInk, viewerGround, 16)
 	g := newGfx(buf.hdc)
 	if r := vw.btn[vbClose]; vw.hot == vbClose {
+		g.round(r.left, r.top, s, s, dp(6), dp(6), dp(6), dp(6), hotFill)
+	}
+	if r := vw.btn[vbFull]; vw.hot == vbFull {
 		g.round(r.left, r.top, s, s, dp(6), dp(6), dp(6), dp(6), hotFill)
 	}
 	r := vw.btn[vbOpen]
@@ -840,6 +860,11 @@ func paintVideo(target uintptr) {
 	c.text(strings.TrimPrefix(vw.video, "https://"), rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.icon)
 	c.text(gCloseBig, vw.btn[vbClose], viewerInk, dtCenter|dtVCenter|dtSingleLine)
+	if vw.full {
+		c.text(gUnfull, vw.btn[vbFull], viewerInk, dtCenter|dtVCenter|dtSingleLine)
+	} else {
+		c.text(gFull, vw.btn[vbFull], viewerInk, dtCenter|dtVCenter|dtSingleLine)
+	}
 	c.text(gOpenOut, rect{r.left + dp(14), r.top, r.left + dp(34), r.bottom}, viewerInk, dtSingleLine|dtVCenter)
 	c.font(fnt.body)
 	c.text(label, rect{r.left + dp(40), r.top, r.right - dp(10), r.bottom}, viewerInk, dtSingleLine|dtVCenter)

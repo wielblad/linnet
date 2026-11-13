@@ -123,6 +123,20 @@ func pickHeadPanes() {
 	invalidate(sv.hwnd)
 }
 
+var pMonitorFromRect = user32.NewProc("MonitorFromRect")
+
+// workAt is the room for windows on the screen a place is on: the monitor that holds most
+// of it, or the nearest one, without its taskbar.
+func workAt(r rect) rect {
+	mi := monitorInfo{size: uint32(unsafe.Sizeof(monitorInfo{}))}
+	mon, _, _ := pMonitorFromRect.Call(uintptr(unsafe.Pointer(&r)), 2) // the nearest one
+	if ok, _, _ := pGetMonitorInfoW.Call(mon, uintptr(unsafe.Pointer(&mi))); mon == 0 || ok == 0 || mi.work.right <= mi.work.left {
+		return workArea()
+	}
+	return mi.work
+}
+
+// workArea is the room for windows on the main screen.
 func workArea() rect {
 	var work rect
 	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
@@ -134,8 +148,7 @@ func undp(v int32) int32 { return v * 96 / dpi }
 
 // panelSize is the size of a window of a conversation beside a head: the one it was dragged
 // to, or the size it has always had. The dock keeps a size of its own.
-func panelSize() (w, ht int32) {
-	work := workArea()
+func panelSize(work rect) (w, ht int32) {
 	w, ht = dp(380), dp(580)
 	sw, sh := cfg.PanelW, cfg.PanelH
 	if cfg.HeadMode == headModeDock {
@@ -379,7 +392,7 @@ func entitySettle(id int64) {
 	if !ok {
 		return
 	}
-	work := workArea()
+	work := workAt(r) // the screen the head is on
 	var dx, dy int32
 	switch {
 	case r.left-work.left < dp(30):
@@ -398,6 +411,25 @@ func entitySettle(id int64) {
 	}
 	hc := headCfgOf(entityMembers(id)[0])
 	entityMove(hc.ID, hc.X+dx, hc.Y+dy)
+}
+
+// groupBump takes a head to the front of its group, which stays where it is: the
+// conversation someone has just written in comes first.
+func groupBump(id int64) bool {
+	g := groupOf(id)
+	if g == nil {
+		return false
+	}
+	first := groupMembers(g.ID)[0]
+	if first == id {
+		return false
+	}
+	origin := *headCfgOf(first)
+	headsReorder(id, first, false)
+	hc := headCfgOf(id)
+	hc.X, hc.Y = origin.X, origin.Y
+	groupsLayout()
+	return true
 }
 
 // headsReorder moves a head in the settings to just before or after another.

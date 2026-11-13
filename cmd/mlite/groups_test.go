@@ -133,3 +133,36 @@ func TestHeadSizes(t *testing.T) {
 		t.Errorf("an unknown size falls back to the middle one")
 	}
 }
+
+// A new message takes its head to the front of the group; the group itself stays put.
+func TestGroupBump(t *testing.T) {
+	defer groupsFixture()()
+	step := headStep()
+	headCfgOf(2).X, headCfgOf(2).Y = 500, 300+step
+	groupJoin(2, 1)
+	headCfgOf(3).X, headCfgOf(3).Y = 500, 300+2*step
+	groupJoin(3, 2) // a stack of 1, 2, 3 at (500,300)
+	if !groupBump(3) {
+		t.Fatalf("the last head of a group can be taken to its front")
+	}
+	if m := groupMembers(groupOf(1).ID); m[0] != 3 || m[1] != 1 || m[2] != 2 {
+		t.Fatalf("order after the bump: %v", m)
+	}
+	at(t, 3, 500, 300)
+	at(t, 1, 500, 300+step)
+	at(t, 2, 500, 300+2*step)
+	if groupBump(3) || groupBump(4) {
+		t.Errorf("the first head and a head on its own have nowhere to go")
+	}
+}
+
+// A place is on the screen that holds it; one that is on no screen gets the nearest.
+func TestWorkAt(t *testing.T) {
+	main := workArea()
+	if w := workAt(rect{main.left + 10, main.top + 10, main.left + 74, main.top + 74}); w.right <= w.left || w.bottom <= w.top {
+		t.Errorf("no room found for a place on the main screen: %+v", w)
+	}
+	if w := workAt(rect{-90000, -90000, -89936, -89936}); w.right <= w.left {
+		t.Errorf("a place on no screen must still get one: %+v", w)
+	}
+}

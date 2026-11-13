@@ -56,6 +56,7 @@ type headCfg struct {
 }
 
 type head struct {
+	own                          int  // its own unread count when last looked at
 	target, under, hidden, shift bool // would be tied to; behind the program's window; inside a folded group; Shift was down
 	id                           int64
 	hwnd, peek                   uintptr
@@ -353,6 +354,19 @@ func headSeenBy(id int64) bool {
 // announce allows the short look at a new message.
 func headsSync(announce bool) {
 	groupsLayout() // the heads of a group follow its first one, whatever was read from the settings
+	if !headsSettled && len(cfg.Heads) > 0 {
+		// Once at the start: a head left on a screen that is no longer there comes back
+		// to the nearest one that is.
+		headsSettled = true
+		for _, hc := range cfg.Heads {
+			entitySettle(hc.ID)
+		}
+	}
+	var bump []int64
+	dragging := false
+	for _, h := range heads {
+		dragging = dragging || h.down
+	}
 	want := map[int64]bool{}
 	for _, hc := range cfg.Heads {
 		want[hc.ID] = true
@@ -362,7 +376,7 @@ func headsSync(announce bool) {
 			if hwnd == 0 {
 				continue
 			}
-			h = &head{id: hc.ID, hwnd: hwnd, unread: unreadBy[hc.ID]}
+			h = &head{id: hc.ID, hwnd: hwnd, unread: unreadBy[hc.ID], own: unreadBy[hc.ID]}
 			heads[hc.ID], headByWnd[hwnd] = h, h
 			pSetWindowPos.Call(hwnd, 0, uintptr(hc.X), uintptr(hc.Y), uintptr(headSize()), uintptr(headSize()), 0x0004|0x0010)
 		}
@@ -400,6 +414,10 @@ func headsSync(announce bool) {
 		if hidden { // its own count, so that a new message of its own is noticed
 			unread = unreadBy[hc.ID]
 		}
+		if announce && cfg.HeadBump && !dragging && unreadBy[hc.ID] > h.own {
+			bump = append(bump, hc.ID)
+		}
+		h.own = unreadBy[hc.ID]
 		if announce && known && unread > h.unread && !h.under && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
 			showPeek(h, title, oneLine(previewText(t.LastPreview), 260), firstURL(t.LastPreview))
 		}
@@ -416,7 +434,18 @@ func headsSync(announce bool) {
 			delete(heads, id)
 		}
 	}
+	moved := false
+	for _, id := range bump { // after the walk over the heads: this changes their order
+		moved = groupBump(id) || moved
+	}
+	if moved {
+		saveConfig()
+		headsApply()
+		headsRedraw() // a folded group shows another head now
+	}
 }
+
+var headsSettled bool
 
 // headsRedraw forces every head to be drawn again, after a picture arrived or the theme changed.
 func headsRedraw() {
@@ -462,7 +491,7 @@ func showPeek(h *head, title, text, link string) {
 		}
 	}
 	pGetWindowRect.Call(anchor, uintptr(unsafe.Pointer(&r)))
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	work = workAt(r)
 	x := r.left - w - dp(8)
 	if (r.left+r.right)/2 < (work.left+work.right)/2 {
 		x = r.right + dp(8)
@@ -516,8 +545,8 @@ func panelPlace(h *head) (x, y, w, ht int32) {
 	if headHidden(h.id) {
 		hr = er
 	}
-	w, ht = panelSize()
-	work := workArea()
+	work := workAt(er) // the screen the heads are on
+	w, ht = panelSize(work)
 	// The side is settled when the panel opens and kept while it is open: a panel that
 	// jumped from one side of the head to the other mid-drag looked like a fault.
 	if compact.side == 0 {
@@ -563,7 +592,7 @@ func windowToRestore() rect {
 	if r.right-r.left >= dp(640) && r.bottom-r.top >= dp(420) {
 		return r
 	}
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	work = workAt(r)
 	w, h := dp(1020), dp(720)
 	if w > work.right-work.left-dp(80) {
 		w = work.right - work.left - dp(80)

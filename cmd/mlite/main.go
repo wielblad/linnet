@@ -575,7 +575,7 @@ func layout() {
 		return
 	}
 	show(lg.hwnd, false)
-	if vw.hwnd != 0 && vw.host == hMain { // a picture shown large covers everything else
+	if vw.hwnd != 0 && vw.host == hMain && !vw.full { // a picture shown large covers everything else
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
