@@ -1,8 +1,8 @@
 {
-  "version": "0.5",
+  "version": "0.6",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29614080,
-  "sha256": "b58459ba0fafa118e1ad930dfc273c7367f2bcb34d5d081c00c03e66083b80aa",
-  "signature": "/fbRFfiyx7aKMpPuIBsGoQ+xwstRiia/SS6YXMlsUEyasfbul3YaJipGCxQJYiPxVcUbjyHl7w+FTbcJs4YtAg==",
-  "notes": "Logowanie po polsku z wyborem sposobu potwierdzenia, wylogowanie w ustawieniach, historia czatów szyfrowanych na żądanie, motyw do wyboru, 27 dźwięków wiadomości, filmy z YouTube i Facebooka jako sam odtwarzacz, panel przy główce przyklejony i bez glitchy."
+  "size": 29635072,
+  "sha256": "97bbe35f0b9962b496d2d44e8228981b94d859ce0fd16ebe1939971378842dbd",
+  "signature": "3ARI/FR13YyFYAX8RomMj+5kKj5bxMQ1PWX0mHU1nMuf6gj0e3wcdpX2Ra+xib/h/C6IJLrPyNo19usP3SBmDQ==",
+  "notes": "Zielony pasek o nowej wersji na górze okna, główki pokazują, że rozmówca pisze albo przeczytał, uporządkowane ustawienia z obsługą klawiatury i czytników ekranu, znacznik przeczytania idzie za wiadomościami rozmówcy, bezpieczniejsze wczytywanie historii czatów szyfrowanych."
 }
