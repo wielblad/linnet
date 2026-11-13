@@ -19,6 +19,7 @@ type toneNote struct {
 	freq, start, decay float64
 	gain               float64
 	glide              float64 // pitch at the end, as a share of freq; 0 for a steady pitch
+	glideTime          float64 // seconds the glide takes; 0 for 0.12
 	overtone           float64 // loudness of a soft partial an octave and a fifth above
 }
 
@@ -40,6 +41,17 @@ var tones = []struct {
 		{freq: 523.3, decay: 0.35, gain: 0.55},
 		{freq: 659.3, start: 0.06, decay: 0.35, gain: 0.5},
 		{freq: 784.0, start: 0.12, decay: 0.4, gain: 0.5, overtone: 0.08}}},
+	// Bubbles: a pitch that leaps up within a few hundredths of a second and dies at once.
+	{"bulp", "Bulp", 0.25, []toneNote{{freq: 320, decay: 0.045, gain: 1, glide: 2.9, glideTime: 0.05}}},
+	{"bubble", "Bąbelek", 0.2, []toneNote{{freq: 650, decay: 0.03, gain: 1, glide: 2.4, glideTime: 0.035}}},
+	{"bubbles", "Dwa bąbelki", 0.35, []toneNote{
+		{freq: 420, decay: 0.035, gain: 0.9, glide: 2.5, glideTime: 0.04},
+		{freq: 560, start: 0.1, decay: 0.04, gain: 1, glide: 2.6, glideTime: 0.04}}},
+	{"plop", "Plum", 0.3, []toneNote{{freq: 950, decay: 0.06, gain: 1, glide: 0.38, glideTime: 0.07}}},
+	{"pop", "Pyk", 0.15, []toneNote{{freq: 900, decay: 0.022, gain: 1, glide: 1.9, glideTime: 0.02}}},
+	{"blip", "Blip", 0.3, []toneNote{
+		{freq: 740, decay: 0.05, gain: 0.9, glide: 1.25, glideTime: 0.03},
+		{freq: 1110, start: 0.075, decay: 0.07, gain: 0.8, glide: 1.15, glideTime: 0.03}}},
 }
 
 var toneCache struct {
@@ -81,13 +93,17 @@ func synthTone(length float64, notes []toneNote) []byte {
 			t := float64(i-first) / toneRate
 			f := nt.freq
 			if nt.glide > 0 {
-				f *= 1 + (nt.glide-1)*math.Min(t/0.12, 1)
+				gt := nt.glideTime
+				if gt == 0 {
+					gt = 0.12
+				}
+				f *= 1 + (nt.glide-1)*math.Min(t/gt, 1)
 			}
 			phase += 2 * math.Pi * f / toneRate
 			phase3 += 2 * math.Pi * f * 3 / toneRate
 			env := math.Exp(-t / nt.decay)
-			if a := 0.004; t < a { // a short rise: no click at the start
-				env *= t / a
+			if a := 0.006; t < a { // a soft rise: no click at the start
+				env *= math.Sin(t / a * math.Pi / 2)
 			}
 			mix[i] += nt.gain * env * (math.Sin(phase) + nt.overtone*math.Sin(phase3))
 		}
