@@ -38,6 +38,9 @@ func notifyBitmap(t store.Thread, d int32) uintptr {
 
 // notifyAbout shows the notification for a conversation.
 func notifyAbout(t store.Thread, title, text string) {
+	if toastAbout(t, title, text) {
+		return
+	}
 	var icon uintptr
 	if bmp := notifyBitmap(t, 96); bmp != 0 {
 		pGdipCreateHICON.Call(bmp, uintptr(unsafe.Pointer(&icon)))

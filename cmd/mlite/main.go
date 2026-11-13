@@ -198,6 +198,7 @@ func main() {
 		dumpNotifyIcons(dir)
 	}
 	be.hwnd.Store(hMain)
+	toastStart()
 	if *loginDemo > 0 {
 		showLogin(false)
 		if *loginDemo >= 2 {
@@ -1350,6 +1351,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			invalidate(pn.hwnd)
 		}
 		return 0
+	case wmAppToast:
+		toastArrived()
+		return 0
 	case wmAppOlder:
 		olderArrived(int64(lp), wp)
 		return 0
@@ -1391,6 +1395,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		closeWindow()
 		return 0
 	case wmDestroy:
+		toastQuit()
 		headsClose()
 		pShellNotifyIconW.Call(nimDelete, uintptr(unsafe.Pointer(&tray)))
 		pPostQuitMessage.Call(0)
@@ -1558,6 +1563,7 @@ func commitRow(idx int, focusInput bool) {
 }
 
 func selectThread(t store.Thread, focusInput bool) {
+	toastGone(t.ID)
 	closeViewer()
 	selClear()
 	first := selectedID == 0
