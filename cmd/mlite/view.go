@@ -911,7 +911,7 @@ func viewClick(x, y int32) {
 	for i := range mv.items {
 		if it := &mv.items[i]; it.kind == itMsg {
 			if u := linkAt(it, x, y); u != "" {
-				openLink(u)
+				openURL(u) // an address is a link: it opens in the default browser, whatever it leads to
 				return
 			}
 		}
@@ -923,7 +923,7 @@ func viewClick(x, y int32) {
 			ix, iy := it.bx+dp(12), it.y+it.top+it.imgTop
 			if x >= ix && x < ix+it.imgW && y >= iy && y < iy+it.imgH {
 				if it.preview {
-					openLink(it.link)
+					openLink(it.link) // the picture of a video plays it here; of a page, opens the browser
 				} else {
 					openViewer(it.imgMsg)
 				}

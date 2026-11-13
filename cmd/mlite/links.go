@@ -149,16 +149,14 @@ func openURL(raw string) {
 // playInWindow plays a video page inside the program's own window.
 func playInWindow(raw string) { openVideo(raw) }
 
-// playExternal shows a video page in a small Edge window without browser chrome, or in the
-// default browser: the way out when no browser can be embedded.
+// playExternal opens a video page in the default browser: the way out when no browser
+// can be embedded in the window.
 func playExternal(raw string) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || strings.ContainsAny(raw, "\" ") {
 		return
 	}
-	if !shellOpen("msedge.exe", fmt.Sprintf(`--app="%s" --window-size=980,640`, raw)) {
-		openURL(raw)
-	}
+	openURL(raw)
 }
 
 // safeOpen opens a fetched file only when its type is a plain document, picture, sound or

@@ -187,8 +187,7 @@ func paintPeek(hwnd, target uintptr) {
 	buf.flush(0, 0)
 }
 
-// peekOpen opens the link of a bubble: a video inside the main window, anything else in
-// the browser.
+// peekOpen opens the link of a bubble in the default browser.
 func peekOpen(hwnd uintptr) {
 	p := peeks[hwnd]
 	if p == nil || p.link == "" {
@@ -196,10 +195,7 @@ func peekOpen(hwnd uintptr) {
 	}
 	link := p.link
 	pShowWindow.Call(hwnd, swHide)
-	if youtubeID(link) != "" || playableLink(link) {
-		showMain()
-	}
-	openLink(link)
+	openURL(link)
 }
 
 // ---- screen readers: the list tells them which conversation the keyboard is on

@@ -597,7 +597,7 @@ func panelClick(i int) {
 	case phEntry:
 		if h.arg < len(pn.entries) {
 			if e := pn.entries[h.arg]; e.link != "" {
-				openLink(e.link)
+				openURL(e.link)
 			} else {
 				openAttachment(e.m)
 			}

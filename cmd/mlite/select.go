@@ -164,7 +164,8 @@ func linkAt(it *vitem, x, y int32) string {
 	return ""
 }
 
-// openLink opens an address the way its kind deserves: videos in a small window of their own.
+// openLink is what the preview picture of a link does: a video plays inside the window,
+// any other page opens in the default browser. The address itself always opens the browser.
 func openLink(u string) {
 	switch {
 	case youtubeID(u) != "":
