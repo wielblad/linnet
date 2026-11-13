@@ -27,6 +27,9 @@ var (
 	pGdipFillEllipseA     = pGdipFillEllipseI
 )
 
+// headBadge is the red of the unread count on a head; white text on it reads at 5:1.
+const headBadge = 0xD92D20
+
 const (
 	wsPopup         = 0x80000000
 	wsExLayered     = 0x00080000
@@ -157,9 +160,8 @@ func paintHead(g gfx, id int64, title string, unread int) {
 		bh := dp(22)
 		bw := bh + int32(len(text)-1)*dp(7)
 		bx := s - bw - dp(1)
-		g.pill(bx-dp(2), 0, bw+dp(4), bh+dp(4), 0xFFFFFF)
-		g.pill(bx, dp(2), bw, bh, pal.accent)
-		g.label(text, bx, dp(1), bw, bh, dp(13), true, pal.onAccent)
+		g.pill(bx, dp(2), bw, bh, headBadge)
+		g.label(text, bx, dp(1), bw, bh, dp(13), true, 0xFFFFFF)
 	}
 }
 
@@ -287,6 +289,45 @@ var compact struct {
 	forID   int64
 }
 
+// panelPlace is where the panel of the overlay belongs beside a head: on the side of the
+// head that has room, and on the screen the head is on.
+func panelPlace(h *head) (x, y, w, ht int32) {
+	w, ht = dp(380), dp(580)
+	var hr, work rect
+	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
+	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
+	x = hr.left - w - dp(10)
+	if (hr.left+hr.right)/2 < (work.left+work.right)/2 {
+		x = hr.right + dp(10)
+	}
+	if x+w > work.right-dp(4) {
+		x = work.right - dp(4) - w
+	}
+	if x < work.left+dp(4) {
+		x = work.left + dp(4)
+	}
+	y = hr.top - dp(120)
+	if y+ht > work.bottom-dp(8) {
+		y = work.bottom - dp(8) - ht
+	}
+	if y < work.top+dp(8) {
+		y = work.top + dp(8)
+	}
+	return x, y, w, ht
+}
+
+// panelFollow keeps the open panel beside its head while the head is dragged.
+func panelFollow(h *head) {
+	if !compact.on || compact.forID != h.id {
+		return
+	}
+	if vis, _, _ := pIsWindowVisible.Call(hMain); vis == 0 {
+		return
+	}
+	x, y, w, ht := panelPlace(h)
+	pSetWindowPos.Call(hMain, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(ht), 0x0004|0x0010) // no activation
+}
+
 // openHead shows the conversation in a small window beside the head; a second click puts it away.
 func openHead(h *head) {
 	t, ok := threadByID(h.id)
@@ -302,23 +343,10 @@ func openHead(h *head) {
 	if !compact.on {
 		pGetWindowRect.Call(hMain, uintptr(unsafe.Pointer(&compact.restore)))
 		compact.on = true
+		setOverlay(true)
 	}
 	compact.forID = h.id
-	w, ht := dp(380), dp(580)
-	var hr, work rect
-	pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&hr)))
-	pSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0)
-	x := hr.left - w - dp(10)
-	if (hr.left+hr.right)/2 < (work.left+work.right)/2 {
-		x = hr.right + dp(10)
-	}
-	y := hr.top - dp(120)
-	if y+ht > work.bottom-dp(8) {
-		y = work.bottom - dp(8) - ht
-	}
-	if y < work.top+dp(8) {
-		y = work.top + dp(8)
-	}
+	x, y, w, ht := panelPlace(h)
 	if r, _, _ := pIsIconic.Call(hMain); r != 0 {
 		pShowWindow.Call(hMain, swRestore)
 	}
@@ -357,6 +385,7 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		if h.dragging {
 			pSetWindowPos.Call(hwnd, 0, uintptr(h.originX+dx), uintptr(h.originY+dy), 0, 0, swpQuiet)
+			panelFollow(h) // the panel is anchored to the head and travels with it
 		}
 		return 0
 	case wmLButtonUp:

@@ -290,6 +290,9 @@ func handleKey(m *msgT) bool {
 	case lay.chat && m.wParam == vkEscape && (m.hwnd == hInput || m.hwnd == hView):
 		goBack()
 		return true
+	case compact.on && m.wParam == vkEscape: // from the list of the panel: put the overlay away
+		closeWindow()
+		return true
 	case m.hwnd == hSearch && m.wParam == vkEscape:
 		if query != "" {
 			setText(hSearch, "")
@@ -811,6 +814,12 @@ func paintMain(target uintptr) {
 			}
 		}
 	}
+	if compact.on { // the panel has no frame: a thin edge tells it from what is underneath
+		c.fill(rect{0, 0, lay.w, 1}, pal.line)
+		c.fill(rect{0, lay.h - 1, lay.w, lay.h}, pal.line)
+		c.fill(rect{0, 0, 1, lay.h}, pal.line)
+		c.fill(rect{lay.w - 1, 0, lay.w, lay.h}, pal.line)
+	}
 	if cfg.ShowMem && !lay.narrow {
 		c.font(fnt.small)
 		c.text(fmt.Sprintf("%d MB", memMB), rect{0, lay.h - dp(8) - sp(22), lay.rail.right, lay.h - dp(8)}, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
@@ -1175,6 +1184,11 @@ func inputChanged() {
 }
 
 func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	if msg == wmNcHitTest {
+		if hit, ok := overlayHit(lp); ok {
+			return hit
+		}
+	}
 	if msg == showMsg && showMsg != 0 { // a second start of the program asks this one to come forward
 		showMain()
 		return 0
@@ -1192,6 +1206,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if hList != 0 {
 			layout()
 		}
+		overlayRound() // the panel of the overlay keeps its rounded corners
 		return 0
 	case wmGetMinMaxInfo:
 		mm := (*minMaxInfo)(unsafe.Pointer(lp))
@@ -1445,8 +1460,9 @@ func isForeground() bool {
 }
 
 func showMain() {
-	if compact.on { // back from the small window beside a head to where the window was
+	if compact.on { // back from the panel of the overlay to the window as it was
 		compact.on = false
+		setOverlay(false)
 		r := compact.restore
 		pSetWindowPos.Call(hMain, 0, uintptr(r.left), uintptr(r.top), uintptr(r.right-r.left), uintptr(r.bottom-r.top), 0x0004)
 	}
