@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -151,7 +152,7 @@ func TestSaveCookiesRoundTrip(t *testing.T) {
 		t.Fatalf("SaveCookies: %v", err)
 	}
 	info, err := os.Stat(CookiesPath(dir))
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) { // Windows has no such bits
 		t.Fatalf("cookies file mode: %v %v", info.Mode(), err)
 	}
 	data, _ := os.ReadFile(CookiesPath(dir))

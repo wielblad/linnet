@@ -17,6 +17,10 @@ const (
 var (
 	pLoadImageW = user32.NewProc("LoadImageW")
 	pDrawIconEx = user32.NewProc("DrawIconEx")
+
+	pCreatePen      = gdi32.NewProc("CreatePen")
+	pRoundRect      = gdi32.NewProc("RoundRect")
+	pGetStockObject = gdi32.NewProc("GetStockObject")
 )
 
 // brandIcon loads one of the linked icons at the given size; the caller destroys it.

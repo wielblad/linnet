@@ -286,7 +286,16 @@ func dwMeasure(s string, width int32, wrap bool) (w, h int32, ok bool) {
 }
 
 // drawFocus draws the keyboard focus rectangle with GDI.
+// drawFocus marks keyboard focus the identity's way: a two-pixel rounded frame in the
+// focus colour, which is 3:1 or more against every surface.
 func drawFocus(hdc uintptr, r *rect) {
 	dwEnd()
-	pDrawFocusRect.Call(hdc, uintptr(unsafe.Pointer(r)))
+	pen, _, _ := pCreatePen.Call(0, uintptr(dp(2)), cref(pal.accent))
+	hollow, _, _ := pGetStockObject.Call(5)
+	oldPen, _, _ := pSelectObject.Call(hdc, pen)
+	oldBrush, _, _ := pSelectObject.Call(hdc, hollow)
+	pRoundRect.Call(hdc, uintptr(r.left), uintptr(r.top), uintptr(r.right), uintptr(r.bottom), uintptr(dp(12)), uintptr(dp(12)))
+	pSelectObject.Call(hdc, oldBrush)
+	pSelectObject.Call(hdc, oldPen)
+	pDeleteObject.Call(pen)
 }

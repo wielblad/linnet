@@ -313,22 +313,6 @@ func handleKey(m *msgT) bool {
 	return false
 }
 
-// headerButton tells which button of the conversation header a point is on: 1 search,
-// 2 information, 0 none.
-func headerButton(x, y int32) int {
-	if _, ok := threadByID(selectedID); !ok || nav == navSettings || lg.active || (lay.narrow && !lay.chat) {
-		return 0
-	}
-	for k, b := range []rect{lay.hbSearch, lay.hbInfo} {
-		if x >= b.left && x < b.right && y >= b.top && y < b.bottom {
-			return k + 1
-		}
-	}
-	return 0
-}
-
-var hotHdr int // header button under the pointer: 1 search, 2 information
-
 func fatal(msg string) {
 	pMessageBoxW.Call(0, uintptr(unsafe.Pointer(u16(msg))), uintptr(unsafe.Pointer(u16(appName))), 0x10)
 	os.Exit(1)
@@ -363,6 +347,9 @@ func createMainWindow(visible bool) {
 	hInput = createWindow(0, "EDIT", "", wsChild|wsTabStop|esMultiline|esAutoVScroll|esWantReturn, hMain, idInput)
 	hSend = createWindow(0, "BUTTON", "Wyślij", wsChild|wsTabStop|bsOwnerDraw, hMain, idSend)
 	hAttach = createWindow(0, "BUTTON", "Dołącz plik", wsChild|wsTabStop|bsOwnerDraw, hMain, idAttach)
+	// the two buttons of the conversation header are real buttons: Tab reaches them
+	hFind = createWindow(0, "BUTTON", "Szukaj w rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idFind)
+	hInfo = createWindow(0, "BUTTON", "Informacje o rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idInfo)
 	hSet = createWindow(0, "MliteSettings", "Ustawienia", wsChild|wsVScroll|wsTabStop, hMain, 0)
 	initLogin()
 	sv.hwnd = hSet
@@ -371,7 +358,7 @@ func createMainWindow(visible bool) {
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
 	initPanel()
-	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach} {
+	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo} {
 		oldBtnProc = subclass(h, btnProc)
 	}
 	applyTheme()
@@ -477,7 +464,7 @@ func layout() {
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
 	if lg.active { // the sign-in screen covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet} {
 			show(c, false)
 		}
 		moveTo(lg.hwnd, rect{0, 0, w, h})
@@ -487,7 +474,7 @@ func layout() {
 	}
 	show(lg.hwnd, false)
 	if vw.hwnd != 0 { // a picture shown large covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hSet} {
 			show(c, false)
 		}
 		moveTo(vw.hwnd, rect{0, 0, w, h})
@@ -622,6 +609,8 @@ func layout() {
 	moveTo(hInput, rect{lay.input.left + dp(10), it, lay.input.right - dp(8), it + inH})
 	moveTo(hSend, rect{w - dp(12) - dp(36), h - dp(10) - dp(36), w - dp(12), h - dp(10)})
 	moveTo(hAttach, rect{cx + dp(10), h - dp(10) - dp(36), cx + dp(46), h - dp(10)})
+	moveTo(hFind, lay.hbSearch)
+	moveTo(hInfo, lay.hbInfo)
 	moveTo(hSet, rect{railW, 0, w, h - barH})
 	switch {
 	case pn.side:
@@ -639,6 +628,10 @@ func layout() {
 	show(hInput, showContent && hasSel && !pn.cover)
 	show(hSend, showContent && hasSel && !pn.cover)
 	show(hAttach, showContent && hasSel && !pn.cover)
+	show(hFind, showContent && hasSel && !pn.cover)
+	show(hInfo, showContent && hasSel && !pn.cover)
+	invalidate(hFind)
+	invalidate(hInfo)
 	show(pn.hwnd, pn.side || pn.cover)
 	show(pn.edit, (pn.side || pn.cover) && pn.search)
 	show(hSet, settings)
@@ -729,15 +722,6 @@ func paintMain(target uintptr) {
 				}
 			}
 			hdrPhoto = threadAvatar(g, t, lay.header.left+hx+dp(14), (lay.header.bottom-dp(36))/2, dp(36), pal.card)
-			for k, b := range []rect{lay.hbSearch, lay.hbInfo} {
-				on := pn.open && pn.search == (k == 0)
-				switch {
-				case on:
-					g.round(b.left, b.top, b.right-b.left, b.bottom-b.top, dp(4), dp(4), dp(4), dp(4), mix(pal.accent, pal.card, 22))
-				case hotHdr == k+1:
-					g.round(b.left, b.top, b.right-b.left, b.bottom-b.top, dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.card, 9))
-				}
-			}
 		}
 		if lay.stripText != "" {
 			s := lay.strip
@@ -799,9 +783,6 @@ func paintMain(target uintptr) {
 					sub = real + " · " + sub
 				}
 			}
-			c.font(fnt.icon)
-			c.text(gSearch, lay.hbSearch, pal.fg, dtCenter|dtVCenter|dtSingleLine)
-			c.text(gInfo, lay.hbInfo, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 			x := lay.header.left + hx + dp(62)
 			c.font(fnt.head)
 			if sub == "" {
@@ -1202,6 +1183,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			drawSend(d)
 		case d.ctlID == idAttach:
 			drawAttach(d)
+		case d.ctlID == idFind || d.ctlID == idInfo:
+			drawHeaderBtn(d)
 		case d.ctlID == idList:
 			drawRow(d)
 		}
@@ -1213,7 +1196,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmCtlColorLB:
 		return brMica
 	case 0x0135: // WM_CTLCOLORBTN: what a button is erased with before it is drawn
-		if lp == hSend || lp == hAttach {
+		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo {
 			return brCard
 		}
 		return brMica
@@ -1232,6 +1215,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			if t, ok := threadByID(selectedID); ok {
 				rowAction(int(id), t)
 			}
+		case (id == idFind || id == idInfo) && code == 0:
+			showPanel(id == idFind)
 		case id == idAttach && code == 0:
 			pickFile()
 		case id == idSend && code == 0:
@@ -1328,8 +1313,6 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			cancelCompose()
 		} else if b := lay.back; lay.chat && x >= b.left && x < b.right && y >= b.top && y < b.bottom {
 			goBack()
-		} else if k := headerButton(x, y); k != 0 {
-			showPanel(k == 1)
 		}
 		return 0
 	case wmAppLogin:
@@ -1349,21 +1332,6 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		viewerRefresh()
 		if pn.open {
 			invalidate(pn.hwnd)
-		}
-		return 0
-	case wmMouseMove:
-		if k := headerButton(int32(int16(lp)), int32(int16(lp>>16))); k != hotHdr {
-			hotHdr = k
-			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.header)), 0)
-			if k != 0 {
-				trackLeave(hMain)
-			}
-		}
-		return 0
-	case wmMouseLeave:
-		if hotHdr != 0 {
-			hotHdr = 0
-			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.header)), 0)
 		}
 		return 0
 	case wmAppOlder:

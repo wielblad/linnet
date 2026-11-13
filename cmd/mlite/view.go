@@ -600,7 +600,7 @@ func paintView(target uintptr) {
 			c.font(fnt.small)
 			w := c.width(it.label) + dp(20)
 			g.pill((mv.w-w)/2, y+sp(10)+1, w, sp(20), shadow)
-			g.pill((mv.w-w)/2, y+sp(10), w, sp(20), pal.card)
+			g.pill((mv.w-w)/2, y+sp(10), w, sp(20), pal.bubble)
 		case itMsg:
 			by := y + it.top
 			fill := pal.bubble

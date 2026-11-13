@@ -27,6 +27,8 @@ const (
 	phEntry
 	phResult
 
+	idFind     = 333
+	idInfo     = 334
 	timerFlash = 23
 	timerToast = 24
 	idPanelEdit = 360
@@ -55,6 +57,8 @@ var pn struct {
 	sc          scroller
 	hits        []panelHit
 	hot         int
+	focus       int  // row the keyboard is on, an index into hits
+	kbd         bool // the keyboard was used last: the focus mark is shown
 	thumbs      map[string]uintptr
 	thumbSide   int32
 	photos      []store.Message
@@ -64,6 +68,42 @@ var pn struct {
 	results     []int           // indexes into all, newest first
 	forThread   int64
 	forCount    int
+}
+
+var hFind, hInfo uintptr // the header buttons that open the panel
+
+// drawHeaderBtn draws one of the two buttons at the right end of the conversation header.
+func drawHeaderBtn(d *drawItem) {
+	w, h := d.rcItem.right, d.rcItem.bottom
+	buf := newBuffer(d.hDC, w, h)
+	c := canvas{buf.hdc}
+	c.fill(rect{0, 0, w, h}, pal.card)
+	search := d.ctlID == idFind
+	fill := pal.card
+	switch {
+	case pn.open && pn.search == search: // the panel it opened is showing
+		fill = mix(pal.accent, pal.card, 22)
+	case d.itemState&odsSelected != 0:
+		fill = mix(pal.fg, pal.card, 14)
+	case hotBtn == d.hwndItem:
+		fill = mix(pal.fg, pal.card, 8)
+	}
+	if fill != pal.card {
+		g := newGfx(buf.hdc)
+		g.round(0, 0, w, h, dp(8), dp(8), dp(8), dp(8), fill)
+		g.free()
+	}
+	glyph := gInfo
+	if search {
+		glyph = gSearch
+	}
+	c.font(fnt.icon)
+	c.text(glyph, rect{0, 0, w, h}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	if focusCue(d) {
+		fr := rect{1, 1, w - 1, h - 1}
+		drawFocus(buf.hdc, &fr)
+	}
+	buf.flush(0, 0)
 }
 
 func panelWidth() int32 { return dp(304) }
@@ -112,6 +152,7 @@ func showPanel(search bool) {
 		return
 	}
 	pn.open, pn.search, pn.scroll = true, search, 0
+	pn.focus, pn.kbd = 0, false
 	panelCollect()
 	layout()
 	if search {
@@ -483,6 +524,10 @@ func paintPanel(target uintptr) {
 	c.text(title, rect{titleX, 0, closeR.left - dp(8), bar}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.iconSm)
 	c.text(gClose, closeR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+	if pn.kbd && pn.focus >= 0 && pn.focus < len(pn.hits) {
+		fr := pn.hits[pn.focus].r
+		drawFocus(buf.hdc, &fr)
+	}
 	buf.flush(0, 0)
 }
 
@@ -632,6 +677,7 @@ func panelProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 	case wmLButtonDown:
 		x, y := lpPoint(lp)
+		pn.kbd = false
 		if pn.sc.mouse(msg, x, y, pn.w, pn.h) {
 			return 0
 		}
@@ -652,10 +698,28 @@ func panelProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		switch wp {
 		case vkEscape:
 			closePanel()
-		case vkUp:
-			pn.sc.by(-dp(40))
-		case vkDown:
-			pn.sc.by(dp(40))
+		case vkUp, vkDown:
+			// the arrows walk the rows that are on screen; past the last one they scroll
+			step := 1
+			if wp == vkUp {
+				step = -1
+			}
+			next := pn.focus + step
+			if !pn.kbd {
+				next = 0
+			}
+			pn.kbd = true
+			if next >= 0 && next < len(pn.hits) {
+				pn.focus = next
+				invalidate(hwnd)
+			} else {
+				pn.sc.by(int32(step) * dp(80))
+			}
+		case vkSpace, vkReturn:
+			if pn.kbd {
+				panelClick(pn.focus)
+				pn.kbd = pn.open
+			}
 		case vkPrior:
 			pn.sc.by(-pn.h * 9 / 10)
 		case vkNext:
