@@ -243,6 +243,7 @@ func handleKey(m *msgT) bool {
 		return true
 	case ctrl && m.wParam == 'C' && m.hwnd == hView && selText() != "":
 		copyText(selText())
+		viewToast("Skopiowano zaznaczenie")
 		return true
 	case ctrl && m.wParam == 'V' && m.hwnd == hInput:
 		if pasteAttachment() {
@@ -1344,6 +1345,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		avatarArrived(int64(lp), wp != 0)
 		return 0
 	case wmAppMedia:
+		if ogArrived() {
+			relayoutView()
+		}
 		mediaArrived()
 		viewerRefresh()
 		if pn.open {

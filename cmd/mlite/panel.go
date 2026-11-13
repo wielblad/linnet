@@ -28,6 +28,7 @@ const (
 	phResult
 
 	timerFlash = 23
+	timerToast = 24
 	idPanelEdit = 360
 )
 

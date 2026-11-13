@@ -54,6 +54,7 @@ type vitem struct {
 	imgTop     int32 // offset of the picture from the top of the bubble
 	imgMsg     store.Message // what the picture is fetched for: the message, or a video preview
 	preview    bool          // the picture stands for a link, not for a photo
+	og         string        // link whose preview is fetched from its page when it is seen
 	play       bool          // the link is a video: it opens in a small window
 	link       string        // first web address in the text
 	chip       string        // line that opens an attachment or the link
@@ -88,6 +89,7 @@ var mv struct {
 	sc       scroller
 	hover    int // index of the message under the pointer, -1 when none
 	flash    string // message marked for a moment after a jump from the search
+	toast    string // short confirmation shown over the bottom of the view
 	hotAct   int // which of its actions is under the pointer
 }
 
@@ -290,11 +292,21 @@ func layoutView() {
 			it.link = u
 			id := youtubeID(u)
 			it.play = id != "" || playableLink(u)
+			title := oneLine(m.LinkTitle, 90)
 			switch {
 			case m.LinkImage != "" || m.LinkRef != "":
 				it.imgMsg = linkMessage(m)
 			case id != "":
 				it.imgMsg = ytMessage(id)
+			case metaHost(u): // no preview came with the message: the page's own, once fetched
+				if pm, t, ok := ogHave(u); ok {
+					it.imgMsg = pm
+					if title == "" {
+						title = oneLine(t, 90)
+					}
+				} else {
+					it.og = u // fetched when the message comes into view
+				}
 			}
 			if it.imgMsg.ID != "" {
 				it.imgW, it.imgH, it.imgReady = mediaBox(it.imgMsg, inner)
@@ -305,7 +317,6 @@ func layoutView() {
 				it.img = it.imgReady || md.busy[it.imgMsg.ID] || id != ""
 				it.preview = it.img
 			}
-			title := oneLine(m.LinkTitle, 90)
 			switch {
 			case title != "" && it.play:
 				it.chip, it.chipIcon, it.chipAct = title+" · "+linkHost(u), gPlay, chipPlay
@@ -548,6 +559,9 @@ func paintView(target uintptr) {
 			g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
 			g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
 			paintTextMarks(g, it, fill)
+			if it.og != "" {
+				ogKick(it.og)
+			}
 			rxDrop := int32(0)
 			if it.rx != "" {
 				rxDrop = dp(18)
@@ -717,11 +731,25 @@ func paintView(target uintptr) {
 			}
 		}
 	}
+	var toast rect
+	if mv.toast != "" {
+		c.font(fnt.small)
+		tw, th := c.width(mv.toast)+dp(28), sp(18)+dp(14)
+		toast = rect{(mv.w - tw) / 2, mv.h - th - dp(14), (mv.w + tw) / 2, mv.h - dp(14)}
+	}
 	bar := newGfx(buf.hdc)
 	paintActions(bar, c, true)
 	mv.sc.paint(bar, mv.w, mv.h, pal.layer)
+	if mv.toast != "" { // drawn over the messages: it takes no room of its own
+		bar.pill(toast.left, toast.top+1, toast.right-toast.left, toast.bottom-toast.top, shadow)
+		bar.pill(toast.left, toast.top, toast.right-toast.left, toast.bottom-toast.top, mix(pal.fg, pal.layer, 92))
+	}
 	bar.free()
 	paintActions(0, c, false)
+	if mv.toast != "" {
+		c.font(fnt.small)
+		c.text(mv.toast, toast, pal.layer, dtCenter|dtVCenter|dtSingleLine)
+	}
 	buf.flush(0, 0)
 }
 
@@ -747,6 +775,14 @@ func relayoutView() {
 	}
 	clampScroll()
 	syncScrollbar()
+	invalidate(mv.hwnd)
+}
+
+// viewToast shows a short confirmation over the bottom of the conversation; it goes away
+// by itself and moves nothing.
+func viewToast(text string) {
+	mv.toast = text
+	pSetTimer.Call(mv.hwnd, timerToast, 1800, 0)
 	invalidate(mv.hwnd)
 }
 
@@ -855,6 +891,12 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		viewHover(-1, -1)
 		return 0
 	case wmTimer:
+		if wp == timerToast {
+			pKillTimer.Call(hwnd, timerToast)
+			mv.toast = ""
+			invalidate(hwnd)
+			return 0
+		}
 		if wp == timerFlash {
 			pKillTimer.Call(hwnd, timerFlash)
 			mv.flash = ""

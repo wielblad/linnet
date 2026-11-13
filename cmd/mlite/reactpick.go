@@ -132,7 +132,7 @@ func actionClick() bool {
 		messageAction(idMsgReply)
 	case actCopy:
 		copyText(it.m.Text)
-		be.notice("Skopiowano wiadomość.")
+		viewToast("Skopiowano wiadomość")
 	case actMore:
 		messageMenu(it.m, r.left, r.bottom)
 	}

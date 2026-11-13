@@ -200,8 +200,10 @@ func messageAction(id int) {
 		setCompose(cmEdit, m)
 	case id == idMsgCopy:
 		copyText(m.Text)
+		viewToast("Skopiowano wiadomość")
 	case id == idMsgCopySel:
 		copyText(selText())
+		viewToast("Skopiowano zaznaczenie")
 	case id == idMsgUnsend:
 		text := "Usunąć tę wiadomość u wszystkich?\n\nZniknie także u rozmówców. Tego nie da się cofnąć."
 		r, _, _ := pMessageBoxW.Call(hMain, uintptr(unsafe.Pointer(u16(text))), uintptr(unsafe.Pointer(u16("Usuwanie wiadomości"))), 0x4|0x30|0x100) // Yes/No, warning, No is default
