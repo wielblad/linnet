@@ -13,6 +13,8 @@ import (
 
 	"go.mau.fi/mautrix-meta/pkg/messagix/table"
 
+	"github.com/rs/zerolog/log"
+
 	"lazyfmess/internal/store"
 )
 
@@ -20,6 +22,7 @@ const (
 	itDay = iota
 	itMsg
 	itNew
+	itTop // the top of what is loaded: fetching older messages, or the beginning
 )
 
 const (
@@ -90,6 +93,10 @@ var mv struct {
 	hover    int // index of the message under the pointer, -1 when none
 	flash    string // message marked for a moment after a jump from the search
 	toast    string // short confirmation shown over the bottom of the view
+	limit     int   // how many of the newest messages are loaded
+	limitFor  int64 // the thread that limit belongs to
+	localMore bool  // the store holds older messages than the loaded ones
+	spin      int   // step of the fetching mark
 	hotAct   int // which of its actions is under the pointer
 }
 
@@ -176,18 +183,21 @@ func loadView(force bool) {
 		}
 		return
 	}
-	msgs, err := be.db.ListMessages(be.ctx, mv.thread.ID)
+	if mv.limitFor != mv.thread.ID || mv.limit < windowStart {
+		mv.limit, mv.limitFor = windowStart, mv.thread.ID
+	}
+	msgs, localMore, err := be.db.RecentMessages(be.ctx, mv.thread.ID, mv.limit)
 	if err != nil {
 		return
 	}
-	if len(msgs) > 400 {
-		msgs = msgs[len(msgs)-400:]
-	}
+	mv.localMore = localMore
+	defer olderSoon()
 	self := be.accountID()
 	receipts, _ := be.db.Receipts(be.ctx, mv.thread.ID, self)
 	nicks, _ := be.db.Nicknames(be.ctx, mv.thread.ID)
 	hash := fnv.New64a()
 	fmt.Fprintf(hash, "%d|%d|%v|%d|%v;", mv.thread.ID, mv.w, pal.dark, textScale, nicks)
+	fmt.Fprintf(hash, "%d|%v|%d;", len(msgs), localMore, olderStateFor(localMore))
 	for _, r := range receipts {
 		fmt.Fprintf(hash, "%d:%d:%d,", r.ContactID, r.Read.UnixMilli(), r.Delivered.UnixMilli())
 	}
@@ -199,11 +209,34 @@ func loadView(force bool) {
 		return
 	}
 	stick := mv.key == 0 || mv.scroll >= mv.total-mv.h-dp(48)
+	// What the reader is looking at stays put when messages are added above it: the first
+	// message on screen is found again after the layout and put back at the same height.
+	anchor, anchorOff := "", int32(0)
+	if !stick {
+		for i := range mv.items {
+			if it := &mv.items[i]; it.kind == itMsg && it.y+it.h > mv.scroll {
+				anchor, anchorOff = it.m.ID, it.y-mv.scroll
+				break
+			}
+		}
+	}
 	mv.key, mv.msgs, mv.receipts, mv.nicks, mv.self = key, msgs, receipts, nicks, self
 	mv.group = isGroup(mv.thread)
+	started := time.Now()
 	layoutView()
+	if timing { // measurements only
+		log.Warn().Int("messages", len(msgs)).Dur("layout", time.Since(started)).Msg("timing")
+	}
 	if stick {
 		mv.scroll = mv.total - mv.h
+	} else if anchor != "" {
+		for i := range mv.items {
+			if it := &mv.items[i]; it.kind == itMsg && it.m.ID == anchor {
+				mv.sc.stop()
+				mv.scroll = it.y - anchorOff
+				break
+			}
+		}
 	}
 	clampScroll()
 	syncScrollbar()
@@ -231,6 +264,17 @@ func layoutView() {
 	inner := maxBubble - padL - padR
 	items := make([]vitem, 0, len(mv.msgs)+8)
 	y := dp(8)
+	if len(mv.msgs) > 0 { // room at the top for the fetching mark; always there, so nothing jumps
+		label := ""
+		switch olderState() {
+		case 1:
+			label = "Wczytywanie starszych wiadomości"
+		case 2:
+			label = "Początek rozmowy"
+		}
+		items = append(items, vitem{kind: itTop, y: y, h: sp(40), label: label})
+		y += sp(40)
+	}
 	lastDay := ""
 	newDone := !mv.hasNew
 	// where each other participant stopped reading: the index of the last message they have seen
@@ -496,7 +540,21 @@ func syncScrollbar() {}
 func scrollBy(d int32) { mv.sc.by(d) }
 
 // viewScrolled runs whenever the conversation moved.
-func viewScrolled() { viewHover(-1, -1) }
+func viewScrolled() {
+	viewHover(-1, -1)
+	olderSoon()
+}
+
+// olderStateFor is olderState for a load in progress, before its result is in place.
+func olderStateFor(localMore bool) int {
+	switch {
+	case older.busy == mv.thread.ID:
+		return 1
+	case !localMore && older.done[mv.thread.ID]:
+		return 2
+	}
+	return 0
+}
 
 func paintView(target uintptr) {
 	buf := newBuffer(target, mv.w, mv.h)
@@ -528,6 +586,16 @@ func paintView(target uintptr) {
 			continue
 		}
 		switch it.kind {
+		case itTop:
+			if olderState() == 1 { // three dots, one after another brighter
+				for k := int32(0); k < 3; k++ {
+					col := mix(pal.fg2, pal.layer, 35)
+					if int32(mv.spin%3) == k {
+						col = pal.accent
+					}
+					g.ellipse(mv.w/2-dp(15)+k*dp(12), y+sp(4), dp(6), dp(6), col)
+				}
+			}
 		case itDay:
 			c.font(fnt.small)
 			w := c.width(it.label) + dp(20)
@@ -617,6 +685,11 @@ func paintView(target uintptr) {
 			continue
 		}
 		switch it.kind {
+		case itTop:
+			if it.label != "" {
+				c.font(fnt.small)
+				c.text(it.label, rect{0, y + sp(14), mv.w, y + sp(36)}, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
+			}
 		case itDay:
 			c.font(fnt.small)
 			c.text(it.label, rect{0, y + sp(10), mv.w, y + sp(30)}, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
@@ -891,6 +964,16 @@ func viewProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		viewHover(-1, -1)
 		return 0
 	case wmTimer:
+		if wp == timerOlder {
+			pKillTimer.Call(hwnd, timerOlder)
+			olderCheck()
+			return 0
+		}
+		if wp == timerSpin {
+			mv.spin++
+			invalidate(hwnd)
+			return 0
+		}
 		if wp == timerToast {
 			pKillTimer.Call(hwnd, timerToast)
 			mv.toast = ""
@@ -989,3 +1072,4 @@ func registerClass(name string, proc func(uintptr, uint32, uintptr, uintptr) uin
 
 // keepHover makes the conversation ignore the pointer leaving; set only for automated checks.
 var keepHover = os.Getenv("MLITE_KEEPHOVER") != ""
+var timing = os.Getenv("MLITE_TIMING") != ""

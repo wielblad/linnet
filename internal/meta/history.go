@@ -175,6 +175,122 @@ func (c *Client) SyncThreadHistory(ctx context.Context, s *store.Store, thread s
 	return c.syncSocketThread(ctx, s, thread)
 }
 
+// SyncThreadNewest brings a conversation up to date when it is opened: the newest page of
+// an encrypted chat, or the first page of a chat the store knows nothing about yet. Older
+// messages are fetched page by page with FetchOlder, as the reader scrolls back.
+func (c *Client) SyncThreadNewest(ctx context.Context, s *store.Store, thread store.Thread) error {
+	if err := c.waitReady(ctx); err != nil {
+		return err
+	}
+	if c == nil || s == nil || thread.ID == 0 {
+		return nil
+	}
+	if table.ThreadType(thread.ThreadType).IsWhatsApp() {
+		return c.syncEncryptedPages(ctx, s, thread, 1)
+	}
+	if _, err := s.OldestMessage(ctx, thread.ID); errors.Is(err, sql.ErrNoRows) {
+		_, err := c.fetchOlderSocket(ctx, s, thread)
+		return err
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// FetchOlder fetches one page of messages older than the oldest one stored for the thread
+// and reports whether the server has more before it.
+func (c *Client) FetchOlder(ctx context.Context, s *store.Store, thread store.Thread) (bool, error) {
+	if err := c.waitReady(ctx); err != nil {
+		return false, err
+	}
+	if c == nil || s == nil || thread.ID == 0 {
+		return false, nil
+	}
+	if table.ThreadType(thread.ThreadType).IsWhatsApp() {
+		return c.fetchOlderEncrypted(ctx, s, thread)
+	}
+	return c.fetchOlderSocket(ctx, s, thread)
+}
+
+func (c *Client) fetchOlderEncrypted(ctx context.Context, s *store.Store, thread store.Thread) (bool, error) {
+	device := c.HistoryDevice()
+	if device == nil || device.ID == "" {
+		return false, nil
+	}
+	timestamp := time.Now().Add(time.Minute).UnixMilli()
+	oldest, err := s.OldestMessage(ctx, thread.ID)
+	switch {
+	case err == nil:
+		timestamp = oldest.Timestamp.UnixMilli()
+	case errors.Is(err, sql.ErrNoRows):
+	default:
+		return false, err
+	}
+	threadID := strconv.FormatInt(thread.ID, 10)
+	isGroup := table.ThreadType(thread.ThreadType) == table.ENCRYPTED_OVER_WA_GROUP
+	rangeResp, err := c.mx.GetSecureHistoryClient().FetchMessages(ctx, device, threadID, true, timestamp, historyPageSize)
+	if err != nil {
+		return false, fmt.Errorf("fetch encrypted history %d: %w", thread.ID, err)
+	}
+	if rangeResp.Epochs != nil && len(rangeResp.Epochs.Edges) > 0 {
+		updated, err := device.WithEpochs(rangeResp.Epochs)
+		if err != nil {
+			return false, fmt.Errorf("apply history epochs: %w", err)
+		}
+		if err := c.saveHistoryDevice(updated); err != nil {
+			return false, err
+		}
+		device = updated
+	}
+	messages, err := rangeResp.Decrypt(device, threadID, c.AccountID(), isGroup)
+	if err != nil {
+		return false, fmt.Errorf("decrypt encrypted history %d: %w", thread.ID, err)
+	}
+	if err := s.InTx(ctx, func(s *store.Store) error {
+		return storeArchivePage(ctx, s, thread, messages)
+	}); err != nil {
+		return false, err
+	}
+	more := rangeResp.Range != nil && rangeResp.Range.HasMoreBefore != nil && *rangeResp.Range.HasMoreBefore
+	// A page that brought nothing older would be asked for again and again.
+	if after, err := s.OldestMessage(ctx, thread.ID); err == nil && after.Timestamp.UnixMilli() >= timestamp {
+		more = false
+	}
+	return more, nil
+}
+
+func (c *Client) fetchOlderSocket(ctx context.Context, s *store.Store, thread store.Thread) (bool, error) {
+	var task socket.Task
+	refID := ""
+	oldest, err := s.OldestMessage(ctx, thread.ID)
+	switch {
+	case err == nil:
+		refID = oldest.ID
+		task = &socket.FetchMessagesTask{
+			ThreadKey:            thread.ID,
+			Direction:            0,
+			ReferenceTimestampMs: oldest.Timestamp.UnixMilli(),
+			ReferenceMessageId:   refID,
+			SyncGroup:            1,
+			Cursor:               c.mx.GetCursor(1),
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		task = &socket.CreateThreadTask{ThreadFBID: thread.ID, SyncGroup: 1}
+	default:
+		return false, err
+	}
+	tbl, err := c.mx.ExecuteTasks(ctx, task)
+	if err != nil {
+		return false, fmt.Errorf("fetch socket history %d: %w", thread.ID, err)
+	}
+	if err := ApplyTable(ctx, s, tbl); err != nil {
+		return false, err
+	}
+	upsert, _ := tbl.WrapMessages()
+	um := upsert[thread.ID]
+	return um != nil && um.Range != nil && um.Range.HasMoreBefore && um.Range.MinMessageId != "" && um.Range.MinMessageId != refID, nil
+}
+
 func (c *Client) SyncAllEncryptedHistory(ctx context.Context, s *store.Store) error {
 	if err := c.waitReady(ctx); err != nil {
 		return err

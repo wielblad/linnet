@@ -221,5 +221,12 @@ receipt(103, 105, read_ago=90 * MIN)                           # has seen everyt
 receipt(103, 106, read_ago=3 * HOUR + 25 * MIN)                # stopped at my message
 receipt(102, 102, read_ago=4 * HOUR)
 
+# 120: a long conversation, to try scrolling back through the history
+c.execute("insert into contacts(id,name) values(?,?)", (120, "Historia Długa"))
+for i in range(1, 701):
+    extra = " To jest trochę dłuższa wiadomość, żeby zawijała się w dymku na dwie linijki albo więcej." if i % 7 == 0 else ""
+    msg(120, 120 if i % 3 else ME, 4 * DAY + (700 - i) * 7 * MIN, "Wiadomość %d.%s" % (i, extra))
+thread(120, "Historia Długa", 1, "Wiadomość 700.", 4 * DAY)
+
 c.commit()
 print("threads:", c.execute("select count(*) from threads").fetchone()[0], "messages:", c.execute("select count(*) from messages").fetchone()[0])

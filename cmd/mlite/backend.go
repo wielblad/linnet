@@ -321,7 +321,7 @@ func (b *backend) openThread(thread store.Thread, markRead bool) {
 		return
 	}
 	go func() {
-		if err := client.SyncThreadHistory(b.ctx, b.db, thread); err != nil {
+		if err := client.SyncThreadNewest(b.ctx, b.db, thread); err != nil {
 			log.Warn().Err(err).Msg("sync thread history")
 		}
 		if markRead && !b.noRead {

@@ -1369,6 +1369,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			pInvalidateRect.Call(hMain, uintptr(unsafe.Pointer(&lay.header)), 0)
 		}
 		return 0
+	case wmAppOlder:
+		olderArrived(int64(lp), wp)
+		return 0
 	case wmAppQuit: // the installer or uninstaller asks a running copy to end
 		quitting = true
 		pDestroyWindow.Call(hMain)

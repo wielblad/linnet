@@ -60,7 +60,8 @@ var pn struct {
 	photos      []store.Message
 	entries     []panelEntry
 	query       string
-	results     []int // indexes into mv.msgs, newest first
+	all         []store.Message // every message of the conversation kept on this computer
+	results     []int           // indexes into all, newest first
 	forThread   int64
 	forCount    int
 }
@@ -125,6 +126,7 @@ func closePanel() {
 		return
 	}
 	pn.open, pn.search = false, false
+	pn.all, pn.results = nil, nil
 	panelDropThumbs()
 	layout()
 	pSetFocus.Call(hInput)
@@ -142,9 +144,10 @@ func panelDropThumbs() {
 // panelCollect gathers what the sections list from the messages the view holds.
 func panelCollect() {
 	pn.photos, pn.entries = pn.photos[:0], pn.entries[:0]
+	pn.all, _ = be.db.ListMessages(be.ctx, mv.thread.ID)
 	pn.forThread, pn.forCount = mv.thread.ID, len(mv.msgs)
-	for i := len(mv.msgs) - 1; i >= 0; i-- {
-		m := mv.msgs[i]
+	for i := len(pn.all) - 1; i >= 0; i-- {
+		m := pn.all[i]
 		if m.Unsent {
 			continue
 		}
@@ -179,8 +182,8 @@ func panelSearch() {
 	if len([]rune(q)) < 2 {
 		return
 	}
-	for i := len(mv.msgs) - 1; i >= 0 && len(pn.results) < 200; i-- {
-		if m := mv.msgs[i]; !m.Unsent && strings.Contains(strings.ToLower(m.Text), q) {
+	for i := len(pn.all) - 1; i >= 0 && len(pn.results) < 200; i-- {
+		if m := pn.all[i]; !m.Unsent && strings.Contains(strings.ToLower(m.Text), q) {
 			pn.results = append(pn.results, i)
 		}
 	}
@@ -293,7 +296,7 @@ func paintPanel(target uintptr) {
 		rh := dp(16) + sp(18) + 2*fnt.lineH
 		for k, idx := range pn.results {
 			if y+rh >= 0 && y < pn.h {
-				m := mv.msgs[idx]
+				m := pn.all[idx]
 				hi := hit(rect{pad, y, pad + cw, y + rh}, phResult, k)
 				card(y, rh, pn.hot == hi)
 				who := senderName(m)
@@ -557,7 +560,12 @@ func panelClick(i int) {
 		}
 	case phResult:
 		if h.arg < len(pn.results) {
-			id := mv.msgs[pn.results[h.arg]].ID
+			idx := pn.results[h.arg]
+			id := pn.all[idx].ID
+			if need := len(pn.all) - idx + 20; need > mv.limit { // older than what is loaded: load back to it
+				mv.limit = need
+				loadView(true)
+			}
 			if pn.cover {
 				closePanel()
 			}

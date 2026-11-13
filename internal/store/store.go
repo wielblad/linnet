@@ -421,6 +421,38 @@ WHERE t.id = ?
 }
 
 func (s *Store) ListMessages(ctx context.Context, threadID int64) ([]Message, error) {
+	return s.listMessages(ctx, threadID, 0)
+}
+
+// RecentMessages returns the newest limit messages of a thread, oldest first, and whether
+// the store holds older ones. A conversation is opened with these and grows backwards.
+func (s *Store) RecentMessages(ctx context.Context, threadID int64, limit int) ([]Message, bool, error) {
+	if limit <= 0 {
+		limit = 1
+	}
+	msgs, err := s.listMessages(ctx, threadID, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	var total int
+	if err := s.q.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE thread_id = ?`, threadID).Scan(&total); err != nil {
+		return nil, false, fmt.Errorf("count messages: %w", err)
+	}
+	return msgs, total > len(msgs), nil
+}
+
+// listMessages reads a thread oldest first; a positive limit keeps only the newest ones.
+func (s *Store) listMessages(ctx context.Context, threadID int64, limit int) ([]Message, error) {
+	from := int64(0) // messages at or after this time are returned
+	if limit > 0 {
+		err := s.q.QueryRowContext(ctx, `
+SELECT COALESCE(MIN(timestamp_ms), 0) FROM (
+	SELECT timestamp_ms FROM messages WHERE thread_id = ? ORDER BY timestamp_ms DESC, id DESC LIMIT ?
+)`, threadID, limit).Scan(&from)
+		if err != nil {
+			return nil, fmt.Errorf("list messages: %w", err)
+		}
+	}
 	rows, err := s.q.QueryContext(ctx, `
 SELECT m.id, m.thread_id, m.sender_id, COALESCE(c.name, ''), m.text, m.timestamp_ms, m.pending, m.error,
 	m.media_kind, m.media_url, m.media_mime, m.media_name, m.media_duration_ms,
@@ -433,9 +465,9 @@ FROM messages m
 LEFT JOIN contacts c ON c.id = m.sender_id
 LEFT JOIN messages r ON m.reply_to_id != '' AND r.id = m.reply_to_id
 LEFT JOIN contacts rc ON rc.id = CASE WHEN m.reply_sender_id != 0 THEN m.reply_sender_id ELSE r.sender_id END
-WHERE m.thread_id = ?
+WHERE m.thread_id = ? AND m.timestamp_ms >= ?
 ORDER BY m.timestamp_ms ASC, m.id ASC
-`, threadID)
+`, threadID, from)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
