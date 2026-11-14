@@ -70,12 +70,17 @@ func filmOnlyScript(page string) string {
     ' width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important;' +
     ' object-fit: contain !important; background: #0E0F12 !important; z-index: 2147483647 !important; }';
   let shown = null;
-  const largest = () => {
-    let best = null, area = 0;
-    for (const v of document.querySelectorAll('video')) {
-      const r = v === shown ? { width: v.videoWidth || 1, height: v.videoHeight || 1 } : v.getBoundingClientRect();
-      const a = r.width * r.height;
-      if (a > area && (v.currentSrc || v.src || v.readyState > 0)) { best = v; area = a; }
+  const films = () => [...document.querySelectorAll('video')].filter(v => v.currentSrc || v.src || v.readyState > 0);
+  // The film of the address is the one the page plays first. The page also loads the next
+  // films of its feed, out of sight: those are never the one.
+  const pick = () => {
+    const all = films();
+    let best = all.find(v => !v.paused && v.currentTime > 0) || null, area = 0;
+    if (!best) {
+      for (const v of all) {
+        const r = v.getBoundingClientRect(), a = r.width * r.height;
+        if (a > area) { best = v; area = a; } // the first of equals: the one at the top of the page
+      }
     }
     return best;
   };
@@ -88,7 +93,8 @@ func filmOnlyScript(page string) string {
     }
   };
   const tend = () => {
-    const film = largest();
+    // Once chosen, the film stays the film for as long as the page keeps it.
+    const film = shown && shown.isConnected ? shown : pick();
     if (!film) return;
     if (!css.isConnected) (document.head || document.documentElement).appendChild(css);
     if (film !== shown) {
@@ -99,10 +105,17 @@ func filmOnlyScript(page string) string {
       free(film);
       const go = film.play(); if (go && go.catch) go.catch(() => {});
     }
+    // The other films of the page stay silent and still: when this one ends, the page
+    // would go on to the next, and that is not what was opened.
+    for (const v of films()) {
+      if (v === film) continue;
+      v.muted = true;
+      if (!v.paused) v.pause();
+    }
     document.documentElement.classList.add('linnet-film');
   };
-  // The page builds itself bit by bit and may replace its film: keep looking for a while.
-  const watch = setInterval(() => { tend(); if (Date.now() - start > 120000) clearInterval(watch); }, 400);
+  // The page builds itself bit by bit and may replace its film.
+  setInterval(tend, 300); // for as long as the page is open: it keeps bringing new films in
   document.addEventListener('DOMContentLoaded', tend);
 })();`
 }
