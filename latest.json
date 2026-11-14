@@ -1,8 +1,8 @@
 {
-  "version": "0.8.3",
+  "version": "0.8.4",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29782528,
-  "sha256": "4141c42ceabef6edce2e870dfce4d98b4673f7e4eceeee3391f24e9280bdac27",
-  "signature": "GykfZIhYs18hGsyWHl12rbf7GhugMHzQVP1UUnvPAOHMF4M9wmQtmdcu8lH/4C08OyFQ1EQmZDUlQNwzFFUvCw==",
-  "notes": "Filmy z Facebooka, których odtwarzacz Facebooka nie chciał pokazać (krótkie linki udostępniania, pionowe rolki), grają teraz w odtwarzaczu Linneta jako sam film."
+  "size": 29783040,
+  "sha256": "e6b0a0905ee3e7e0f4a5b8d31f42bb1dadfaa4cd9e77d86aadf8c1f1d9ea6239",
+  "signature": "mFgyrZ/1VffpmkhB7ijIqx13JJycTv3pgB79dbs+zXilFAN8taipCMh0iEPtl8Zz1IEkF31PXAu8IoIwOTSoDg==",
+  "notes": "Odtwarzacz filmów z Facebooka trzyma się filmu z linku: obraz nie przeskakuje już na następny film ze strony, a po zakończeniu nie włącza się inny."
 }

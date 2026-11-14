@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	appVersion = "0.8.3"
+	appVersion = "0.8.4"
 	logName    = "linnet.log"
 	wmAppQuit  = wmApp + 9
 	uninstRoot = `Software\Microsoft\Windows\CurrentVersion\Uninstall\`
