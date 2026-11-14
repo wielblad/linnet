@@ -789,7 +789,17 @@ func openVideo(u string) {
 			invalidate(vw.hwnd)
 		}
 	}
-	view, err := webview.Open(vw.hwnd, [4]int32{0, dp(56), vw.w, vw.h}, filepath.Join(dataDir, "webview"), play, videoCookies(u), func(err error) {
+	script := ""
+	if host := linkHost(u); host == "fb.watch" || host == "facebook.com" || strings.HasSuffix(host, ".facebook.com") {
+		// Facebook's player for other sites refuses many films. Short links it does not
+		// follow at all, so those start on the page of the film; the rest go there when the
+		// player gives up. Either way only the film is shown.
+		script = filmOnlyScript(u)
+		if fbShareLink(u) {
+			play = u
+		}
+	}
+	view, err := webview.OpenWith(vw.hwnd, [4]int32{0, dp(56), vw.w, vw.h}, filepath.Join(dataDir, "webview"), play, videoCookies(u), script, func(err error) {
 		if err != nil {
 			failed(err)
 		}

@@ -36,6 +36,7 @@ const (
 
 	// ICoreWebView2 (WebView2.h; jchv/go-webview2 pkg/edge/corewebview2.go)
 	webViewNavigate            = 5  // Navigate(LPCWSTR)
+	webViewAddScript           = 27 // AddScriptToExecuteOnDocumentCreated(LPCWSTR, handler)
 	webViewAddNewWindowRequest = 44 // add_NewWindowRequested(handler, EventRegistrationToken*)
 
 	// ICoreWebView2_2 continues ICoreWebView2's table, which ends at slot 60 (generated
@@ -90,6 +91,7 @@ type View struct {
 	bounds  rect
 	url     string   // waiting to be opened once the browser exists
 	cookies []Cookie // waiting to be set before that
+	script  string   // run in every page the browser opens, before the page's own scripts
 	done    func(error)
 	closed  bool
 
@@ -120,6 +122,12 @@ type View struct {
 // view is closed before creation has finished. An empty
 // userDataDir lets the runtime pick its default folder next to the executable.
 func Open(parent uintptr, bounds [4]int32, userDataDir, url string, cookies []Cookie, done func(error)) (*View, error) {
+	return OpenWith(parent, bounds, userDataDir, url, cookies, "", done)
+}
+
+// OpenWith is Open with a script that the browser runs in every document it opens, before
+// the document's own scripts: the way for the program to change how a page is shown.
+func OpenWith(parent uintptr, bounds [4]int32, userDataDir, url string, cookies []Cookie, script string, done func(error)) (*View, error) {
 	if parent == 0 {
 		return nil, errors.New("webview: no parent window")
 	}
@@ -149,6 +157,7 @@ func Open(parent uintptr, bounds [4]int32, userDataDir, url string, cookies []Co
 		bounds:  rect{bounds[0], bounds[1], bounds[2], bounds[3]},
 		url:     url,
 		cookies: append([]Cookie(nil), cookies...),
+		script:  script,
 		done:    done,
 	}
 	v.onEnvironment = newHandler(&iidEnvironmentHandler, v.environmentCompleted)
@@ -385,6 +394,15 @@ func (v *View) controllerCompleted(result, controller uintptr) {
 	note("ICoreWebView2.add_NewWindowRequested",
 		comCall(v.webView, webViewAddNewWindowRequest, v.onNewWindow.addr(), uintptr(unsafe.Pointer(&token))))
 
+	if v.script != "" && first == nil {
+		// No handler is given for "added": the browser takes requests in order, so the
+		// script is in place before the navigation below is.
+		if p, err := syscall.UTF16PtrFromString(v.script); err != nil {
+			first = fmt.Errorf("webview: the script: %w", err)
+		} else {
+			note("ICoreWebView2.AddScriptToExecuteOnDocumentCreated", comCall(v.webView, webViewAddScript, uintptr(unsafe.Pointer(p)), 0))
+		}
+	}
 	if first == nil {
 		first = v.setCookies(v.cookies)
 	}

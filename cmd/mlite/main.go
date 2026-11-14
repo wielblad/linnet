@@ -469,6 +469,9 @@ func createMainWindow(visible bool) {
 	if v := os.Getenv("MLITE_LOGINPREVIEW"); v != "" { // for looking at the sign-in steps only
 		loginPreview(v)
 	}
+	if v := os.Getenv("MLITE_PLAYVIDEO"); v != "" { // for looking at the player with one address
+		pSetTimer.Call(hMain, timerPlayVideo, 1500, 0)
+	}
 	memMB = workingSetMB()
 	pSetTimer.Call(hMain, timerMem, 5000, 0)
 	if visible {
@@ -1443,6 +1446,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			headDotsTimer()
 		case timerHeadsZ:
 			headsZ()
+		case timerPlayVideo:
+			pKillTimer.Call(hMain, timerPlayVideo)
+			openVideo(os.Getenv("MLITE_PLAYVIDEO"))
 		case timerOpen:
 			pKillTimer.Call(hMain, timerOpen)
 			if t, ok := threadByID(selectedID); ok {

@@ -660,7 +660,10 @@ var (
 	pDwmGetWindowAttribute = dwmapi.NewProc("DwmGetWindowAttribute")
 )
 
-const timerHeadsZ = 8
+const (
+	timerHeadsZ    = 8
+	timerPlayVideo = 9
+)
 
 // mainShowsAt reports whether the ordinary window of the program is what the screen shows
 // at a point: no window of another program lies over it there.
