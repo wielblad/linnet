@@ -1,8 +1,8 @@
 {
-  "version": "0.9",
+  "version": "0.9.1",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29795840,
-  "sha256": "34ccbd19e27ba2144f635a6ccb331fdc6c5401c31e712e19cc4ac41dc45a81f3",
-  "signature": "7AiAvV+a7JHwxyN2juhCF4WNnuqmQm0Rh+x63IcCkf+hak/QTxXn/GNE0WV6Yxzdgp8GNNx7x3JqPvDiuAoPBQ==",
-  "notes": "Film otworzysz od razu w serwisie: ikona w rogu podglądu, pozycja w menu wiadomości i ustawienie „Filmy otwieraj od razu w przeglądarce”. Okno rozmowy przy główce przesuniesz za nagłówek, razem z główką. Dźwięk wiadomości działa niezależnie od powiadomień Windows. Dodatkowe zabezpieczenia przed znikaniem główek po zamknięciu okna rozmowy."
+  "size": 29809152,
+  "sha256": "abd6b4edca2c0c084a7cb1abd73803355400dca2a29c5176eca588bd75dd00c9",
+  "signature": "DN0haj97U0yY//LpxvSqDeY2StChQQcoq8a4VVTfZToEVeHPHYqBmoBeIzoTqJvmpMEl+nkK8Y5wehxGUCexAw==",
+  "notes": "Widać, kiedy ktoś pisze: trzy kropki w otwartej rozmowie i na główce, także w czatach szyfrowanych. Przełącznik w ustawieniach: Powiadomienia → „Pokazuj, kiedy ktoś pisze”."
 }
