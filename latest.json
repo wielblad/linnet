@@ -1,8 +1,8 @@
 {
-  "version": "0.8.4",
+  "version": "0.9",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29783040,
-  "sha256": "e6b0a0905ee3e7e0f4a5b8d31f42bb1dadfaa4cd9e77d86aadf8c1f1d9ea6239",
-  "signature": "mFgyrZ/1VffpmkhB7ijIqx13JJycTv3pgB79dbs+zXilFAN8taipCMh0iEPtl8Zz1IEkF31PXAu8IoIwOTSoDg==",
-  "notes": "Odtwarzacz filmów z Facebooka trzyma się filmu z linku: obraz nie przeskakuje już na następny film ze strony, a po zakończeniu nie włącza się inny."
+  "size": 29795840,
+  "sha256": "34ccbd19e27ba2144f635a6ccb331fdc6c5401c31e712e19cc4ac41dc45a81f3",
+  "signature": "7AiAvV+a7JHwxyN2juhCF4WNnuqmQm0Rh+x63IcCkf+hak/QTxXn/GNE0WV6Yxzdgp8GNNx7x3JqPvDiuAoPBQ==",
+  "notes": "Film otworzysz od razu w serwisie: ikona w rogu podglądu, pozycja w menu wiadomości i ustawienie „Filmy otwieraj od razu w przeglądarce”. Okno rozmowy przy główce przesuniesz za nagłówek, razem z główką. Dźwięk wiadomości działa niezależnie od powiadomień Windows. Dodatkowe zabezpieczenia przed znikaniem główek po zamknięciu okna rozmowy."
 }
