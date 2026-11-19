@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,7 +52,8 @@ type Client struct {
 	ready         chan struct{}
 	connectErr    error
 	stopMu        sync.Mutex
-	stop          func() // ends this client's own background work when it is disconnected
+	stop          func()      // ends this client's own background work when it is disconnected
+	here          atomic.Bool // the person is at the program: encrypted chats are told so
 }
 
 func New(sess *session.Cookies, dataDir string, logWriter io.Writer, handler EventHandler) (*Client, error) {

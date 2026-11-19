@@ -40,6 +40,10 @@ type liveMessage struct {
 }
 
 func (c *Client) onE2EEEvent(ctx context.Context, evt any) {
+	if _, ok := evt.(*events.Connected); ok && c.here.Load() {
+		// A new connection knows nothing of the last one: say again that the person is here.
+		go func() { _ = c.sendPresence(ctx) }()
+	}
 	if c.handler == nil {
 		return
 	}

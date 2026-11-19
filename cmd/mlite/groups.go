@@ -699,6 +699,7 @@ func mainShowsAt(pt point) bool {
 // Other programs come and go over the window without a word to this one, so while the
 // window is up the question is asked again every second.
 func headsZ() {
+	presenceSync() // a window shown or put away changes whether the person is here
 	var mr rect
 	normal := false
 	if vis, _, _ := pIsWindowVisible.Call(hMain); vis != 0 && !compact.on {

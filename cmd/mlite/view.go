@@ -537,6 +537,7 @@ func layoutView() {
 	}
 	mv.items = items
 	mv.total = y + dp(12)
+	typingLay() // someone writing: the dots under the last message
 }
 
 // reactionSummary groups equal reactions: one emoji each, with a count when used more than once.
@@ -654,6 +655,8 @@ func paintView(target uintptr) {
 			continue
 		}
 		switch it.kind {
+		case itTyping:
+			paintTyping(g, y, shadow)
 		case itTop:
 			if olderState() == 1 { // three dots, one after another brighter
 				for k := int32(0); k < 3; k++ {

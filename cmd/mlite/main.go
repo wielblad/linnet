@@ -1474,8 +1474,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		switch wp {
 		case timerHeadDots:
 			headPhase++
-			headsSync(false)
-			headDotsTimer()
+			typingSync()
 		case timerHeadsZ:
 			headsZ()
 		case timerPlayVideo:
@@ -2101,6 +2100,9 @@ func refresh() {
 	trayRefresh()
 	headsSync(be.armed.Load())
 
+	if notify != nil { // the message being written has arrived
+		typingStopped(notify.ID)
+	}
 	if notify != nil && !lastFromSelf(notify.ID, self) {
 		// The sound, the notification of Windows and the blinking each have their own
 		// switch: turning the notifications off used to silence the sound as well.

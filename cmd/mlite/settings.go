@@ -23,6 +23,9 @@ type config struct {
 	// Heads are the conversations pinned to the desktop, with their positions.
 	Heads       []headCfg `json:"heads"`
 	HeadPreview bool      `json:"head_preview"`
+	// NoTyping switches off showing that someone is writing, and with it telling the
+	// encrypted chats that the person is here.
+	NoTyping bool `json:"no_typing,omitempty"`
 	// Quiet are the conversations this program does not notify about (its own switch,
 	// separate from muting in Messenger).
 	Quiet []int64 `json:"quiet"`
@@ -147,6 +150,8 @@ func buildSettings() {
 			live: soundLine, label: soundLabel, action: pickSound, whole: true},
 		{kind: srToggle, title: "Nie przeszkadzać", desc: "Wstrzymuje powiadomienia i miganie. Licznik w zasobniku działa dalej.",
 			get: func() bool { return cfg.DND }, set: func(v bool) { cfg.DND = v; trayRefresh() }},
+		{kind: srToggle, title: "Pokazuj, kiedy ktoś pisze", desc: "Trzy kropki w rozmowie i na główce. Czaty szyfrowane mówią o pisaniu tylko aktywnym, więc gdy okno Linneta albo główka jest na ekranie, Linnet zgłasza Messengerowi, że jesteś aktywny.",
+			get: func() bool { return !cfg.NoTyping }, set: func(v bool) { cfg.NoTyping = !v; presenceSync(); typingSync() }},
 		{kind: srHeader, title: "Główki rozmów"},
 		{kind: srToggle, title: "Pokazuj nową wiadomość obok główki", desc: "Krótki dymek na kilka sekund. Przy wyłączonej treści wiadomości mówi tylko, że przyszła nowa.",
 			get: func() bool { return cfg.HeadPreview }, set: func(v bool) { cfg.HeadPreview = v }},

@@ -277,27 +277,30 @@ var (
 // every few seconds while it lasts, so it is believed only for a little while.
 func typingArrived(id int64, active bool) {
 	if active {
-		typingUntil[id] = time.Now().Add(8 * time.Second)
+		typingUntil[id] = time.Now().Add(typingFor)
 	} else {
 		delete(typingUntil, id)
 	}
-	headsSync(false)
-	headDotsTimer()
+	typingSync()
 }
 
-// headDotsTimer keeps the dots turning only while a head really shows them.
+// headDotsTimer keeps the dots turning only while they are really shown somewhere: on a
+// head or in a conversation. It is also what notices that the news has grown old.
 func headDotsTimer() {
+	on := typingAny()
 	for id := range heads {
-		if headMark(id) == markTyping {
-			pSetTimer.Call(hMain, timerHeadDots, 350, 0)
-			return
-		}
+		on = on || headMark(id) == markTyping
+	}
+	if on {
+		pSetTimer.Call(hMain, timerHeadDots, 350, 0)
+		return
 	}
 	pKillTimer.Call(hMain, timerHeadDots)
 }
 
-// headMark is what the head of a conversation shows in its corner. A head whose panel is
-// open shows nothing: the conversation itself says it all there.
+// headMark is what the head of a conversation shows in its corner. Someone writing is
+// shown always, also on the head of an open conversation: the head follows it live. That
+// the last message was read is not repeated on a head whose conversation is open.
 func headMark(id int64) int {
 	switch os.Getenv("MLITE_HEADMARK") { // for looking at the marks only
 	case "typing":
@@ -305,17 +308,14 @@ func headMark(id int64) int {
 	case "seen":
 		return markSeen
 	}
+	if typingNow(id) {
+		return markTyping
+	}
 	if vis, _, _ := pIsWindowVisible.Call(hMain); compact.on && vis != 0 && (compact.forID == id || (tabsMode() && tabIndex(id) >= 0)) {
 		return markNone
 	}
 	if p := paneFor(id); p != nil && !p.min { // open in a pane of its own
 		return markNone
-	}
-	if until, ok := typingUntil[id]; ok {
-		if time.Now().Before(until) {
-			return markTyping
-		}
-		delete(typingUntil, id)
 	}
 	if headSeenBy(id) {
 		return markSeen
@@ -353,7 +353,8 @@ func headSeenBy(id int64) bool {
 // headsSync creates, removes and redraws the heads so they match the pinned list and the unread counts.
 // announce allows the short look at a new message.
 func headsSync(announce bool) {
-	groupsLayout() // the heads of a group follow its first one, whatever was read from the settings
+	defer presenceSync() // heads coming and going change whether the person is here
+	groupsLayout()       // the heads of a group follow its first one, whatever was read from the settings
 	if !headsSettled && len(cfg.Heads) > 0 {
 		// Once at the start: a head left on a screen that is no longer there comes back
 		// to the nearest one that is.

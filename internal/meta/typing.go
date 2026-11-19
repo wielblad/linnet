@@ -55,6 +55,29 @@ func (c *Client) SetTyping(ctx context.Context, thread store.Thread, active bool
 	return nil
 }
 
+// SetPresence says to the encrypted chats that the person is here, or no longer is. The
+// servers of those chats send "is writing" only to those who are here, so without this no
+// such news ever arrives. What was asked for is remembered and said again whenever the
+// connection comes back.
+func (c *Client) SetPresence(ctx context.Context, here bool) error {
+	c.here.Store(here)
+	return c.sendPresence(ctx)
+}
+
+func (c *Client) sendPresence(ctx context.Context) error {
+	if c.e2ee == nil || !c.e2ee.IsConnected() || !c.e2ee.IsLoggedIn() {
+		return nil // said when the connection is there
+	}
+	state := types.PresenceUnavailable
+	if c.here.Load() {
+		state = types.PresenceAvailable
+	}
+	if err := c.e2ee.SendPresence(ctx, state); err != nil {
+		return fmt.Errorf("send e2ee presence: %w", err)
+	}
+	return nil
+}
+
 func TypingFromEvent(ctx context.Context, s *store.Store, evt Event) ([]Typing, error) {
 	if evt.Table == nil {
 		return evt.typing, nil

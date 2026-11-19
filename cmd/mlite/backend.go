@@ -58,6 +58,7 @@ type backend struct {
 	noRead         bool // never tell Messenger that something was read (for checks)
 	refreshPending atomic.Bool
 	mediaRetry     atomic.Bool // pictures that failed may be tried again (the connection came back)
+	here           atomic.Bool // something of the program is on the screen: encrypted chats are told
 	armed          atomic.Bool
 	done           chan struct{}
 }
@@ -335,6 +336,7 @@ func (b *backend) run() {
 	b.mu.Lock()
 	b.client = client
 	b.mu.Unlock()
+	_ = client.SetPresence(b.ctx, b.here.Load()) // remembered now, said once connected
 
 	b.setStatus("Łączenie z Messengerem…")
 	if err := client.Connect(b.ctx); err != nil {
@@ -371,18 +373,25 @@ func (b *backend) run() {
 
 func (b *backend) onEvent(ctx context.Context, evt meta.Event) {
 	// Someone writing: the heads on the desktop show it. One's own typing is not news.
-	if typing, err := meta.TypingFromEvent(ctx, b.db, evt); err == nil {
-		if h := b.hwnd.Load(); h != 0 {
-			for _, t := range typing {
-				if t.SenderID == b.accountID() || t.ThreadID == 0 {
-					continue
-				}
-				active := uintptr(0)
-				if t.Active {
-					active = 1
-				}
-				postMsg(h, wmAppTyping, active, uintptr(t.ThreadID))
+	typing, err := meta.TypingFromEvent(ctx, b.db, evt)
+	if err != nil && typingDebug {
+		log.Warn().Err(err).Str("source", evt.Type).Msg("typing: not understood")
+	}
+	if h := b.hwnd.Load(); h != 0 && err == nil {
+		for _, t := range typing {
+			own := t.SenderID == b.accountID()
+			if typingDebug { // no names and no numbers of people: only what kind of news it was
+				log.Warn().Str("source", evt.Type).Bool("known", t.ThreadID != 0).Bool("own", own).Bool("writing", t.Active).Msg("typing")
 			}
+			if own || t.ThreadID == 0 {
+				continue
+			}
+			active := uintptr(0)
+			if t.Active {
+				active = 1
+				typingWho.Store(t.ThreadID, t.SenderID)
+			}
+			postMsg(h, wmAppTyping, active, uintptr(t.ThreadID))
 		}
 	}
 	switch {
