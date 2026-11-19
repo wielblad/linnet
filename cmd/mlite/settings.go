@@ -28,6 +28,8 @@ type config struct {
 	Quiet []int64 `json:"quiet"`
 	// VideoSession hands the embedded video player this program's Facebook session.
 	VideoSession bool `json:"video_session"`
+	// VideoExternal sends films straight to the browser instead of the program's player.
+	VideoExternal bool `json:"video_external,omitempty"`
 	// Sound plays the Windows message sound with a notification.
 	Sound bool `json:"sound"`
 	// SoundFile is which sound that is: a file of the Windows sounds, a path to one of your
@@ -171,6 +173,8 @@ func buildSettings() {
 		{kind: srAction, title: "Historia rozmów szyfrowanych", live: historyLine, label: historyButton, action: historyAction},
 		{kind: srToggle, title: "Odtwarzaj filmy jako zalogowany", desc: "Odtwarzacz używa Twojej sesji Facebooka, więc rolki nie zatrzymują się na logowaniu. Po wyłączeniu zagrają tylko filmy publiczne.",
 			get: func() bool { return cfg.VideoSession }, set: func(v bool) { cfg.VideoSession = v }},
+		{kind: srToggle, title: "Filmy otwieraj od razu w przeglądarce", desc: "Kliknięcie podglądu filmu pomija odtwarzacz Linneta. Bez tego film w przeglądarce otworzysz ikoną w rogu podglądu albo z menu wiadomości.",
+			get: func() bool { return cfg.VideoExternal }, set: func(v bool) { cfg.VideoExternal = v }},
 		{kind: srHeader, title: "O programie " + appName},
 		{kind: srAction, key: "update", title: "Aktualizacje", live: updateLine, label: updateButton, action: updateAction},
 		{kind: srInfo, title: appName + " " + appVersion, desc: "Klient wiadomości Messenger na Windows. Niezależna aplikacja, niepowiązana z Meta Platforms, Inc. Messenger i Facebook są znakami ich właścicieli."},

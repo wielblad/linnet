@@ -14,6 +14,7 @@ import (
 
 const (
 	idMsgCopySel = 406
+	idMsgOpenOut = 407 // the film of the message, where it lives
 	wmSetCursor  = 0x0020
 	idcIBeam     = 32513
 	idcHand      = 32649

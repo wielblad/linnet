@@ -844,7 +844,7 @@ func paintVideo(target uintptr) {
 	vw.btn[vbFull] = rect{x - s, (bar - s) / 2, x, (bar + s) / 2}
 	x -= s + dp(8)
 	c.font(fnt.body)
-	label := "Otwórz w przeglądarce"
+	label := openInLabel(vw.video)
 	w := dp(14) + dp(20) + dp(6) + c.width(label) + dp(14)
 	vw.btn[vbOpen] = rect{x - w, (bar - s) / 2, x, (bar + s) / 2}
 	hotFill := mix(viewerInk, viewerGround, 16)

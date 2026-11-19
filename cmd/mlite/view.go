@@ -740,6 +740,10 @@ func paintView(target uintptr) {
 					if it.preview && it.play { // a dark disc for the play sign
 						g.ellipseA(it.bx+padL+it.imgW/2-dp(22), cy+it.imgH/2-dp(22), dp(44), dp(44), 0xB0000000)
 					}
+					if hasOut(it) { // and a smaller one in the corner for "open where it lives"
+						r := outRect(it)
+						g.ellipseA(r.left, r.top-mv.scroll, r.right-r.left, r.bottom-r.top, 0xB0000000)
+					}
 				} else {
 					it.imgReady = false
 					g.round(it.bx+padL, cy, it.imgW, it.imgH, dp(10), dp(10), dp(10), dp(10), mix(pal.fg, fill, 9))
@@ -826,6 +830,11 @@ func paintView(target uintptr) {
 				} else if it.preview && it.play {
 					c.font(fnt.iconLg)
 					c.text(gPlay, rect{x0, cy, x0 + it.imgW, cy + it.imgH}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
+					if hasOut(it) {
+						r := outRect(it)
+						c.font(fnt.iconSm)
+						c.text(gOpenOut, rect{r.left, r.top - mv.scroll, r.right, r.bottom - mv.scroll}, 0xFFFFFF, dtCenter|dtVCenter|dtSingleLine)
+					}
 				}
 				cy += it.imgH + dp(6)
 			}
@@ -1000,6 +1009,10 @@ func viewClick(x, y int32) {
 		it := &mv.items[i]
 		if it.kind == itMsg && it.img {
 			ix, iy := it.bx+dp(12), it.y+it.top+it.imgTop
+			if r := outRect(it); hasOut(it) && x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+				playExternal(it.link) // the corner of the picture: the film where it lives, not in the player
+				return
+			}
 			if x >= ix && x < ix+it.imgW && y >= iy && y < iy+it.imgH {
 				if it.preview {
 					openLink(it.link) // the picture of a video plays it here; of a page, opens the browser

@@ -164,7 +164,47 @@ func openURL(raw string) {
 }
 
 // playInWindow plays a video page inside the program's own window.
-func playInWindow(raw string) { openVideo(raw) }
+func playInWindow(raw string) {
+	if cfg.VideoExternal { // the person would rather watch where the film lives
+		playExternal(raw)
+		return
+	}
+	openVideo(raw)
+}
+
+// openInLabel names the way out of the program for an address: the service a film is on,
+// or simply the browser.
+func openInLabel(raw string) string {
+	host := linkHost(raw)
+	switch {
+	case youtubeID(raw) != "":
+		return "Otwórz w YouTube"
+	case host == "fb.watch" || host == "facebook.com" || strings.HasSuffix(host, ".facebook.com"):
+		return "Otwórz na Facebooku"
+	case strings.HasSuffix(host, "instagram.com"):
+		return "Otwórz na Instagramie"
+	case strings.HasSuffix(host, "tiktok.com"):
+		return "Otwórz na TikToku"
+	case host == "vimeo.com":
+		return "Otwórz na Vimeo"
+	}
+	return "Otwórz w przeglądarce"
+}
+
+// outRect is the small button on the preview picture of a film that opens the film where
+// it lives, without the player: in the upper right corner of the picture, in the
+// coordinates of the conversation (not yet scrolled).
+func outRect(it *vitem) rect {
+	s := dp(30)
+	x := it.bx + dp(12) + it.imgW - dp(6) - s
+	y := it.y + it.top + it.imgTop + dp(6)
+	return rect{x, y, x + s, y + s}
+}
+
+// hasOut reports whether a message shows that button.
+func hasOut(it *vitem) bool {
+	return it.kind == itMsg && it.img && it.preview && it.play && it.imgReady && it.imgW >= dp(90)
+}
 
 // playExternal opens a video page in the default browser: the way out when no browser
 // can be embedded in the window.

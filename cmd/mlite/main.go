@@ -1331,6 +1331,38 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		headsZ()
 	}
 	if compact.on {
+		// The header of the panel is a handle of its head, as the header of any conversation
+		// beside a head is.
+		inHeader := func(x, y int32) bool {
+			h := lay.header
+			return lay.chat && nav != navSettings && dlg.hwnd == 0 && vw.hwnd == 0 && x >= h.left && x < h.right && y >= h.top && y < h.bottom
+		}
+		switch msg {
+		case wmLButtonDown:
+			if x, y := lpPoint(lp); inHeader(x, y) && hdrDragStart(hwnd, compact.forID) {
+				return 0
+			}
+		case wmMouseMove:
+			if hdrDragMove(hwnd) {
+				return 0
+			}
+		case wmLButtonUp:
+			if was, moved := hdrDragEnd(hwnd); was && moved {
+				return 0
+			}
+		case wmCaptureChanged:
+			hdrDragLost(hwnd)
+		case wmSetCursor:
+			if lp&0xFFFF == 1 {
+				var pt point
+				pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+				pScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+				if (hdr.on && hdr.hwnd == hwnd) || (inHeader(pt.x, pt.y) && headCfgOf(compact.forID) != nil) {
+					setCursor(idcSizeAll)
+					return 1
+				}
+			}
+		}
 		// The panel has no frame of its own. Whatever happens to the styles, the system
 		// must never draw a title bar or a border over what the panel has painted.
 		switch msg {

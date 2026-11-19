@@ -171,6 +171,9 @@ func messageMenu(m store.Message, x, y int32) {
 		if m.Text != "" {
 			add(menu, mfString, idMsgCopy, "Kopiuj tekst")
 		}
+		if u := linkOf(m); u != "" && (youtubeID(u) != "" || playableLink(u)) {
+			add(menu, mfString, idMsgOpenOut, openInLabel(u)) // past the player, straight to the service
+		}
 		if me {
 			add(menu, mfSeparator, 0, "")
 			if m.Text != "" {
@@ -205,6 +208,8 @@ func messageAction(id int) {
 	case id == idMsgCopy:
 		copyText(m.Text)
 		viewToast("Skopiowano wiadomość")
+	case id == idMsgOpenOut:
+		playExternal(linkOf(m))
 	case id == idMsgCopySel:
 		copyText(selText())
 		viewToast("Skopiowano zaznaczenie")

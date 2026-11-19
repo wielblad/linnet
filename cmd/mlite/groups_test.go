@@ -189,3 +189,19 @@ func TestNotifyPlan(t *testing.T) {
 		}
 	}
 }
+
+// The way out of the program is named after where the film lives.
+func TestOpenInLabel(t *testing.T) {
+	for addr, want := range map[string]string{
+		"https://www.youtube.com/watch?v=jNQXAC9IVRw": "Otwórz w YouTube",
+		"https://youtu.be/jNQXAC9IVRw":                "Otwórz w YouTube",
+		"https://www.facebook.com/reel/123/":          "Otwórz na Facebooku",
+		"https://fb.watch/abc/":                       "Otwórz na Facebooku",
+		"https://www.instagram.com/reel/abc/":         "Otwórz na Instagramie",
+		"https://example.org/film":                    "Otwórz w przeglądarce",
+	} {
+		if got := openInLabel(addr); got != want {
+			t.Errorf("%s: %q, want %q", addr, got, want)
+		}
+	}
+}

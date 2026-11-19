@@ -720,6 +720,7 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		dx, dy := pt.x-h.startX, pt.y-h.startY
 		if !h.dragging && (dx > dp(4) || dx < -dp(4) || dy > dp(4) || dy < -dp(4)) {
 			h.dragging = true
+			setCursor(idcSizeAll)
 			hidePeek(h)
 			if h.shift && groupOf(h.id) != nil { // Shift takes this one head out of its group
 				groupLeave(h.id)
@@ -772,6 +773,11 @@ func headProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmRButtonUp:
 		headMenu(h)
 		return 0
+	case wmSetCursor: // a head can be pressed and carried: the pointer says so
+		if lp&0xFFFF == 1 {
+			setCursor(idcHand)
+			return 1
+		}
 	case wmTimer:
 		pKillTimer.Call(hwnd, wp)
 		hidePeek(h)

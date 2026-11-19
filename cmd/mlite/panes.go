@@ -814,7 +814,28 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			headsZ() // brought forward by a click, it still gives way to the ordinary window
 		}
 		return 0
+	case wmLButtonDown: // on the empty part of the header: the head is taken hold of
+		if x, y := lpPoint(lp); y < paneHeaderH() && paneHit(p, x, y) == pbtNone {
+			hdrDragStart(hwnd, p.id)
+		}
+		return 0
+	case wmCaptureChanged:
+		hdrDragLost(hwnd)
+		return 0
+	case wmSetCursor:
+		if lp&0xFFFF == 1 {
+			var pt point
+			pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+			pScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+			if (hdr.on && hdr.hwnd == hwnd) || (pt.y < paneHeaderH() && paneHit(p, pt.x, pt.y) == pbtNone && headCfgOf(p.id) != nil) {
+				setCursor(idcSizeAll)
+				return 1
+			}
+		}
 	case wmMouseMove:
+		if hdrDragMove(hwnd) {
+			return 0
+		}
 		x, y := lpPoint(lp)
 		if hot := paneHit(p, x, y); hot != p.hot {
 			p.hot = hot
@@ -829,6 +850,9 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmLButtonUp:
+		if was, moved := hdrDragEnd(hwnd); was && moved {
+			return 0 // it was carried, not clicked
+		}
 		x, y := lpPoint(lp)
 		switch hit := paneHit(p, x, y); {
 		case hit == pbtClose:
