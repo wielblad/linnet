@@ -399,6 +399,18 @@ func headsSync(announce bool) {
 				pShowWindow.Call(h.hwnd, swHide)
 			}
 		}
+		if !hidden && !dragging {
+			// A head that should be seen is seen, and stands where the settings say it does:
+			// whatever happened to its window meanwhile, the next look puts it right.
+			var r rect
+			pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
+			if r.left != hc.X || r.top != hc.Y {
+				pSetWindowPos.Call(h.hwnd, 0, uintptr(hc.X), uintptr(hc.Y), 0, 0, swpQuiet)
+			}
+			if vis, _, _ := pIsWindowVisible.Call(h.hwnd); vis == 0 && h.key != 0 {
+				pShowWindow.Call(h.hwnd, swShowNA)
+			}
+		}
 		mark, phase := headMark(hc.ID), 0
 		if mark == markTyping {
 			phase = headPhase
@@ -418,8 +430,12 @@ func headsSync(announce bool) {
 			bump = append(bump, hc.ID)
 		}
 		h.own = unreadBy[hc.ID]
-		if announce && known && unread > h.unread && !h.under && cfg.HeadPreview && cfg.Body && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
-			showPeek(h, title, oneLine(previewText(t.LastPreview), 260), firstURL(t.LastPreview))
+		if announce && known && unread > h.unread && !h.under && cfg.HeadPreview && !cfg.DND && !quietThread(h.id) && !conversationShown(h.id) {
+			text, link := "", "" // with the text of messages switched off: only that there is one
+			if cfg.Body {
+				text, link = oneLine(previewText(t.LastPreview), 260), firstURL(t.LastPreview)
+			}
+			showPeek(h, title, text, link)
 		}
 		if unread == 0 {
 			hidePeek(h)

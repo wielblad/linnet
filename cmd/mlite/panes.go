@@ -294,6 +294,10 @@ func paneClose(p *pane) {
 	if p.bank.compose.mode == cmFile {
 		dropPasted(p.bank.compose.file)
 	}
+	// The window goes first, while the program still knows whose it is: what Windows sends
+	// to a window and its view as they are destroyed must reach this pane, not be taken for
+	// the view of the program's own window.
+	pDestroyWindow.Call(p.hwnd)
 	for i, q := range panes {
 		if q == p {
 			panes = append(panes[:i], panes[i+1:]...)
@@ -301,9 +305,10 @@ func paneClose(p *pane) {
 		}
 	}
 	delete(bankByView, p.view)
-	pDestroyWindow.Call(p.hwnd)
 	panesPlace()
 	headsSync(false)
+	headsZ() // the heads stay above what is left, whichever window Windows made the active one
+	headsDump("a conversation beside a head was closed")
 }
 
 // panesCloseAll puts every pane away: the way of showing conversations was changed.

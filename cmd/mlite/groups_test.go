@@ -166,3 +166,26 @@ func TestWorkAt(t *testing.T) {
 		t.Errorf("a place on no screen must still get one: %+v", w)
 	}
 }
+
+// The sound of a new message does not hang on the notifications of Windows: each has its
+// own switch. "Nie przeszkadzać" stops everything; a window of the program in front needs
+// neither a sound nor the blinking.
+func TestNotifyPlan(t *testing.T) {
+	cases := []struct {
+		toasts, dnd, front  bool
+		sound, toast, flash bool
+	}{
+		{true, false, false, true, true, true},
+		{false, false, false, true, false, true}, // notifications off: the sound still plays
+		{true, false, true, false, true, false},
+		{false, false, true, false, false, false},
+		{true, true, false, false, false, false},
+		{false, true, false, false, false, false},
+	}
+	for _, c := range cases {
+		s, n, f := notifyPlan(c.toasts, c.dnd, c.front)
+		if s != c.sound || n != c.toast || f != c.flash {
+			t.Errorf("notifications %v, do not disturb %v, in front %v: got sound %v, notification %v, blinking %v", c.toasts, c.dnd, c.front, s, n, f)
+		}
+	}
+}

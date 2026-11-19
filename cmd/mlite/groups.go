@@ -13,8 +13,11 @@ package main
 // own, has its own row of conversations beside it.
 
 import (
+	"os"
 	"time"
 	"unsafe"
+
+	"github.com/rs/zerolog/log"
 )
 
 type groupCfg struct {
@@ -715,9 +718,12 @@ func headsZ() {
 		pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
 		under := normal && r.left < mr.right && r.right > mr.left && r.top < mr.bottom && r.bottom > mr.top &&
 			mainShowsAt(point{(r.left + r.right) / 2, (r.top + r.bottom) / 2})
-		if !under && !h.under {
+		if !under && !h.under && len(panes) == 0 {
 			continue
 		}
+		// With conversations open, a head is put on top again even when it was on top: the
+		// conversations are "always on top" windows too, a click brings one of them above
+		// the heads, and a head that one of them reaches would be gone from sight.
 		h.under = under
 		if under {
 			hidePeek(h)
@@ -761,6 +767,33 @@ func minI(a, b int32) int32 {
 		return a
 	}
 	return b
+}
+
+// headsDump writes where every head is, for finding out why one is not seen. Only with
+// MLITE_HEADS_DEBUG set; heads are named by their place in the settings, not by whose
+// they are.
+func headsDump(why string) {
+	if os.Getenv("MLITE_HEADS_DEBUG") == "" {
+		return
+	}
+	for i, hc := range cfg.Heads {
+		h := heads[hc.ID]
+		if h == nil {
+			log.Warn().Str("why", why).Int("head", i).Msg("head has no window")
+			continue
+		}
+		var r rect
+		pGetWindowRect.Call(h.hwnd, uintptr(unsafe.Pointer(&r)))
+		vis, _, _ := pIsWindowVisible.Call(h.hwnd)
+		fold := false
+		if g := groupByID(hc.Group); g != nil {
+			fold = g.Fold
+		}
+		log.Warn().Str("why", why).Int("head", i).Int("group", hc.Group).Bool("group_folded", fold).
+			Int32("set_x", hc.X).Int32("set_y", hc.Y).Int32("win_x", r.left).Int32("win_y", r.top).Int32("win_w", r.right-r.left).
+			Bool("shown", vis != 0).Bool("on_top", windowLong(h.hwnd, gwlExStyle)&wsExTopmost != 0).
+			Bool("hidden_in_group", h.hidden).Bool("under_window", h.under).Bool("pane_open", paneFor(hc.ID) != nil).Msg("head")
+	}
 }
 
 // headOpenNow reports whether the conversation of a head is open beside it.

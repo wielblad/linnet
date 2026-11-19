@@ -2069,17 +2069,23 @@ func refresh() {
 	trayRefresh()
 	headsSync(be.armed.Load())
 
-	if notify != nil && cfg.Toasts && !cfg.DND && !lastFromSelf(notify.ID, self) {
-		notifyID = notify.ID
-		body := "Nowa wiadomość"
-		if cfg.Body {
-			body = oneLine(previewText(notify.LastPreview), 200)
+	if notify != nil && !lastFromSelf(notify.ID, self) {
+		// The sound, the notification of Windows and the blinking each have their own
+		// switch: turning the notifications off used to silence the sound as well.
+		front, _, _ := pGetForegroundWindow.Call()
+		sound, toast, flash := notifyPlan(cfg.Toasts, cfg.DND, fg || paneHost(front) != nil)
+		if sound {
+			playMessageSound() // which looks at the switch of the sound itself
 		}
-		if !fg { // the window in front already shows the message: no sound over it
-			playMessageSound()
+		if toast {
+			notifyID = notify.ID
+			body := "Nowa wiadomość"
+			if cfg.Body {
+				body = oneLine(previewText(notify.LastPreview), 200)
+			}
+			notifyAbout(*notify, oneLine(threadTitle(*notify), 60), body)
 		}
-		notifyAbout(*notify, oneLine(threadTitle(*notify), 60), body)
-		if !fg {
+		if flash {
 			pFlashWindow.Call(hMain, 1)
 		}
 	}
@@ -2092,6 +2098,18 @@ func refresh() {
 			markSelectedRead()
 		}
 	}
+}
+
+// notifyPlan says what a new message from someone else sets off: the sound, the
+// notification of Windows, the blinking of the taskbar. "Nie przeszkadzać" stops all three.
+// A window of the program in front, the ordinary one or a conversation beside a head,
+// already shows that something came: no sound over it and no blinking, as before. Whether
+// the sound is switched on at all is the business of the sound itself.
+func notifyPlan(toasts, dnd, inFront bool) (sound, toast, flash bool) {
+	if dnd {
+		return false, false, false
+	}
+	return !inFront, toasts, !inFront
 }
 
 func lastFromSelf(threadID, self int64) bool {
