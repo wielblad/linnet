@@ -18,8 +18,8 @@ func TestEdgeShows(t *testing.T) {
 			under = 0x000000
 		}
 		for _, bg := range []uint32{pal.layer, under} {
-			if c := contrast(pal.edge, bg); c < 3 {
-				t.Errorf("%s: edge %06X on %06X is %.2f:1, want 3:1", theme, pal.edge, bg, c)
+			if c := contrast(pal.edge, bg); c < 1.9 {
+				t.Errorf("%s: edge %06X on %06X is %.2f:1, want at least 1.9:1", theme, pal.edge, bg, c)
 			}
 		}
 	}

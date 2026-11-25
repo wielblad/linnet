@@ -21,8 +21,8 @@ type palette struct {
 	accentHover, accentDown               uint32 // the accent under the pointer and while pressed
 	avatars                               [6]uint32
 	// edge is where a window of the program ends. Unlike line, which parts things inside a
-	// window, it has to show on whatever lies under the window, a white page included: 3:1
-	// against the window's own surface and against white or black beneath it.
+	// window, it has to show on whatever lies under the window, a white page included: about 2:1
+	// against the window and against white or black beneath it, clear without being heavy.
 	edge uint32
 }
 
@@ -101,7 +101,7 @@ func loadPalette() {
 	if dark {
 		p.mica, p.layer, p.card, p.bubble = 0x0D1422, 0x151F31, 0x151F31, 0x1D2A40 // canvas, surface, surface, elevated
 		p.fg, p.fg2, p.line = 0xF4F7FC, 0xB4C0D3, 0x344259
-		p.edge = 0x646F82
+		p.edge = 0x4C5769
 		p.accent, p.onAccent = 0x76ADFF, 0x0D1422
 		p.accentHover, p.accentDown = mix(0xFFFFFF, p.accent, 14), mix(0x0D1422, p.accent, 14)
 		p.own, p.ownFg = p.accent, p.onAccent
@@ -115,7 +115,7 @@ func loadPalette() {
 		p.mica, p.layer, p.card = 0xF4F7FC, 0xFFFFFF, 0xFFFFFF // canvas, surface, surface
 		p.bubble = mix(0xDCE3EF, 0xFFFFFF, 55)                 // the border colour, thinned: a bubble that shows on white
 		p.fg, p.fg2, p.line = 0x14213D, 0x58657D, 0xDCE3EF
-		p.edge = 0x8A93A4
+		p.edge = 0xB3B9C4
 		p.accent, p.onAccent = 0x0866E8, 0xFFFFFF
 		p.accentHover, p.accentDown = 0x0758C7, 0x0649A6
 		p.own, p.ownFg = p.accent, p.onAccent
