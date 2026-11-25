@@ -254,10 +254,28 @@ func paneInputChanged(p *pane) {
 	invalidate(p.hwnd)
 }
 
+// paneEdge is how much of a pane its own drawn edge takes on every side. Windows draws
+// the edge and the shadow of a window only when it also rounds its corners, so a square
+// column, left to the system, would have no edge at all and be lost on a white page.
+func paneEdge() int32 {
+	if cfg.HeadMode == headModeCols {
+		return 1
+	}
+	return 0
+}
+
+// paneEdgeColour is the colour of a pane's edge: the accent on the one being written in.
+func paneEdgeColour(p *pane) uint32 {
+	if p.active {
+		return pal.accent
+	}
+	return pal.edge
+}
+
 // paneFrame gives the pane the edge the panel of the overlay has: rounded in the dock,
-// square where columns stand shoulder to shoulder.
+// square where columns stand shoulder to shoulder. The square one is drawn in panePaint.
 func paneFrame(p *pane) {
-	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.line))
+	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.edge))
 	if cfg.HeadMode == headModeCols {
 		round = dwmRoundNone
 	}
@@ -266,6 +284,9 @@ func paneFrame(p *pane) {
 	}
 	pDwmSetWindowAttribute.Call(p.hwnd, dwmaCornerPreference, uintptr(unsafe.Pointer(&round)), 4)
 	pDwmSetWindowAttribute.Call(p.hwnd, dwmaBorderColour, uintptr(unsafe.Pointer(&border)), 4)
+	if paneEdge() != 0 {
+		invalidate(p.hwnd)
+	}
 }
 
 func paneFront(p *pane) {
@@ -544,7 +565,8 @@ func paneLayout(p *pane) {
 	if cover := paneCovered(p); cover != 0 && !p.min {
 		show(p.view, false)
 		show(p.input, false)
-		moveTo(cover, rect{0, 0, p.w, p.h})
+		e := paneEdge()
+		moveTo(cover, rect{e, e, p.w - e, p.h - e})
 		if cover == pn.hwnd {
 			show(pn.hwnd, true)
 			show(pn.edit, pn.search)
@@ -574,7 +596,7 @@ func paneLayout(p *pane) {
 	}
 	show(p.view, true)
 	show(p.input, true)
-	moveTo(p.view, rect{0, hh + 1, p.w, p.h - p.compH - 1})
+	moveTo(p.view, rect{paneEdge(), hh + 1, p.w - paneEdge(), p.h - p.compH - 1})
 	p.attachR = rect{dp(10), p.h - dp(10) - dp(36), dp(46), p.h - dp(10)}
 	p.sendR = rect{p.w - dp(12) - dp(36), p.h - dp(10) - dp(36), p.w - dp(12), p.h - dp(10)}
 	p.fieldR = rect{dp(12) + dp(40), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
@@ -717,6 +739,13 @@ func panePaint(p *pane, target uintptr) {
 			}
 			c.text(gClose, compose.closeHit, ink, dtCenter|dtVCenter|dtSingleLine)
 		}
+	}
+	if e := paneEdge(); e != 0 { // last, over everything the pane has painted
+		col := paneEdgeColour(p)
+		c.fill(rect{0, 0, p.w, e}, col)
+		c.fill(rect{0, p.h - e, p.w, p.h}, col)
+		c.fill(rect{0, 0, e, p.h}, col)
+		c.fill(rect{p.w - e, 0, p.w, p.h}, col)
 	}
 	buf.flush(0, 0)
 }

@@ -98,7 +98,7 @@ func setOverlay(on bool) {
 // panel, so that it looks the way the ordinary window does. The frame itself is taken away
 // in wndProc: the window keeps it only for what the system draws around it.
 func overlayRound() {
-	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.line))
+	round, border := uintptr(dwmRoundSmall), uintptr(cref(pal.edge))
 	if !compact.on {
 		round, border = dwmRoundNone, dwmDefaultColour
 	} else if cfg.HeadMode == headModeCols { // columns stand shoulder to shoulder
