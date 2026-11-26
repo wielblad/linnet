@@ -26,6 +26,11 @@ const (
 	phPhoto
 	phEntry
 	phResult
+	phMorePhotos  // the row under the pictures that shows the next ones
+	phMoreEntries // and the one under the files and links
+
+	panelPhotoPage = 18 // pictures shown at first, and added by each "show more"
+	panelEntryPage = 20
 
 	idFind      = 333
 	idInfo      = 334
@@ -64,6 +69,10 @@ var pn struct {
 	thumbSide   int32
 	photos      []store.Message
 	entries     []panelEntry
+	photoMax    int // how many pictures are shown at most now; grows by a page at a time
+	entryMax    int
+	photoAll    int // how many there are in all, on this computer
+	entryAll    int
 	query       string
 	all         []store.Message // every message of the conversation kept on this computer
 	results     []int           // indexes into all, newest first
@@ -235,6 +244,10 @@ func panelDropThumbs() {
 func panelCollect() {
 	pn.photos, pn.entries = pn.photos[:0], pn.entries[:0]
 	pn.all, _ = be.db.ListMessages(be.ctx, mv.thread.ID)
+	if pn.forThread != mv.thread.ID || pn.photoMax == 0 { // another conversation: from the first page again
+		pn.photoMax, pn.entryMax = panelPhotoPage, panelEntryPage
+	}
+	pn.photoAll, pn.entryAll = 0, 0
 	pn.forThread, pn.forCount = mv.thread.ID, len(mv.msgs)
 	for i := len(pn.all) - 1; i >= 0; i-- {
 		m := pn.all[i]
@@ -243,15 +256,21 @@ func panelCollect() {
 		}
 		switch {
 		case showsInline(m):
-			if len(pn.photos) < 18 {
+			pn.photoAll++
+			if len(pn.photos) < pn.photoMax {
 				pn.photos = append(pn.photos, m)
 			}
 		case hasAttachment(m):
-			if len(pn.entries) < 20 {
+			pn.entryAll++
+			if len(pn.entries) < pn.entryMax {
 				pn.entries = append(pn.entries, panelEntry{icon: attachmentIcon(m), label: mediaLabel(m), when: shortDate(m), m: m})
 			}
 		default:
-			if u := linkOf(m); u != "" && len(pn.entries) < 20 {
+			u := linkOf(m)
+			if u != "" {
+				pn.entryAll++
+			}
+			if u != "" && len(pn.entries) < pn.entryMax {
 				label := oneLine(m.LinkTitle, 80)
 				if label == "" {
 					label = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
@@ -344,6 +363,17 @@ func paintPanel(target uintptr) {
 		}
 		g.round(pad, y, cw, h, dp(8), dp(8), dp(8), dp(8), edge)
 		g.round(pad+1, y+1, cw-2, h-2, dp(7), dp(7), dp(7), dp(7), fill)
+	}
+	// more is the row that shows the next page of a section and says how many are left.
+	moreH := dp(40)
+	more := func(y int32, kind int, label string, left int) {
+		if y+moreH < 0 || y > pn.h {
+			return
+		}
+		hi := hit(rect{pad, y, pad + cw, y + moreH}, kind, 0)
+		card(y, moreH, pn.hot == hi)
+		text(fnt.bodySemi, label, rect{pad + dp(12), y, pad + cw - dp(90), y + moreH}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+		text(fnt.small, fmt.Sprintf("jeszcze %d", left), rect{pad + cw - dp(90), y, pad + cw - dp(12), y + moreH}, pal.fg2, dtRight|dtSingleLine|dtVCenter)
 	}
 	toggle := func(y, h int32, on bool) {
 		tx, ty := pad+cw-dp(14)-dp(40), y+(h-dp(20))/2
@@ -493,6 +523,11 @@ func paintPanel(target uintptr) {
 			}
 			rows := int32((len(pn.photos) + 2) / 3)
 			y += rows*(side+gap) - gap
+			if left := pn.photoAll - len(pn.photos); left > 0 {
+				y += dp(8)
+				more(y, phMorePhotos, "Pokaż starsze zdjęcia", left)
+				y += moreH
+			}
 		}
 		// files and links
 		if len(pn.entries) > 0 {
@@ -509,6 +544,11 @@ func paintPanel(target uintptr) {
 					text(fnt.small, e.when, rect{pad + dp(42), y + dp(8) + sp(20), pad + cw - dp(12), y + rh - dp(8)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 				}
 				y += rh + dp(4)
+			}
+			if left := pn.entryAll - len(pn.entries); left > 0 {
+				y += dp(4)
+				more(y, phMoreEntries, "Pokaż starsze pliki i linki", left)
+				y += moreH
 			}
 		}
 		if len(pn.photos) == 0 && len(pn.entries) == 0 {
@@ -643,6 +683,14 @@ func panelClick(i int) {
 		if h.arg < len(pn.photos) {
 			openViewer(pn.photos[h.arg])
 		}
+	case phMorePhotos: // the next page of pictures, under the ones already shown
+		pn.photoMax += panelPhotoPage
+		panelCollect()
+		invalidate(pn.hwnd)
+	case phMoreEntries:
+		pn.entryMax += panelEntryPage
+		panelCollect()
+		invalidate(pn.hwnd)
 	case phEntry:
 		if h.arg < len(pn.entries) {
 			if e := pn.entries[h.arg]; e.link != "" {
