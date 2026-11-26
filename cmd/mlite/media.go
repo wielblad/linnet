@@ -84,6 +84,8 @@ func placeholderLabel(text string) string {
 		return "Plik"
 	case "[gif]":
 		return "GIF"
+	case "[message]": // an answer to something whose words are not known here
+		return "Wiadomość"
 	}
 	return ""
 }

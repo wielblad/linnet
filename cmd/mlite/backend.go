@@ -531,6 +531,15 @@ func (b *backend) setEmoji(thread store.Thread, emoji string) bool {
 	return b.act("Nie udało się zmienić emotki rozmowy", func(c *meta.Client) error { return c.SetEmoji(b.ctx, b.db, thread, emoji) })
 }
 
+// replyWords is what is kept as the words of the message being answered: a recording or a
+// picture has none, so its kind stands for it.
+func replyWords(m store.Message) string {
+	if m.Text == "" && m.MediaKind != "" {
+		return "[" + m.MediaKind + "]"
+	}
+	return m.Text
+}
+
 func (b *backend) sendSized(thread store.Thread, text string, replyTo store.Message, size int64) bool {
 	client := b.current()
 	if client == nil {
@@ -547,7 +556,7 @@ func (b *backend) sendSized(thread store.Thread, text string, replyTo store.Mess
 		EmojiSize: size,
 
 		ReplyToID:     replyTo.ID,
-		ReplyText:     replyTo.Text,
+		ReplyText:     replyWords(replyTo),
 		ReplySenderID: replyTo.SenderID,
 	}
 	if err := b.db.UpsertMessage(b.ctx, pending); err != nil {

@@ -466,7 +466,11 @@ SELECT COALESCE(MIN(timestamp_ms), 0) FROM (
 SELECT m.id, m.thread_id, m.sender_id, COALESCE(c.name, ''), m.text, m.timestamp_ms, m.pending, m.error,
 	m.media_kind, m.media_url, m.media_mime, m.media_name, m.media_duration_ms,
 	m.reply_to_id,
-	CASE WHEN m.reply_text != '' THEN m.reply_text ELSE COALESCE(r.text, '') END,
+	CASE WHEN m.reply_text != '' THEN m.reply_text
+		WHEN COALESCE(r.text, '') != '' THEN r.text
+		WHEN COALESCE(r.media_kind, '') != '' THEN '[' || r.media_kind || ']'
+		WHEN m.reply_to_id != '' THEN '[message]'
+		ELSE '' END,
 	CASE WHEN m.reply_sender_id != 0 THEN m.reply_sender_id ELSE COALESCE(r.sender_id, 0) END,
 	COALESCE(rc.name, ''), m.edited, m.unsent, m.media_ref,
 	m.link_url, m.link_title, m.link_image, m.link_ref, m.emoji_size

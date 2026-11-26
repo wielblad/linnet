@@ -176,6 +176,15 @@ func dayLabel(t time.Time) string {
 	return t.Format("02.01.2006")
 }
 
+// quoteText is the line that stands for the message being answered: its words, or what
+// it was when it had none, such as a voice recording.
+func quoteText(text string) string {
+	if lbl := placeholderLabel(text); lbl != "" {
+		return lbl
+	}
+	return oneLine(text, 120)
+}
+
 func mediaLabel(m store.Message) string {
 	switch m.MediaKind {
 	case "":
@@ -823,7 +832,7 @@ func paintView(target uintptr) {
 				c.font(fnt.smallSemi)
 				c.text(who, rect{x0 + dp(10), cy + dp(3), x1 - dp(6), cy + sp(20)}, ink, dtSingleLine|dtEndEllipsis)
 				c.font(fnt.small)
-				c.text(oneLine(it.m.ReplyText, 120), rect{x0 + dp(10), cy + sp(20), x1 - dp(6), cy + sp(38)}, ink2, dtSingleLine|dtEndEllipsis)
+				c.text(quoteText(it.m.ReplyText), rect{x0 + dp(10), cy + sp(20), x1 - dp(6), cy + sp(38)}, ink2, dtSingleLine|dtEndEllipsis)
 				cy += sp(40) + dp(4)
 			}
 			if it.media != "" {

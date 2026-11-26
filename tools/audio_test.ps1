@@ -83,6 +83,9 @@ try {
     [ET]::PostMessage($view, 0x0201, [IntPtr]1, $at) | Out-Null
     [ET]::PostMessage($view, 0x0202, [IntPtr]::Zero, $at) | Out-Null
   }
+  Shot "glos-0-przed"
+  [ET]::PostMessage($view, 0x0200, [IntPtr]::Zero, [IntPtr](($Y1 -shl 16) -bor 150)) | Out-Null   # the pointer over the recording: its actions
+  Start-Sleep -Milliseconds 400; Shot "glos-0-wskazana"
   Click $X1 $Y1
   Start-Sleep -Milliseconds 1500; Shot "glos-1-gra"
   Start-Sleep -Milliseconds 1500; Shot "glos-2-gra-dalej"
