@@ -585,7 +585,19 @@ func layout() {
 		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hMic, hGif, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
-		moveTo(viewerInner(), rect{0, 0, w, h})
+		// Information open beside the conversation stays beside the picture too: the next
+		// picture can be chosen from it. Where there is no room for both, it goes under.
+		vwW := w
+		if pn.hwnd != 0 && (pn.host == 0 || pn.host == hMain) {
+			beside := pn.open && selectedID != 0 && nav != navSettings && w >= dp(1040)
+			if beside {
+				vwW = w - panelWidth()
+				moveTo(pn.hwnd, rect{vwW, 0, w, h})
+			}
+			show(pn.hwnd, beside)
+			show(pn.edit, beside && pn.search)
+		}
+		moveTo(viewerInner(), rect{0, 0, vwW, h})
 		return
 	}
 	settings := nav == navSettings

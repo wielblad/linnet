@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -30,7 +31,17 @@ const (
 	phPhotoOlder
 	phEntryNewer // and the one under the files and links
 	phEntryOlder
-	phPull // fetch older history of the conversation from Messenger
+	phPull       // fetch older history of the conversation from Messenger
+	phPhotoFirst // to the newest page of pictures, and to the oldest
+	phPhotoLast
+	phEntryFirst
+	phEntryLast
+	phPhotoGoto // the words "page 4 of 12": a click lets the number be typed
+	phEntryGoto
+
+	idPanelPage = 361
+	esNumber    = 0x2000
+	esCenter    = 0x0001
 
 	panelPhotoPage = 18 // pictures on a page
 	panelEntryPage = 10 // files and links on a page
@@ -77,6 +88,9 @@ var pn struct {
 	entryPage   int
 	photoAll    int // how many there are in all, on this computer
 	entryAll    int
+	pageEdit    uintptr // the small field a page number is typed into
+	pageOld     uintptr
+	pageFor     int      // the section whose page is being typed: 0 none, 1 pictures, 2 files and links
 	pull        struct { // older history being fetched from Messenger for the panel
 		thread int64
 		left   int
@@ -149,6 +163,8 @@ func panelBar() int32   { return dp(52) }
 func initPanel() {
 	pn.hwnd = createWindow(0, "MlitePanel", "Informacje o rozmowie", wsChild|wsTabStop|wsClipChildren, hMain, 0)
 	pn.edit = createWindow(0, "EDIT", "", wsChild|wsTabStop|esAutoHScroll, pn.hwnd, idPanelEdit)
+	pn.pageEdit = createWindow(0, "EDIT", "", wsChild|esAutoHScroll|esNumber|esCenter, pn.hwnd, idPanelPage)
+	pn.pageOld = subclass(pn.pageEdit, panelPageProc)
 	pn.sc = scroller{hwnd: pn.hwnd, pos: &pn.scroll, total: func() int32 { return pn.total }, page: func() int32 { return pn.h }}
 	pn.hot = -1
 	pn.thumbs = map[string]uintptr{}
@@ -309,6 +325,60 @@ func panelCollect() {
 	panelSearch()
 }
 
+// panelGoto shows a page of a section (1 the pictures, 2 the files and links); a number
+// past either end is brought to that end.
+func panelGoto(section, page int) {
+	if section == 1 {
+		page = min(max(page, 0), panelPages(pn.photoAll, panelPhotoPage)-1)
+		if page != pn.photoPage {
+			pn.photoPage = page
+			panelDropThumbs()
+		}
+	} else {
+		pn.entryPage = min(max(page, 0), panelPages(pn.entryAll, panelEntryPage)-1)
+	}
+	panelCollect()
+	invalidate(pn.hwnd)
+}
+
+// panelPageDone ends the typing of a page number: with go the page typed is shown.
+func panelPageDone(goTo bool) {
+	section := pn.pageFor
+	if section == 0 {
+		return
+	}
+	pn.pageFor = 0
+	show(pn.pageEdit, false)
+	if n, err := strconv.Atoi(strings.TrimSpace(getText(pn.pageEdit))); goTo && err == nil {
+		panelGoto(section, n-1)
+	}
+	invalidate(pn.hwnd)
+	pSetFocus.Call(pn.hwnd)
+}
+
+// panelPageProc lets Enter go to the page typed and Escape, or leaving the field, drop it.
+func panelPageProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
+	switch msg {
+	case wmKeyDown:
+		switch wp {
+		case 0x0D:
+			panelPageDone(true)
+			return 0
+		case vkEscape:
+			panelPageDone(false)
+			return 0
+		}
+	case 0x0102: // WM_CHAR: Enter and Escape have been dealt with; no bell for them
+		if wp == 0x0D || wp == 0x1B {
+			return 0
+		}
+	case wmKillFocus:
+		defer panelPageDone(false)
+	}
+	r, _, _ := pCallWindowProcW.Call(pn.pageOld, hwnd, uintptr(msg), wp, lp)
+	return r
+}
+
 // panelPages is how many pages a section of n things has; one at least.
 func panelPages(n, per int) int {
 	if n <= per {
@@ -444,31 +514,54 @@ func paintPanel(target uintptr) {
 		g.round(pad, y, cw, h, dp(8), dp(8), dp(8), dp(8), edge)
 		g.round(pad+1, y+1, cw-2, h-2, dp(7), dp(7), dp(7), dp(7), fill)
 	}
-	// pager is the row that turns the pages of a section: to the newer ones on its left,
-	// to the older ones on its right, and which page of how many between them.
+	// pager is the row that turns the pages of a section: to the newest and the newer on
+	// its left, to the older and the oldest on its right, and between them which page of
+	// how many, where a click lets the number be typed. section is 1 for the pictures and
+	// 2 for the files and links.
 	pagerH := dp(40)
-	pager := func(y int32, newer, olderKind, page, pages int) {
+	pager := func(y int32, section, page, pages int) {
 		if y+pagerH < 0 || y > pn.h {
+			if pn.pageFor == section { // the row has scrolled away with its field
+				show(pn.pageEdit, false)
+			}
 			return
 		}
-		bw := dp(104)
-		side := func(x int32, kind int, label string, on bool, flags uint32) {
-			r := rect{x, y, x + bw, y + pagerH}
-			ink := mix(pal.fg2, pal.mica, 45)
+		kinds := [][5]int{{}, {phPhotoFirst, phPhotoNewer, phPhotoOlder, phPhotoLast, phPhotoGoto}, {phEntryFirst, phEntryNewer, phEntryOlder, phEntryLast, phEntryGoto}}[section]
+		card(y, pagerH, false)
+		bw := dp(38)
+		btn := func(x int32, kind int, sign string, on bool) {
+			r := rect{x, y + dp(2), x + bw, y + pagerH - dp(2)}
+			ink := mix(pal.fg2, pal.card, 40)
 			if on {
 				hi := hit(r, kind, 0)
-				card(y, pagerH, false)
 				ink = pal.accentText
 				if pn.hot == hi {
-					g.round(r.left, r.top, bw, pagerH, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.card, 8))
+					g.round(r.left, r.top, bw, r.bottom-r.top, dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.card, 9))
 				}
 			}
-			text(fnt.bodySemi, label, rect{r.left + dp(12), r.top, r.right - dp(12), r.bottom}, ink, flags|dtSingleLine|dtVCenter)
+			text(fnt.head, sign, r, ink, dtCenter|dtSingleLine|dtVCenter)
 		}
-		card(y, pagerH, false)
-		side(pad, newer, "‹  Nowsze", page > 0, 0)
-		side(pad+cw-bw, olderKind, "Starsze  ›", page < pages-1, dtRight)
-		text(fnt.small, fmt.Sprintf("Strona %d z %d", page+1, pages), rect{pad + bw, y, pad + cw - bw, y + pagerH}, pal.fg2, dtCenter|dtSingleLine|dtVCenter)
+		btn(pad+dp(2), kinds[0], "«", page > 0)
+		btn(pad+dp(2)+bw, kinds[1], "‹", page > 0)
+		btn(pad+cw-dp(2)-2*bw, kinds[2], "›", page < pages-1)
+		btn(pad+cw-dp(2)-bw, kinds[3], "»", page < pages-1)
+		mid := rect{pad + dp(2) + 2*bw, y + dp(2), pad + cw - dp(2) - 2*bw, y + pagerH - dp(2)}
+		if pn.pageFor == section { // the number is being typed: "Strona [ 4 ] z 12"
+			ew, eh := dp(46), lay.editH
+			ex := (mid.left+mid.right)/2 - ew/2
+			g.round(ex-dp(4), y+dp(6), ew+dp(8), pagerH-dp(12), dp(6), dp(6), dp(6), dp(6), pal.accent)
+			g.round(ex-dp(4)+2, y+dp(6)+2, ew+dp(8)-4, pagerH-dp(12)-4, dp(4), dp(4), dp(4), dp(4), pal.card)
+			moveTo(pn.pageEdit, rect{ex, y + (pagerH-eh)/2, ex + ew, y + (pagerH-eh)/2 + eh})
+			show(pn.pageEdit, true)
+			text(fnt.small, "Strona", rect{mid.left, y, ex - dp(10), y + pagerH}, pal.fg2, dtRight|dtSingleLine|dtVCenter)
+			text(fnt.small, fmt.Sprintf("z %d", pages), rect{ex + ew + dp(10), y, mid.right, y + pagerH}, pal.fg2, dtSingleLine|dtVCenter)
+			return
+		}
+		hi := hit(mid, kinds[4], 0)
+		if pn.hot == hi {
+			g.round(mid.left, mid.top, mid.right-mid.left, mid.bottom-mid.top, dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.card, 6))
+		}
+		text(fnt.small, fmt.Sprintf("Strona %d z %d", page+1, pages), mid, pal.fg2, dtCenter|dtSingleLine|dtVCenter)
 	}
 	toggle := func(y, h int32, on bool) {
 		tx, ty := pad+cw-dp(14)-dp(40), y+(h-dp(20))/2
@@ -620,7 +713,7 @@ func paintPanel(target uintptr) {
 			y += rows*(side+gap) - gap
 			if pages := panelPages(pn.photoAll, panelPhotoPage); pages > 1 {
 				y += dp(8)
-				pager(y, phPhotoNewer, phPhotoOlder, pn.photoPage, pages)
+				pager(y, 1, pn.photoPage, pages)
 				y += pagerH
 			}
 		}
@@ -642,7 +735,7 @@ func paintPanel(target uintptr) {
 			}
 			if pages := panelPages(pn.entryAll, panelEntryPage); pages > 1 {
 				y += dp(4)
-				pager(y, phEntryNewer, phEntryOlder, pn.entryPage, pages)
+				pager(y, 2, pn.entryPage, pages)
 				y += pagerH
 			}
 		}
@@ -674,6 +767,11 @@ func paintPanel(target uintptr) {
 		}
 	}
 	pn.total = y + pn.scroll + dp(20)
+	if most := max(pn.total-pn.h, 0); pn.scroll > most {
+		// a shorter page, or a section gone: what is left is brought back into view
+		pn.scroll = most
+		invalidate(pn.hwnd)
+	}
 
 	// the bar on top stays in place
 	g.round(0, 0, pn.w, bar, 0, 0, 0, 0, pal.mica)
@@ -799,18 +897,23 @@ func panelClick(i int) {
 		if h.arg < len(pn.photos) {
 			openViewer(pn.photos[h.arg])
 		}
-	case phPhotoNewer, phPhotoOlder, phEntryNewer, phEntryOlder: // another page takes the place of the one shown
-		step := map[int]int{phPhotoNewer: -1, phPhotoOlder: 1, phEntryNewer: -1, phEntryOlder: 1}[h.kind]
-		if h.kind == phPhotoNewer || h.kind == phPhotoOlder {
-			if next := pn.photoPage + step; next >= 0 && next < panelPages(pn.photoAll, panelPhotoPage) {
-				pn.photoPage = next
-				panelDropThumbs()
-			}
-		} else if next := pn.entryPage + step; next >= 0 && next < panelPages(pn.entryAll, panelEntryPage) {
-			pn.entryPage = next
+	case phPhotoNewer, phPhotoOlder, phPhotoFirst, phPhotoLast: // another page takes the place of the one shown
+		last := panelPages(pn.photoAll, panelPhotoPage) - 1
+		panelGoto(1, map[int]int{phPhotoNewer: pn.photoPage - 1, phPhotoOlder: pn.photoPage + 1, phPhotoFirst: 0, phPhotoLast: last}[h.kind])
+	case phEntryNewer, phEntryOlder, phEntryFirst, phEntryLast:
+		last := panelPages(pn.entryAll, panelEntryPage) - 1
+		panelGoto(2, map[int]int{phEntryNewer: pn.entryPage - 1, phEntryOlder: pn.entryPage + 1, phEntryFirst: 0, phEntryLast: last}[h.kind])
+	case phPhotoGoto, phEntryGoto: // the number of the page is typed into a small field
+		page := pn.photoPage
+		pn.pageFor = 1
+		if h.kind == phEntryGoto {
+			pn.pageFor, page = 2, pn.entryPage
 		}
-		panelCollect()
+		setText(pn.pageEdit, strconv.Itoa(page+1))
 		invalidate(pn.hwnd)
+		pUpdateWindow.Call(pn.hwnd) // drawn now, so that the field is in its place before it is used
+		pSetFocus.Call(pn.pageEdit)
+		sendMsg(pn.pageEdit, emSetSel, 0, ^uintptr(0))
 	case phPull:
 		if !older.done[t.ID] {
 			panelPull()

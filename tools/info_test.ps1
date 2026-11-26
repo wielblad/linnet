@@ -1,5 +1,5 @@
 # The pages of the Information panel: opens the first conversation in the ordinary window,
-# opens Information, and turns a page of its files and links.
+# opens Information, opens a picture beside it, goes to the oldest page of its files and links and opens the field for a page number.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File tools\info_test.ps1 -Exe build\linnet.exe -DataDir .local\data-ui-test -OutDir .local\shots [-Mode cols|dock|one|tabs] [-Theme light|dark] [-Back FFFFFF]
 param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Mode = "cols", [string]$Theme = "light", [string]$Back = "FFFFFF", [long]$Open = 102, [long]$Other = 101)
 $ErrorActionPreference = "Stop"
@@ -49,7 +49,7 @@ try {
     $at = [IntPtr](($y -shl 16) -bor $x)
     [ET]::PostMessage($w, 0x0201, [IntPtr]1, $at) | Out-Null; [ET]::PostMessage($w, 0x0202, [IntPtr]::Zero, $at) | Out-Null
   }
-  [ET]::SetWindowPos($main, [IntPtr](-1), 200, 80, 1000, 900, 0x0010) | Out-Null
+  [ET]::SetWindowPos($main, [IntPtr](-1), 100, 60, 1400, 900, 0x0010) | Out-Null
   Start-Sleep -Milliseconds 600
   $list = [ET]::FindWindowEx($main, [IntPtr]::Zero, "MliteList", [NullString]::Value)
   Click $list 120 40
@@ -58,11 +58,20 @@ try {
   [ET]::PostMessage($main, 0x0111, [IntPtr]334, $info) | Out-Null
   Start-Sleep -Milliseconds 1200
   $panel = [ET]::FindWindowEx($main, [IntPtr]::Zero, "MlitePanel", [NullString]::Value)
+  Click $panel 50 520                                  # a picture: it opens beside Information, not under it
+  Start-Sleep -Milliseconds 3500; Shot "info-0-zdjecie-obok"
+  $viewer = [ET]::FindWindowEx($main, [IntPtr]::Zero, "MliteViewer", [NullString]::Value)
+  if ($viewer -ne [IntPtr]::Zero) { [ET]::PostMessage($viewer, 0x0100, [IntPtr]0x1B, [IntPtr]::Zero) | Out-Null }
+  Start-Sleep -Milliseconds 800
   for ($i = 0; $i -lt 8; $i++) { [ET]::PostMessage($panel, 0x020A, [IntPtr](-120 * 65536 * 3), [IntPtr]::Zero) | Out-Null }
   Start-Sleep -Milliseconds 900; Shot "info-1-pierwsza-strona"
   $pr = Rect $panel
-  Click $panel (($pr.R - $pr.L) - 60) (($pr.B - $pr.T) - 135)   # "Starsze" of the files and links
-  Start-Sleep -Milliseconds 900; Shot "info-2-druga-strona"
+  Click $panel (($pr.R - $pr.L) - 34) (($pr.B - $pr.T) - 135)   # to the oldest page of the files and links
+  Start-Sleep -Milliseconds 900; Shot "info-2-ostatnia-strona"
+  for ($i = 0; $i -lt 8; $i++) { [ET]::PostMessage($panel, 0x020A, [IntPtr](-120 * 65536 * 3), [IntPtr]::Zero) | Out-Null }
+  Start-Sleep -Milliseconds 500
+  Click $panel ([int](($pr.R - $pr.L) / 2)) (($pr.B - $pr.T) - 135)   # the words in the middle: the number can be typed
+  Start-Sleep -Milliseconds 900; Shot "info-3-wpisywanie"
   "okno listy: {0}, przycisk: {1}, panel: {2}" -f ($list -ne [IntPtr]::Zero), ($info -ne [IntPtr]::Zero), ($panel -ne [IntPtr]::Zero)
   $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
 } finally {
