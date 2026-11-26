@@ -72,6 +72,12 @@ try {
   Start-Sleep -Milliseconds 500
   Click $panel ([int](($pr.R - $pr.L) / 2)) (($pr.B - $pr.T) - 135)   # the words in the middle: the number can be typed
   Start-Sleep -Milliseconds 900; Shot "info-3-wpisywanie"
+  $pe = [IntPtr]::Zero
+  for ($i = 0; $i -lt 4; $i++) { $pe = [ET]::FindWindowEx($panel, $pe, "Edit", [NullString]::Value); if ($pe -eq [IntPtr]::Zero -or [ET]::IsWindowVisible($pe)) { break } }
+  "pole numeru strony widoczne: {0}" -f ($pe -ne [IntPtr]::Zero)
+  [ET]::PostMessage($pe, 0x0102, [IntPtr]0x32, [IntPtr]::Zero) | Out-Null     # the key 2
+  [ET]::PostMessage($pe, 0x0100, [IntPtr]0x0D, [IntPtr]::Zero) | Out-Null     # Enter
+  Start-Sleep -Milliseconds 900; Shot "info-4-po-enter"
   "okno listy: {0}, przycisk: {1}, panel: {2}" -f ($list -ne [IntPtr]::Zero), ($info -ne [IntPtr]::Zero), ($panel -ne [IntPtr]::Zero)
   $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
 } finally {

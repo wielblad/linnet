@@ -255,6 +255,11 @@ func main() {
 
 // handleKey takes the keys that the dialog manager would otherwise swallow or misroute.
 func handleKey(m *msgT) bool {
+	if pn.pageEdit != 0 && m.hwnd == pn.pageEdit && (m.wParam == vkReturn || m.wParam == vkEscape) {
+		// the field of a page number: these two keys would not reach it otherwise
+		panelPageDone(m.wParam == vkReturn)
+		return true
+	}
 	ctrl := keyDown(vkControl)
 	if p := paneOf(m.hwnd); p != nil { // a pane beside the heads: the keys of a conversation, for its own
 		defer enterBank(p.bank)()

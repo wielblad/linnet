@@ -356,7 +356,7 @@ func panelPageDone(goTo bool) {
 	pSetFocus.Call(pn.hwnd)
 }
 
-// panelPageProc lets Enter go to the page typed and Escape, or leaving the field, drop it.
+// panelPageProc lets Enter, or leaving the field, go to the page typed and Escape drop it.
 func panelPageProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	switch msg {
 	case wmKeyDown:
@@ -372,8 +372,8 @@ func panelPageProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		if wp == 0x0D || wp == 0x1B {
 			return 0
 		}
-	case wmKillFocus:
-		defer panelPageDone(false)
+	case wmKillFocus: // a click elsewhere takes the number typed, as Enter does
+		defer panelPageDone(true)
 	}
 	r, _, _ := pCallWindowProcW.Call(pn.pageOld, hwnd, uintptr(msg), wp, lp)
 	return r
