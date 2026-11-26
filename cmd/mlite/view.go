@@ -233,6 +233,9 @@ func loadView(force bool) {
 		mv.limit, mv.limitFor = windowStart, mv.thread.ID
 	}
 	msgs, localMore, err := be.db.RecentMessages(be.ctx, mv.thread.ID, mv.limit)
+	for i := range msgs {
+		gifAsPicture(&msgs[i]) // a GIF of an encrypted chat is a picture, not a film
+	}
 	if err != nil {
 		return
 	}
@@ -769,6 +772,7 @@ func paintView(target uintptr) {
 				var th uintptr
 				if it.imgReady {
 					th = mediaThumb(it.imgMsg, it.imgW, it.imgH)
+					gifSeen(it.imgMsg, it.imgW, it.imgH) // a GIF on the screen moves
 				}
 				if th != 0 {
 					g.image(th, it.bx+padL, cy, it.imgW, it.imgH)

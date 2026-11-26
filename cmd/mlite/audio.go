@@ -75,6 +75,7 @@ func audioToggle(m store.Message, path string) {
 		return
 	}
 	audioStop()
+	path = playableSound(path) // Messenger's own kind of recording is repacked for Windows first
 	pCoInitializeEx.Call(0, 2) // the player wants an apartment; harmless when there is one
 	var player uintptr
 	hr, _, _ := pMFPCreateMediaPlayer.Call(uintptr(unsafe.Pointer(u16(path))), 1, 0, 0, 0, uintptr(unsafe.Pointer(&player)))

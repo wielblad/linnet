@@ -1515,6 +1515,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			hotTick()
 		case timerAudio:
 			audioTick()
+		case timerGif:
+			gifTick()
 		case timerHeadDots:
 			headPhase++
 			typingSync()
@@ -2196,6 +2198,9 @@ func lastFromSelf(threadID, self int64) bool {
 		return false
 	}
 	msgs, err := be.db.ListMessages(be.ctx, threadID)
+	for i := range msgs {
+		gifAsPicture(&msgs[i])
+	}
 	if err != nil || len(msgs) == 0 {
 		return false
 	}

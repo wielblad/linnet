@@ -144,7 +144,7 @@ func mediaExt(mime string) string {
 		return ".m4a"
 	case "audio/aac":
 		return ".aac"
-	case "audio/ogg":
+	case "audio/ogg", "audio/opus":
 		return ".ogg"
 	case "audio/wav", "audio/x-wav":
 		return ".wav"
@@ -358,6 +358,12 @@ func thumbOf(path string, w, h, radius int32, cover bool) uintptr {
 		return 0
 	}
 	defer pGdipDisposeImage.Call(src)
+	return thumbFrom(src, w, h, radius, cover, 7)
+}
+
+// thumbFrom does the same from a picture already open, as it is at this moment: the frame
+// a moving picture is at. quality is the way of scaling: 7 the finest, 6 a little faster.
+func thumbFrom(src uintptr, w, h, radius int32, cover bool, quality uintptr) uintptr {
 	var sw, sh uint32
 	pGdipGetImageWidth.Call(src, uintptr(unsafe.Pointer(&sw)))
 	pGdipGetImageHeight.Call(src, uintptr(unsafe.Pointer(&sh)))
@@ -368,7 +374,7 @@ func thumbOf(path string, w, h, radius int32, cover bool) uintptr {
 	if scaled == 0 {
 		return 0
 	}
-	pGdipSetInterpolationMode.Call(uintptr(g1), 7)
+	pGdipSetInterpolationMode.Call(uintptr(g1), quality)
 	sx, sy, cw, ch := int32(0), int32(0), int32(sw), int32(sh)
 	if cover {
 		if cw*h > ch*w { // wider than the box: cut the sides

@@ -85,7 +85,7 @@ func waveWorker() {
 	pCoInitializeEx.Call(0, 0)
 	pMFStartup.Call(mfVersion, 0)
 	for job := range waveQueue {
-		waves.Store(job[0], measureWave(job[1]))
+		waves.Store(job[0], measureWave(playableSound(job[1])))
 		waveBusy.Delete(job[0])
 		be.requestRefresh() // drawn where the recording is on the screen
 	}
