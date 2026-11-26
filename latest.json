@@ -1,8 +1,8 @@
 {
-  "version": "0.9.5",
+  "version": "0.9.6",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29850624,
-  "sha256": "89e793669dccdf89468aca110c0a5c16a6837fb6aa108495437b9c6c005929d1",
-  "signature": "UIhLUJWMiP4e702hi3CnLCKq8OVOyFpQrnmBAz4hh0IZVOM4rvFezo69RM1zRbd77sEtmUjqXzm0zGpC0THjDA==",
-  "notes": "Naprawa: zwykły tekst nie jest już pokazywany ogromną czcionką, duże są tylko same emotki. Emotka rozmowy jest teraz poprawnie odczytywana z Messengera. Wybór innej emotki ma własne okienko zamiast systemowego menu."
+  "size": 29851648,
+  "sha256": "f181a3af2379bc5e7ca064580b45ff5844d913ebc4438fb66a9f281d1372750b",
+  "signature": "sVBmPM2ZDnn2TYni8/XCfsockk+XIPXAvjyGTT1Ag7VZrGxI+gcC3hD4yY2AopQb4uV+c7B3q1dlmRYERd3NBA==",
+  "notes": "Emotka na przycisku zmienia się od razu po przełączeniu rozmowy. Okienko wyboru emotki ma jaśniejszy opis."
 }
