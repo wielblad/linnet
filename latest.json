@@ -1,8 +1,8 @@
 {
-  "version": "0.9.7",
+  "version": "0.9.8",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
   "size": 29872640,
-  "sha256": "8ff572b3c1f1108b883d8d0660846113aaf4d558fec0ed25f17327ecd328f7f3",
-  "signature": "0puQONuwp3ZVsvNtIpWFuDG1TsoCgeMNf/c16J17tpPEPgMqOwHtEVy1vSDPw8Hy/X01MecIqOep5AGjyajsBw==",
-  "notes": "Nagrania głosowe odtwarzają się w rozmowie: okrągły przycisk odtwarzania i pauzy, fala dźwięku z suwakiem, czas. Odpowiedź na nagranie pokazuje cytat."
+  "sha256": "1aebdf32c281e2ee905070e083e1760ded5303e0bfd905842d8c086d21d3112b",
+  "signature": "/0v4y4gxD5ANhAf52S/Y7JRv4oWzUPoA/2B3zfSt1Fdymjd1pn4xcDsY3ap0Htsh5qT6PGi/bqJ9+a+JFVwZAw==",
+  "notes": "Nagrania głosowe i pliki w czatach nieszyfrowanych (m.in. w grupach) nie giną już — wcześniej taka wiadomość przychodziła pusta."
 }
