@@ -1,4 +1,4 @@
-# The window of GIFs: opens a conversation from a head, presses the GIF button of its pane
+# The window of GIFs and stickers: opens a conversation from a head, presses the GIF button of its pane
 # the way the mouse does and takes a picture of the window. Needs MLITE_GIFS set to a file
 # with a search answer, since there is no connection to ask.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File tools\gif_test.ps1 -Exe build\linnet.exe -DataDir .local\data-ui-test -OutDir .local\shots [-Mode cols|dock|one|tabs] [-Theme light|dark] [-Back FFFFFF]
@@ -83,7 +83,12 @@ try {
   [ET]::PostMessage($pane, 0x0202, [IntPtr]::Zero, $at) | Out-Null
   Start-Sleep -Milliseconds 1800; Shot "gif-1-okno"
   $g = (All "MliteGif")[0]
-  if ($g) { [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00B40064) | Out-Null; Start-Sleep -Milliseconds 400; Shot "gif-2-wskazany" }
+  if ($g) {
+    [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00DC0064) | Out-Null; Start-Sleep -Milliseconds 400; Shot "gif-2-wskazany"
+    [ET]::PostMessage($g, 0x0202, [IntPtr]::Zero, [IntPtr]0x0018010E) | Out-Null   # the tab of stickers
+    Start-Sleep -Milliseconds 1200
+    [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00A000C8) | Out-Null; Start-Sleep -Milliseconds 400; Shot "gif-3-naklejki"
+  }
   $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
 } finally {
   if ($sheet) { $sheet.Close(); $sheet.Dispose() }

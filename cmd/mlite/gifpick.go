@@ -2,10 +2,12 @@
 
 package main
 
-// The window of GIFs: opened from the button beside the microphone, it shows the GIFs in
-// fashion and, as words are typed, the ones found for them. A click sends the GIF to the
-// conversation. The search is Messenger's own, asked through the connection; the small
-// still pictures in the window come straight from the service the GIFs live on.
+// The window of GIFs and stickers: opened from the button beside the microphone. Its first
+// leaf shows the GIFs in fashion and, as words are typed, the ones found for them; its
+// second the packs of stickers the account has in Messenger and what is in the chosen one.
+// A click sends the GIF or the sticker to the conversation. Both are asked of Messenger
+// through the connection; the small pictures in the window come straight from where they
+// are kept.
 
 import (
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,17 +26,20 @@ import (
 )
 
 const (
-	wmAppGif     = wmApp + 20 // an answer to a search has come; wp is the search it answers
+	wmAppGif     = wmApp + 20 // an answer has come; wp is the question it answers
 	wmAppGifPic  = wmApp + 21 // a small picture has come
 	timerGifType = 33         // the words have stopped changing: search for them
 	idGif        = 334
 	idGifEdit    = 335
-	gifCols      = 2
+
+	tabGifs     = 0
+	tabStickers = 1
 )
 
 var (
 	hGif    uintptr
 	gifFake = os.Getenv("MLITE_GIFS") // a file with a search answer, for looking at the window without a connection
+	gifTab  = tabGifs                 // the leaf the window was last left on
 
 	gp struct {
 		hwnd, edit uintptr
@@ -41,28 +47,38 @@ var (
 		thread     store.Thread
 		bank       *viewBank
 		w, h       int32
-		items      []meta.GIF
+		gifs       []meta.GIF
+		stickers   []meta.Sticker
+		packs      []meta.StickerPack
+		pack       int
 		cells      []rect // where each one is drawn, before scrolling
 		total      int32
 		scroll     int32
-		hot        int
+		hot        int // the GIF or sticker under the pointer
+		hotTop     int // the tab (0, 1) or the pack (10 and on) under the pointer; -1 for none
 		seq        int
 		status     string
-		pics       map[string]uintptr // scaled pictures by GIF
+		pics       map[string]uintptr // scaled pictures by what they are of
 		asked      map[string]bool
 		mu         sync.Mutex
-		answers    map[int]gifAnswer
+		answers    map[int]pickAnswer
 		sem        chan struct{}
 	}
 )
 
-type gifAnswer struct {
-	items []meta.GIF
-	err   error
+type pickAnswer struct {
+	kind     string // gifs, packs or stickers
+	gifs     []meta.GIF
+	packs    []meta.StickerPack
+	stickers []meta.Sticker
+	err      error
 }
 
-func gifPad() int32 { return dp(10) }
-func gifTop() int32 { return dp(12) + dp(36) + dp(10) }
+func gifPad() int32   { return dp(10) }
+func gifTabs() rect   { return rect{gifPad(), dp(8), gp.w - gifPad(), dp(8) + dp(32)} }
+func gifBand() rect   { return rect{gifPad(), dp(48), gp.w - gifPad(), dp(48) + dp(36)} }
+func gifTop() int32   { return dp(48) + dp(36) + dp(10) }
+func packSide() int32 { return dp(36) }
 
 // gifOpen opens the window above a point of the screen: the upper left corner of its button.
 func gifOpen(x, y int32) {
@@ -71,15 +87,16 @@ func gifOpen(x, y int32) {
 		return
 	}
 	if be.current() == nil && gifFake == "" {
-		viewToast("Brak połączenia. GIF-y są wyszukiwane przez Messengera.")
+		viewToast("Brak połączenia. GIF-y i naklejki są pobierane z Messengera.")
 		return
 	}
 	gifClose()
 	epickClose()
 	gp.thread, gp.bank = t, curBank
-	gp.w, gp.h = dp(360), dp(460)
-	gp.items, gp.cells, gp.scroll, gp.total, gp.hot = nil, nil, 0, 0, -1
-	gp.pics, gp.asked, gp.answers = map[string]uintptr{}, map[string]bool{}, map[int]gifAnswer{}
+	gp.w, gp.h = dp(360), dp(480)
+	gp.gifs, gp.stickers, gp.packs, gp.pack = nil, nil, nil, 0
+	gp.cells, gp.scroll, gp.total, gp.hot, gp.hotTop = nil, 0, 0, -1, -1
+	gp.pics, gp.asked, gp.answers = map[string]uintptr{}, map[string]bool{}, map[int]pickAnswer{}
 	if gp.sem == nil {
 		gp.sem = make(chan struct{}, 4)
 	}
@@ -94,24 +111,41 @@ func gifOpen(x, y int32) {
 	if py < work.top+dp(8) {
 		py = work.top + dp(8)
 	}
-	gp.hwnd = createWindow(wsExTopmost|wsExToolWindow, "MliteGif", "GIF-y", wsPopup|wsClipChildren, 0, 0)
+	gp.hwnd = createWindow(wsExTopmost|wsExToolWindow, "MliteGif", "GIF-y i naklejki", wsPopup|wsClipChildren, 0, 0)
 	if gp.hwnd == 0 {
 		return
 	}
 	r := dp(12)
 	rgn, _, _ := pCreateRoundRectRgn.Call(0, 0, uintptr(gp.w+1), uintptr(gp.h+1), uintptr(2*r), uintptr(2*r))
 	pSetWindowRgn.Call(gp.hwnd, rgn, 0)
-	gp.edit = createWindow(0, "EDIT", "", wsChild|wsVisible|wsTabStop|esAutoHScroll, gp.hwnd, idGifEdit)
+	gp.edit = createWindow(0, "EDIT", "", wsChild|wsTabStop|esAutoHScroll, gp.hwnd, idGifEdit)
 	sendMsg(gp.edit, wmSetFont, fnt.body, 1)
 	sendMsg(gp.edit, emSetCueBanner, 1, uintptr(unsafe.Pointer(u16("Szukaj GIF-ów"))))
 	gp.oldEdit = subclass(gp.edit, gifEditProc)
-	eh := lay.editH
-	moveTo(gp.edit, rect{gifPad() + dp(12), dp(12) + (dp(36)-eh)/2, gp.w - gifPad() - dp(12), dp(12) + (dp(36)-eh)/2 + eh})
+	eh, band := lay.editH, gifBand()
+	moveTo(gp.edit, rect{band.left + dp(12), band.top + (dp(36)-eh)/2, band.right - dp(12), band.top + (dp(36)-eh)/2 + eh})
 	pSetWindowPos.Call(gp.hwnd, 0, uintptr(px), uintptr(py), uintptr(gp.w), uintptr(gp.h), 0x0004)
 	pShowWindow.Call(gp.hwnd, swShow)
 	pSetForegroundWindow.Call(gp.hwnd)
-	pSetFocus.Call(gp.edit)
-	gifSearch("")
+	gifShowTab(gifTab)
+}
+
+// gifShowTab turns the window to one of its leaves and asks for what belongs on it.
+func gifShowTab(tab int) {
+	gifTab = tab
+	gp.cells, gp.scroll, gp.total, gp.hot = nil, 0, 0, -1
+	show(gp.edit, tab == tabGifs)
+	if tab == tabGifs {
+		pSetFocus.Call(gp.edit)
+		pickAsk("gifs", getText(gp.edit))
+		return
+	}
+	pSetFocus.Call(gp.hwnd)
+	if len(gp.packs) == 0 {
+		pickAsk("packs", "")
+		return
+	}
+	pickAsk("stickers", gp.packs[gp.pack].ID)
 }
 
 func gifClose() {
@@ -140,25 +174,39 @@ func gifEditProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	return r
 }
 
-// gifSearch asks for the GIFs of some words, away from the window.
-func gifSearch(words string) {
+// pickAsk asks Messenger for GIFs, for the packs of stickers or for the stickers of a
+// pack, away from the window.
+func pickAsk(kind, arg string) {
 	gp.seq++
 	seq, win := gp.seq, gp.hwnd
-	gp.status = "Szukam…"
+	gp.status = "Wczytuję…"
 	invalidate(gp.hwnd)
 	client := be.current()
 	go func() {
-		var a gifAnswer
-		if gifFake != "" { // for looking at the window only: an answer kept in a file
-			if body, err := os.ReadFile(gifFake); err == nil {
-				a.items, a.err = meta.ParseGIFs(body)
-			} else {
-				a.err = err
+		a := pickAnswer{kind: kind}
+		switch {
+		case gifFake != "": // for looking at the window only: answers kept in files
+			name := map[string]string{"gifs": filepath.Base(gifFake), "packs": "packs.json", "stickers": "pack.json"}[kind]
+			body, err := os.ReadFile(filepath.Join(filepath.Dir(gifFake), name))
+			a.err = err
+			if err == nil {
+				switch kind {
+				case "gifs":
+					a.gifs, a.err = meta.ParseGIFs(body)
+				case "packs":
+					a.packs, a.err = meta.ParseStickerPacks(body)
+				default:
+					a.stickers, a.err = meta.ParseStickers(body)
+				}
 			}
-		} else if client == nil {
+		case client == nil:
 			a.err = fmt.Errorf("no connection")
-		} else {
-			a.items, a.err = client.SearchGIFs(be.ctx, words)
+		case kind == "gifs":
+			a.gifs, a.err = client.SearchGIFs(be.ctx, arg)
+		case kind == "packs":
+			a.packs, a.err = client.StickerPacks(be.ctx)
+		default:
+			a.stickers, a.err = client.Stickers(be.ctx, arg)
 		}
 		gp.mu.Lock()
 		gp.answers[seq] = a
@@ -167,8 +215,8 @@ func gifSearch(words string) {
 	}()
 }
 
-// gifArrived takes in the answer to a search, unless a later one has been asked since.
-func gifArrived(seq int) {
+// pickArrived takes in an answer, unless something else has been asked since.
+func pickArrived(seq int) {
 	gp.mu.Lock()
 	a, ok := gp.answers[seq]
 	delete(gp.answers, seq)
@@ -176,33 +224,62 @@ func gifArrived(seq int) {
 	if !ok || seq != gp.seq {
 		return
 	}
-	gp.items, gp.scroll, gp.hot = a.items, 0, -1
-	switch {
-	case a.err != nil:
-		gp.status = "Nie udało się wyszukać GIF-ów."
+	gp.status = ""
+	if a.err != nil {
+		gp.status = "Nie udało się wczytać. Spróbuj ponownie."
 		if typingDebug {
 			viewToast(a.err.Error())
 		}
-	case len(a.items) == 0:
-		gp.status = "Nic nie znaleziono."
-	default:
-		gp.status = ""
+		invalidate(gp.hwnd)
+		return
 	}
+	switch a.kind {
+	case "gifs":
+		gp.gifs = a.gifs
+		if len(a.gifs) == 0 {
+			gp.status = "Nic nie znaleziono."
+		}
+	case "packs":
+		gp.packs, gp.pack = a.packs, 0
+		if len(a.packs) == 0 {
+			gp.status = "Nie masz jeszcze paczek naklejek w Messengerze."
+			break
+		}
+		pickAsk("stickers", a.packs[0].ID) // the first pack at once
+		return
+	default:
+		gp.stickers = a.stickers
+		if len(a.stickers) == 0 {
+			gp.status = "Ta paczka jest pusta."
+		}
+	}
+	gp.scroll, gp.hot = 0, -1
 	gifLay()
 	invalidate(gp.hwnd)
 }
 
-// gifLay places the GIFs in columns, each under the shortest so far.
+// gifLay places what the leaf shows: GIFs in two columns, each under the shorter so far;
+// stickers four in a row.
 func gifLay() {
-	cw := (gp.w - gifPad()*(gifCols+1)) / gifCols
-	var colY [gifCols]int32
-	gp.cells = gp.cells[:0]
-	for _, g := range gp.items {
+	gp.cells, gp.total = gp.cells[:0], 0
+	if gifTab == tabStickers {
+		const cols = 4
+		cw := (gp.w - gifPad()*(cols+1)) / cols
+		for i := range gp.stickers {
+			x := gifPad() + int32(i%cols)*(cw+gifPad())
+			y := int32(i/cols) * (cw + gifPad())
+			gp.cells = append(gp.cells, rect{x, y, x + cw, y + cw})
+			gp.total = y + cw + gifPad()
+		}
+		return
+	}
+	const cols = 2
+	cw := (gp.w - gifPad()*(cols+1)) / cols
+	var colY [cols]int32
+	for _, g := range gp.gifs {
 		col := 0
-		for c := 1; c < gifCols; c++ {
-			if colY[c] < colY[col] {
-				col = c
-			}
+		if colY[1] < colY[0] {
+			col = 1
 		}
 		h := cw * int32(g.Height) / int32(g.Width)
 		if h > cw*2 {
@@ -212,12 +289,7 @@ func gifLay() {
 		gp.cells = append(gp.cells, rect{x, colY[col], x + cw, colY[col] + h})
 		colY[col] += h + gifPad()
 	}
-	gp.total = 0
-	for _, y := range colY {
-		if y > gp.total {
-			gp.total = y
-		}
-	}
+	gp.total = max(colY[0], colY[1])
 }
 
 // gifStillURL is the address of a small still picture of a GIF, where its service has one.
@@ -230,26 +302,28 @@ func gifStillURL(g meta.GIF) string {
 	return g.URL
 }
 
-func gifStillPath(g meta.GIF) string {
+// pickPath is where the small picture kept under a name lives on the disk.
+func pickPath(kind, name string) string {
 	h := fnv.New64a()
-	h.Write([]byte(g.URL))
-	return filepath.Join(dataDir, "media", fmt.Sprintf("gifp-%016x.gif", h.Sum64()))
+	h.Write([]byte(name))
+	return filepath.Join(dataDir, "media", fmt.Sprintf("%s-%016x.img", kind, h.Sum64()))
 }
 
-// gifPicture gives the scaled picture of a GIF, asking for its file when it is not here.
-func gifPicture(g meta.GIF, w, h int32) uintptr {
-	if img, ok := gp.pics[g.ID]; ok {
+// pickPicture gives the scaled picture kept under a key, asking for its file when it is
+// not here yet. cover cuts the picture to the box; without it the picture is fitted whole.
+func pickPicture(key, path, from string, w, h, radius int32, cover bool) uintptr {
+	if img, ok := gp.pics[key]; ok {
 		return img
 	}
-	path := gifStillPath(g)
 	if _, err := os.Stat(path); err == nil {
-		img := thumbOf(path, w, h, dp(8), true)
-		gp.pics[g.ID] = img
+		shown, _, _ := drawable(path) // a WebP picture becomes a PNG copy the window can draw
+		img := thumbOf(shown, w, h, radius, cover)
+		gp.pics[key] = img
 		return img
 	}
-	if !gp.asked[g.ID] {
-		gp.asked[g.ID] = true
-		win, from := gp.hwnd, gifStillURL(g)
+	if !gp.asked[key] && from != "" {
+		gp.asked[key] = true
+		win := gp.hwnd
 		go func() {
 			gp.sem <- struct{}{}
 			err := fetchTo(from, path, 8<<20)
@@ -263,13 +337,51 @@ func gifPicture(g meta.GIF, w, h int32) uintptr {
 }
 
 func gifAt(x, y int32) int {
-	y += gp.scroll - gifTop()
-	if y < 0 {
+	if y < gifTop() {
 		return -1
 	}
+	y += gp.scroll - gifTop()
 	for i, c := range gp.cells {
 		if x >= c.left && x < c.right && y >= c.top && y < c.bottom {
 			return i
+		}
+	}
+	return -1
+}
+
+// tabRect is one of the two tabs; packRect one of the packs of the sticker leaf.
+func tabRect(i int) rect {
+	t := gifTabs()
+	half := (t.right - t.left) / 2
+	return rect{t.left + int32(i)*half, t.top, t.left + int32(i+1)*half, t.bottom}
+}
+
+func packRect(i int) rect {
+	b := gifBand()
+	x := b.left + int32(i)*(packSide()+dp(6))
+	return rect{x, b.top, x + packSide(), b.top + packSide()}
+}
+
+// packsShown is how many packs fit in the row.
+func packsShown() int {
+	b := gifBand()
+	n := int((b.right - b.left + dp(6)) / (packSide() + dp(6)))
+	return min(n, len(gp.packs))
+}
+
+// gifTopAt tells what of the upper part is at a point: a tab (0, 1), a pack (10 and on), -1.
+func gifTopAt(x, y int32) int {
+	in := func(r rect) bool { return x >= r.left && x < r.right && y >= r.top && y < r.bottom }
+	for i := 0; i < 2; i++ {
+		if in(tabRect(i)) {
+			return i
+		}
+	}
+	if gifTab == tabStickers {
+		for i := 0; i < packsShown(); i++ {
+			if in(packRect(i)) {
+				return 10 + i
+			}
 		}
 	}
 	return -1
@@ -306,6 +418,11 @@ func gifProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			gifClose()
 		}
 		return 0
+	case wmKeyDown:
+		if wp == vkEscape {
+			gifClose()
+		}
+		return 0
 	case wmCtlColorEdit:
 		pSetTextColor.Call(wp, cref(pal.fg))
 		pSetBkColor.Call(wp, cref(pal.card))
@@ -318,11 +435,13 @@ func gifProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmTimer:
 		if wp == timerGifType {
 			pKillTimer.Call(hwnd, timerGifType)
-			gifSearch(getText(gp.edit))
+			if gifTab == tabGifs {
+				pickAsk("gifs", getText(gp.edit))
+			}
 		}
 		return 0
 	case wmAppGif:
-		gifArrived(int(wp))
+		pickArrived(int(wp))
 		return 0
 	case wmAppGifPic:
 		invalidate(hwnd)
@@ -334,18 +453,41 @@ func gifProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmMouseMove:
 		x, y := lpPoint(lp)
-		if hot := gifAt(x, y); hot != gp.hot {
-			gp.hot = hot
+		if hot, top := gifAt(x, y), gifTopAt(x, y); hot != gp.hot || top != gp.hotTop {
+			gp.hot, gp.hotTop = hot, top
 			invalidate(hwnd)
 		}
 		return 0
 	case wmLButtonUp:
 		x, y := lpPoint(lp)
-		if i := gifAt(x, y); i >= 0 && i < len(gp.items) {
-			g, t := gp.items[i], gp.thread
+		switch top := gifTopAt(x, y); {
+		case top == tabGifs || top == tabStickers:
+			if top != gifTab {
+				gifShowTab(top)
+			}
+			return 0
+		case top >= 10 && top-10 < len(gp.packs):
+			if gp.pack != top-10 {
+				gp.pack = top - 10
+				gp.stickers, gp.cells, gp.scroll, gp.hot = nil, nil, 0, -1
+				pickAsk("stickers", gp.packs[gp.pack].ID)
+			}
+			return 0
+		}
+		i, t := gifAt(x, y), gp.thread
+		switch {
+		case i < 0:
+		case gifTab == tabGifs && i < len(gp.gifs):
+			g := gp.gifs[i]
 			gifClose()
 			if be.sendGIF(t, g) {
 				viewToast("Wysyłam GIF-a…")
+			}
+		case gifTab == tabStickers && i < len(gp.stickers):
+			st := gp.stickers[i]
+			gifClose()
+			if be.sendSticker(t, st) {
+				viewToast("Wysyłam naklejkę…")
 			}
 		}
 		return 0
@@ -362,34 +504,84 @@ func gifPaint(hdc uintptr) {
 	r := dp(12)
 	g.round(1, 1, gp.w-2, gp.h-2, r-1, r-1, r-1, r-1, pal.layer)
 	top := gifTop()
-	// the GIFs first, so that the bar with the field covers what scrolls under it
+	// what scrolls first, so that the upper part covers what goes under it
 	for i, cell := range gp.cells {
 		y := cell.top + top - gp.scroll
-		if y > gp.h || y+(cell.bottom-cell.top) < top {
+		w, h := cell.right-cell.left, cell.bottom-cell.top
+		if y > gp.h || y+h < top {
 			continue
 		}
-		w, h := cell.right-cell.left, cell.bottom-cell.top
-		if img := gifPicture(gp.items[i], w, h); img != 0 {
+		var img uintptr
+		if gifTab == tabGifs && i < len(gp.gifs) {
+			gif := gp.gifs[i]
+			img = pickPicture("g"+gif.ID, pickPath("gifp", gif.URL), gifStillURL(gif), w, h, dp(8), true)
+		} else if gifTab == tabStickers && i < len(gp.stickers) {
+			st := gp.stickers[i]
+			id := strconv.FormatInt(st.ID, 10)
+			if i == gp.hot {
+				g.round(cell.left-dp(4), y-dp(4), w+dp(8), h+dp(8), dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.layer, 9))
+			}
+			img = pickPicture("s"+id, pickPath("stk", id), st.Image, w, h, 1, false)
+		}
+		switch {
+		case img != 0:
 			g.image(img, cell.left, y, w, h)
-		} else {
+		case gifTab == tabGifs:
 			g.round(cell.left, y, w, h, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.layer, 7))
 		}
-		if i == gp.hot { // a ring in the accent around the one under the pointer
-			g.round(cell.left-dp(3), y-dp(3), w+dp(6), dp(3), dp(1), dp(1), dp(1), dp(1), pal.accent)
-			g.round(cell.left-dp(3), y+h, w+dp(6), dp(3), dp(1), dp(1), dp(1), dp(1), pal.accent)
-			g.round(cell.left-dp(3), y-dp(3), dp(3), h+dp(6), dp(1), dp(1), dp(1), dp(1), pal.accent)
-			g.round(cell.left+w, y-dp(3), dp(3), h+dp(6), dp(1), dp(1), dp(1), dp(1), pal.accent)
+		if gifTab == tabGifs && i == gp.hot { // a ring in the accent around the one under the pointer
+			t := dp(3)
+			g.round(cell.left-t, y-t, w+2*t, t, 1, 1, 1, 1, pal.accent)
+			g.round(cell.left-t, y+h, w+2*t, t, 1, 1, 1, 1, pal.accent)
+			g.round(cell.left-t, y-t, t, h+2*t, 1, 1, 1, 1, pal.accent)
+			g.round(cell.left+w, y-t, t, h+2*t, 1, 1, 1, 1, pal.accent)
 		}
 	}
 	g.round(1, 1, gp.w-2, top-dp(2), r-1, r-1, 1, 1, pal.card)
-	f := rect{gifPad(), dp(12), gp.w - gifPad(), dp(12) + dp(36)}
-	g.round(f.left, f.top, f.right-f.left, f.bottom-f.top, dp(8), dp(8), dp(8), dp(8), pal.accent)
-	g.round(f.left+2, f.top+2, f.right-f.left-4, f.bottom-f.top-4, dp(6), dp(6), dp(6), dp(6), pal.card)
+	// the two tabs: the chosen one filled
+	tabs := gifTabs()
+	g.round(tabs.left, tabs.top, tabs.right-tabs.left, tabs.bottom-tabs.top, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.card, 7))
+	for i := 0; i < 2; i++ {
+		t := tabRect(i)
+		switch {
+		case i == gifTab:
+			g.round(t.left+dp(2), t.top+dp(2), t.right-t.left-dp(4), t.bottom-t.top-dp(4), dp(6), dp(6), dp(6), dp(6), pal.accent)
+		case i == gp.hotTop:
+			g.round(t.left+dp(2), t.top+dp(2), t.right-t.left-dp(4), t.bottom-t.top-dp(4), dp(6), dp(6), dp(6), dp(6), mix(pal.fg, pal.card, 14))
+		}
+	}
+	band := gifBand()
+	if gifTab == tabGifs { // the frame of the field
+		g.round(band.left, band.top, band.right-band.left, band.bottom-band.top, dp(8), dp(8), dp(8), dp(8), pal.accent)
+		g.round(band.left+2, band.top+2, band.right-band.left-4, band.bottom-band.top-4, dp(6), dp(6), dp(6), dp(6), pal.card)
+	} else { // the packs
+		for i := 0; i < packsShown(); i++ {
+			p, pr := gp.packs[i], packRect(i)
+			switch {
+			case i == gp.pack:
+				g.round(pr.left-dp(2), pr.top-dp(2), packSide()+dp(4), packSide()+dp(4), dp(8), dp(8), dp(8), dp(8), pal.accent)
+				g.round(pr.left, pr.top, packSide(), packSide(), dp(6), dp(6), dp(6), dp(6), pal.card)
+			case gp.hotTop == 10+i:
+				g.round(pr.left-dp(2), pr.top-dp(2), packSide()+dp(4), packSide()+dp(4), dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.card, 12))
+			}
+			if img := pickPicture("p"+p.ID, pickPath("stkp", p.ID), p.Thumb, packSide()-dp(6), packSide()-dp(6), 1, false); img != 0 {
+				g.image(img, pr.left+dp(3), pr.top+dp(3), packSide()-dp(6), packSide()-dp(6))
+			}
+		}
+	}
 	g.free()
 	c.fill(rect{1, top - dp(2), gp.w - 1, top - dp(1)}, pal.line)
+	c.font(fnt.smallSemi)
+	for i, label := range []string{"GIF-y", "Naklejki"} {
+		ink := pal.fg
+		if i == gifTab {
+			ink = pal.onAccent
+		}
+		c.text(label, tabRect(i), ink, dtCenter|dtVCenter|dtSingleLine)
+	}
 	if gp.status != "" {
 		c.font(fnt.small)
-		c.text(gp.status, rect{0, top, gp.w, top + dp(60)}, pal.fg2, dtCenter|dtVCenter|dtSingleLine)
+		c.text(gp.status, rect{gifPad(), top, gp.w - gifPad(), top + dp(60)}, pal.fg2, dtCenter|dtVCenter|dtSingleLine|dtEndEllipsis)
 	}
 	buf.flush(0, 0)
 }
@@ -408,6 +600,47 @@ func (b *backend) sendGIF(thread store.Thread, g meta.GIF) bool {
 			return
 		}
 		b.sendFile(thread, path)
+	}()
+	return true
+}
+
+// sendSticker sends a sticker and notes it locally, so that the conversation shows it at
+// once. An encrypted chat is sent the picture itself, fetched first.
+func (b *backend) sendSticker(thread store.Thread, st meta.Sticker) bool {
+	client := b.current()
+	if client == nil {
+		b.notice("Brak połączenia. Naklejka nie została wysłana.")
+		return false
+	}
+	go func() {
+		path := filepath.Join(dataDir, "outbox", "naklejka-"+time.Now().Format("20060102-150405.000")+".png")
+		if err := fetchTo(st.Image, path, 4<<20); err != nil {
+			b.notice("Nie udało się pobrać naklejki.")
+			return
+		}
+		defer os.Remove(path)
+		result, err := client.SendSticker(b.ctx, thread, st, path)
+		if err != nil {
+			b.notice("Nie udało się wysłać naklejki: " + err.Error())
+			return
+		}
+		at := result.Timestamp
+		if at.IsZero() {
+			at = time.Now()
+		}
+		if result.MessageID != "" {
+			sent := store.Message{ID: result.MessageID, ThreadID: thread.ID, SenderID: client.AccountID(), Timestamp: at,
+				MediaKind: "image", MediaMime: "image/png", MediaName: "sticker", MediaURL: st.Image}
+			if data, err := os.ReadFile(path); err == nil {
+				dst := mediaPath(sent)
+				if os.MkdirAll(filepath.Dir(dst), 0o700) == nil {
+					_ = os.WriteFile(dst, data, 0o600)
+				}
+			}
+			_ = b.db.UpsertMessage(b.ctx, sent)
+			_ = b.db.SetLastRead(b.ctx, thread.ID, at)
+		}
+		b.requestRefresh()
 	}()
 	return true
 }
