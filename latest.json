@@ -1,8 +1,8 @@
 {
-  "version": "0.9.12",
+  "version": "0.9.13",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 30088704,
-  "sha256": "0d495b4a7fbcd12aa7b01d72ecf6a60bcb637c5c34e054891fcb18b88733079a",
-  "signature": "v5mvN9d13tccT2CKt4zvBika5c0vDRZDVwlU2Z7U1iuPLAkYXBfxHCpcQ1/B6Vlv/0z6jeSpjg2FibPKu+UWCA==",
-  "notes": "Okno GIF-ów i naklejek: przycisk GIF obok mikrofonu otwiera wyszukiwarkę GIF-ów Messengera oraz Twoje paczki naklejek. Kliknięcie wysyła GIF-a albo naklejkę."
+  "size": 30096384,
+  "sha256": "3d3a08ab7d5a914fe1843d3f5f4c5f61109b0edcf66fca8b07eacc086735a913",
+  "signature": "snVf+Yr1atAT4bCnMK3oQjeDazii0+cuf+hBatkyAtLB/mcRcOxIVpqs3cLvOMrutV/px414NMrAmrSEb7MHAQ==",
+  "notes": "Naprawa: przyciski mikrofonu i GIF w dużym oknie robią to, co powinny (otwierały Szukaj i Informacje). GIF pod wskaźnikiem się rusza. Informacje pokazują starsze zdjęcia, pliki i linki po stronie."
 }
