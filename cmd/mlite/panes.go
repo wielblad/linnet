@@ -357,7 +357,7 @@ func panesRefresh() {
 		if !ok {
 			continue
 		}
-		if threadTitle(t) != threadTitle(p.thread) {
+		if threadTitle(t) != threadTitle(p.thread) || t.Emoji != p.thread.Emoji {
 			invalidate(p.hwnd)
 		}
 		p.thread = t

@@ -1907,6 +1907,7 @@ func selectThread(t store.Thread, focusInput bool) {
 	loadView(true)
 	invalidate(hList)
 	invalidate(hMain)
+	invalidate(hSend) // each conversation has its own emoji on the button
 	if focusInput {
 		pSetFocus.Call(hInput)
 	}
@@ -1990,6 +1991,7 @@ func refresh() {
 		return
 	}
 	threads = ts
+	invalidate(hSend) // the emoji of the conversation may be another now
 	if nicks, err := be.db.TitleNicknames(be.ctx); err == nil {
 		titleNick = nicks
 	}
