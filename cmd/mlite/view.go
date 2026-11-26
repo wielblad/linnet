@@ -946,6 +946,7 @@ func paintView(target uintptr) {
 		c.font(fnt.small)
 		c.text(mv.toast, toast, pal.layer, dtCenter|dtVCenter|dtSingleLine)
 	}
+	paintHotPreview(c)
 	buf.flush(0, 0)
 }
 

@@ -33,7 +33,7 @@ func (c *Client) SendText(ctx context.Context, thread store.Thread, text string,
 		return SendResult{}, fmt.Errorf("message is empty")
 	}
 	if table.ThreadType(thread.ThreadType).IsWhatsApp() {
-		return c.sendE2EEText(ctx, thread, text, replyTo)
+		return c.sendE2EEText(ctx, thread, text, replyTo, 0)
 	}
 	return c.sendLightspeedText(ctx, thread.ID, text, replyTo)
 }
@@ -54,13 +54,6 @@ func thumbSize(sticker int64) int64 {
 	return 0
 }
 
-// HotSizes reports whether an emoji sent with the button can be given a size in this
-// conversation. Encrypted chats carry it as plain text: their messages have no place for
-// a size.
-func HotSizes(thread store.Thread) bool {
-	return !table.ThreadType(thread.ThreadType).IsWhatsApp()
-}
-
 // SendEmoji sends the emoji of the conversation's button in one of three sizes, 1 to 3.
 func (c *Client) SendEmoji(ctx context.Context, thread store.Thread, emoji string, size int64) (SendResult, error) {
 	if err := c.waitReady(ctx); err != nil {
@@ -70,8 +63,8 @@ func (c *Client) SendEmoji(ctx context.Context, thread store.Thread, emoji strin
 		emoji = ThumbEmoji
 	}
 	size = min(max(size, 1), 3)
-	if !HotSizes(thread) {
-		return c.sendE2EEText(ctx, thread, emoji, store.Message{})
+	if table.ThreadType(thread.ThreadType).IsWhatsApp() {
+		return c.sendE2EEText(ctx, thread, emoji, store.Message{}, size)
 	}
 	if emoji == ThumbEmoji {
 		return c.sendLightspeed(ctx, &socket.SendMessageTask{
@@ -133,7 +126,9 @@ func (c *Client) sendLightspeed(ctx context.Context, task *socket.SendMessageTas
 	return SendResult{MessageID: msgID, Timestamp: ts}, nil
 }
 
-func (c *Client) sendE2EEText(ctx context.Context, thread store.Thread, text string, replyTo store.Message) (SendResult, error) {
+// sendE2EEText sends words to an encrypted chat. size, 1 to 3, marks them as an emoji
+// sent large with the conversation's button; 0 is an ordinary message.
+func (c *Client) sendE2EEText(ctx context.Context, thread store.Thread, text string, replyTo store.Message, size int64) (SendResult, error) {
 	if c.e2ee == nil {
 		return SendResult{}, fmt.Errorf("e2ee client is not connected")
 	}
@@ -145,6 +140,11 @@ func (c *Client) sendE2EEText(ctx context.Context, thread store.Thread, text str
 			MessageText: &waCommon.MessageText{Text: proto.String(text)},
 		},
 	})
+	if size > 0 {
+		payload.Metadata = &waConsumerApplication.ConsumerApplication_Metadata{
+			SpecialTextSize: waConsumerApplication.ConsumerApplication_Metadata_SpecialTextSize(size).Enum(),
+		}
+	}
 	var metadata *waMsgApplication.MessageApplication_Metadata
 	if replyTo.ID != "" {
 		participant := types.JID{User: strconv.FormatInt(replyTo.SenderID, 10), Server: types.MessengerServer}

@@ -719,7 +719,7 @@ func panePaint(p *pane, target uintptr) {
 			ink = pal.fg2
 		}
 		if emojiMode() {
-			drawHotButton(c, p.sendR, p.hwnd, p.thread)
+			drawHotButton(c, p.sendR, p.hwnd, t)
 		} else {
 			c.font(fnt.icon)
 			c.text(gSend, p.sendR, ink, dtCenter|dtVCenter|dtSingleLine)
@@ -857,7 +857,7 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		x, y := lpPoint(lp)
 		if y < paneHeaderH() && paneHit(p, x, y) == pbtNone {
 			hdrDragStart(hwnd, p.id)
-		} else if paneHit(p, x, y) == pbtSend && emojiMode() && be.current() != nil {
+		} else if paneHit(p, x, y) == pbtSend && emojiMode() {
 			hotStart(hwnd, p.thread) // held, the emoji of the conversation grows
 			pSetCapture.Call(hwnd)
 		}
@@ -866,6 +866,13 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		hdrDragLost(hwnd)
 		if hot.on && hot.host == hwnd && lp != hwnd {
 			hotEnd()
+		}
+		return 0
+	case wmRButtonUp: // on the emoji of the conversation: the choice of another
+		if x, y := lpPoint(lp); paneHit(p, x, y) == pbtSend && emojiMode() {
+			var pt point
+			pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+			emojiMenu(pt.x, pt.y)
 		}
 		return 0
 	case wmSetCursor:

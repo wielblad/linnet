@@ -7,11 +7,13 @@ package main
 // the conversation chose. Held down, the emoji grows through three sizes, and it is sent
 // in the size it had when the button was let go.
 //
-// Encrypted chats have no place for a size in their messages: there the emoji goes as
-// plain text and the button does not grow.
+// While it is held, the growing emoji is shown large in the corner of the conversation,
+// where it will land. The other button of the mouse opens the choice of another emoji for
+// the conversation; that changes it for everyone in it, as in Messenger.
 
 import (
 	"time"
+	"unsafe"
 
 	"lazyfmess/internal/meta"
 	"lazyfmess/internal/store"
@@ -19,6 +21,7 @@ import (
 
 const (
 	timerHot  = 28 // the emoji grows while its button is held
+	mfGrayed  = 0x0001
 	hotMedium = 450 * time.Millisecond
 	hotLarge  = 1100 * time.Millisecond
 )
@@ -27,8 +30,8 @@ const (
 var hot struct {
 	on    bool
 	host  uintptr // the window that shows the button: a pane, or the send button itself
+	view  uintptr // the conversation above it, where the growing emoji is shown
 	since time.Time
-	grows bool
 	let   int64 // the size reached when the send button of the window was let go
 }
 
@@ -55,16 +58,14 @@ func emojiMode() bool {
 
 // hotStart is the button going down.
 func hotStart(host uintptr, t store.Thread) {
-	hot.on, hot.host, hot.since, hot.grows = true, host, time.Now(), meta.HotSizes(t)
-	if hot.grows {
-		pSetTimer.Call(hMain, timerHot, 40, 0)
-	}
+	hot.on, hot.host, hot.view, hot.since = true, host, mv.hwnd, time.Now()
+	pSetTimer.Call(hMain, timerHot, 30, 0)
 	invalidate(host)
 }
 
 // hotSize is the size the held emoji has reached: 1, 2 or 3.
 func hotSize() int64 {
-	if !hot.on || !hot.grows {
+	if !hot.on {
 		return 1
 	}
 	switch held := time.Since(hot.since); {
@@ -78,7 +79,7 @@ func hotSize() int64 {
 
 // hotGrowth is how far the held emoji has grown, 0 to 100, for drawing it between sizes.
 func hotGrowth(host uintptr) int32 {
-	if !hot.on || hot.host != host || !hot.grows {
+	if !hot.on || hot.host != host {
 		return 0
 	}
 	g := int32(time.Since(hot.since) * 100 / hotLarge)
@@ -91,11 +92,14 @@ func hotGrowth(host uintptr) int32 {
 // hotEnd is the button let go, or the hold given up: it gives the size reached.
 func hotEnd() int64 {
 	size := hotSize()
-	host := hot.host
-	hot.on, hot.host = false, 0
+	host, view := hot.host, hot.view
+	hot.on, hot.host, hot.view = false, 0, 0
 	pKillTimer.Call(hMain, timerHot)
 	if host != 0 {
 		invalidate(host)
+	}
+	if view != 0 {
+		invalidate(view)
 	}
 	return size
 }
@@ -107,12 +111,83 @@ func hotTick() {
 		return
 	}
 	invalidate(hot.host)
+	invalidate(hot.view)
+}
+
+// hotHost is the window that shows the emoji button of the view being used.
+func hotHost() uintptr {
+	if p := curBank.pane; p != nil {
+		return p.hwnd
+	}
+	return hSend
+}
+
+// paintHotPreview draws the held emoji in the lower corner of the conversation, growing
+// from the size of a small one to the size of the largest. A short click shows nothing.
+func paintHotPreview(c canvas) {
+	if !hot.on || hot.view != mv.hwnd || time.Since(hot.since) < 140*time.Millisecond {
+		return
+	}
+	t, ok := threadByID(hostThreadID())
+	if !ok {
+		return
+	}
+	px := dp(30) + (dp(64)-dp(30))*hotGrowth(hot.host)/100
+	px -= px % 2 // fewer fonts to make on the way
+	c.font(hotFont(px))
+	box := px + px/2
+	c.text(threadEmoji(t), rect{mv.w - dp(16) - box, mv.h - dp(10) - box, mv.w - dp(16), mv.h - dp(10)}, pal.fg, dtCenter|dtVCenter|dtSingleLine)
+}
+
+// emojiChoices are the emoji offered for a conversation; the first is the one everyone
+// starts with.
+var emojiChoices = []string{
+	meta.ThumbEmoji, "\u2764\uFE0F", "\U0001F602", "\U0001F62E", "\U0001F622", "\U0001F621",
+	"\U0001F525", "\U0001F4AA", "\U0001F389", "\U0001F44C", "\U0001F64F", "\U0001F60D",
+	"\U0001F60E", "\U0001F914", "\U0001F4AF", "\U0001F44B",
+}
+
+// emojiMenu offers another emoji for the conversation being used, at a point of the screen.
+func emojiMenu(x, y int32) {
+	t, ok := threadByID(hostThreadID())
+	if !ok {
+		return
+	}
+	menu, _, _ := pCreatePopupMenu.Call()
+	add := func(flags, id uintptr, label string) {
+		pAppendMenuW.Call(menu, flags, id, uintptr(unsafe.Pointer(u16(label))))
+	}
+	add(mfString|mfGrayed, 0, "Emotka tej rozmowy (zmienia się u wszystkich)")
+	add(mfSeparator, 0, "")
+	now := threadEmoji(t)
+	for i, e := range emojiChoices {
+		flags, label := uintptr(mfString), e
+		if e == now {
+			flags |= mfChecked
+		}
+		if i == 0 {
+			label += "   domyślna"
+		}
+		add(flags, uintptr(i+1), label)
+	}
+	host := hostWnd()
+	pSetForegroundWindow.Call(host)
+	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(x), uintptr(y), 0, host, 0)
+	pDestroyMenu.Call(menu)
+	if cmd == 0 || int(cmd) > len(emojiChoices) || emojiChoices[cmd-1] == now {
+		return
+	}
+	be.setEmoji(t, emojiChoices[cmd-1])
 }
 
 // sendHot sends the emoji of the conversation being used, in the given size.
 func sendHot(size int64) {
 	t, ok := threadByID(hostThreadID())
 	if !ok {
+		return
+	}
+	if be.current() == nil { // said in the conversation itself, wherever it is open
+		viewToast("Brak połączenia. Emotka nie została wysłana.")
 		return
 	}
 	if be.sendEmoji(t, size) {

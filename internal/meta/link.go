@@ -26,6 +26,7 @@ type linkPreview struct {
 // encryptedBody is what is stored from the content of an encrypted message.
 type encryptedBody struct {
 	Text string
+	Size int64 // 1 to 3 for an emoji sent large with the conversation's button
 	Att  encryptedAttachment
 	Link linkPreview
 }
@@ -43,7 +44,11 @@ func encryptedContent(message any, paths map[string]string) (encryptedBody, bool
 		if hasMedia {
 			text = att.Caption // the attachment itself is shown, not a placeholder word
 		}
-		return encryptedBody{Text: text, Att: att, Link: consumerLink(typed, paths)}, true
+		size := int64(0)
+		if !hasMedia {
+			size = min(max(int64(typed.GetMetadata().GetSpecialTextSize()), 0), 3)
+		}
+		return encryptedBody{Text: text, Size: size, Att: att, Link: consumerLink(typed, paths)}, true
 	case *waArmadilloApplication.Armadillo:
 		text, link, ok := sharedLink(typed, paths)
 		return encryptedBody{Text: text, Link: link}, ok

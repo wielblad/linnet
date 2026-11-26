@@ -1244,6 +1244,13 @@ func btnProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			if hot.on && hot.host == hSend {
 				hotEnd()
 			}
+		case wmRButtonUp: // another emoji for the conversation
+			if emojiMode() {
+				var pt point
+				pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+				emojiMenu(pt.x, pt.y)
+				return 0
+			}
 		}
 	}
 	r, _, _ := pCallWindowProcW.Call(oldBtnProc, hwnd, uintptr(msg), wp, lp)

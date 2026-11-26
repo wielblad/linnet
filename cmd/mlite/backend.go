@@ -523,10 +523,12 @@ func (b *backend) sendEmoji(thread store.Thread, size int64) bool {
 	if emoji == "" {
 		emoji = meta.ThumbEmoji
 	}
-	if !meta.HotSizes(thread) { // plain text there, and shown here as it will be seen
-		return b.send(thread, emoji, store.Message{})
-	}
 	return b.sendSized(thread, emoji, store.Message{}, size)
+}
+
+// setEmoji changes the emoji of the conversation's button, for everyone in it.
+func (b *backend) setEmoji(thread store.Thread, emoji string) bool {
+	return b.act("Nie udało się zmienić emotki rozmowy", func(c *meta.Client) error { return c.SetEmoji(b.ctx, b.db, thread, emoji) })
 }
 
 func (b *backend) sendSized(thread store.Thread, text string, replyTo store.Message, size int64) bool {

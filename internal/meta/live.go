@@ -93,6 +93,7 @@ func decodeLiveMessage(evt *events.FBMessage) (liveMessage, bool) {
 			ThreadID:        threadID,
 			SenderID:        senderID,
 			Text:            body.Text,
+			EmojiSize:       body.Size,
 			Timestamp:       evt.Info.Timestamp,
 			ReplyToID:       evt.FBApplication.GetMetadata().GetQuotedMessage().GetStanzaID(),
 			MediaKind:       att.Kind,
