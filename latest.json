@@ -1,8 +1,8 @@
 {
-  "version": "0.9.9",
+  "version": "0.9.10",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29945344,
-  "sha256": "3abba38a0372390ceb69f4191ff337d9468b433a72df954bdf361a52c369cf92",
-  "signature": "PlQIkSQqftGVFAEttyZt+8h+ayu4CMUIiDAxKYFlTVyVnw13gd9iHxlHJIbTOz6P+8yeCUq931ZJgKv0XlyDCA==",
-  "notes": "Film wysłany w rozmowie ma miniaturę ze znakiem odtwarzania i otwiera się w odtwarzaczu Linneta. Krótkie filmy pobierają się same, dłuższe po kliknięciu."
+  "size": 29982720,
+  "sha256": "cf6d02a6654dd723fb5b9111e2971a6a2885ba0bb13bb39f4b8095ad74fcf199",
+  "signature": "thuO6yMPlOB6hJz5aGviUm905WeITjCz2bdStqJZbb4XGz2XVJ4wGE8bK0BiAFUfvogYfAzjrDXa+uATxxRWDg==",
+  "notes": "Nagrania głosowe z Messengera (format Ogg Opus) odtwarzają się w Linnecie zamiast otwierać katalog. GIF z czatu szyfrowanego jest ruchomym obrazkiem, a nie nieotwieralnym wideo."
 }
