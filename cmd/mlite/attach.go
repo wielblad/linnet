@@ -150,6 +150,10 @@ func drawAttach(d *drawItem) {
 			ink = pal.signal
 		}
 	}
+	if d.ctlID == idGif { // written, not a sign: that is how the button is known everywhere
+		c.font(fnt.smallSemi)
+		glyph = "GIF"
+	}
 	c.text(glyph, rect{0, 0, w, h}, ink, dtCenter|dtVCenter|dtSingleLine)
 	if focusCue(d) {
 		fr := rect{3, 3, w - 3, h - 3}

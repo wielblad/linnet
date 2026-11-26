@@ -42,7 +42,7 @@ type pane struct {
 	closeR, minR      rect
 	sendR, fieldR     rect
 	attachR, barR     rect
-	micR              rect
+	micR, gifR        rect
 	appR, findR       rect  // the buttons to the ordinary window of the program, and to the search
 	side              int32 // where its row stands: 1 to the right of the heads, -1 to the left
 	last              bool  // the one furthest from the heads: its outer edge changes the size
@@ -57,6 +57,7 @@ const (
 	pbtMin
 	pbtAttach
 	pbtMic
+	pbtGif
 	pbtSend
 	pbtBarClose
 	pbtApp
@@ -601,8 +602,9 @@ func paneLayout(p *pane) {
 	moveTo(p.view, rect{paneEdge(), hh + 1, p.w - paneEdge(), p.h - p.compH - 1})
 	p.attachR = rect{dp(10), p.h - dp(10) - dp(36), dp(46), p.h - dp(10)}
 	p.micR = rect{dp(46), p.h - dp(10) - dp(36), dp(82), p.h - dp(10)}
+	p.gifR = rect{dp(82), p.h - dp(10) - dp(36), dp(118), p.h - dp(10)}
 	p.sendR = rect{p.w - dp(12) - dp(36), p.h - dp(10) - dp(36), p.w - dp(12), p.h - dp(10)}
-	p.fieldR = rect{dp(12) + dp(40) + dp(36), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
+	p.fieldR = rect{dp(12) + dp(40) + dp(36) + dp(36), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
 	it := p.fieldR.top + (fieldH-inH)/2
 	moveTo(p.input, rect{p.fieldR.left + dp(10), it, p.fieldR.right - dp(8), it + inH})
 }
@@ -674,6 +676,9 @@ func panePaint(p *pane, target uintptr) {
 		if p.hot == pbtMic {
 			hotBack(p.micR)
 		}
+		if p.hot == pbtGif {
+			hotBack(p.gifR)
+		}
 		if compose.mode != cmNone {
 			b := p.barR
 			g.pill(b.left, b.top+dp(2), dp(3), b.bottom-b.top-dp(4), pal.accent)
@@ -744,6 +749,13 @@ func panePaint(p *pane, target uintptr) {
 			ink = pal.fg
 		}
 		c.text(gMic, p.micR, ink, dtCenter|dtVCenter|dtSingleLine)
+		ink = pal.fg2
+		if p.hot == pbtGif {
+			ink = pal.fg
+		}
+		c.font(fnt.smallSemi)
+		c.text("GIF", p.gifR, ink, dtCenter|dtVCenter|dtSingleLine)
+		c.font(fnt.icon)
 		if compose.mode != cmNone {
 			b := p.barR
 			title, excerpt := composeLabels()
@@ -792,6 +804,8 @@ func paneHit(p *pane, x, y int32) int {
 		return pbtAttach
 	case in(p.micR):
 		return pbtMic
+	case in(p.gifR):
+		return pbtGif
 	case in(p.sendR):
 		return pbtSend
 	case p.bank.compose.mode != cmNone && in(p.bank.compose.closeHit):
@@ -951,6 +965,10 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			pickFile()
 		case hit == pbtMic:
 			voiceStart()
+		case hit == pbtGif:
+			pt := point{p.gifR.left, p.gifR.top} // above the button
+			pClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+			gifOpen(pt.x, pt.y)
 		case hit == pbtSend:
 			paneSend(p)
 		case hit == pbtBarClose:
