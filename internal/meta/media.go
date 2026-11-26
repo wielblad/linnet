@@ -75,6 +75,11 @@ func mediaFromAttachment(
 		return "", "", "", "", 0
 	}
 	mime = firstNonEmpty(playableMime, attachmentMime, imageMime, previewMime)
+	if kind == "image" && strings.HasPrefix(mime, "video/") {
+		// A GIF of a chat that is not encrypted is kept by Messenger as a short film: it is
+		// what its file is, and is shown and played as a film.
+		kind = "video"
+	}
 	name = strings.TrimSpace(filename)
 	if name == "" {
 		name = kind

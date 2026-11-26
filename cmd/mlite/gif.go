@@ -10,6 +10,8 @@ package main
 // real GIF as its file: such a message is a picture here, not a film.
 
 import (
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -49,7 +51,11 @@ func gifAsPicture(m *store.Message) {
 	}
 }
 
-func isGif(m store.Message) bool { return m.MediaKind == "image" && m.MediaMime == "image/gif" }
+// isGif reports whether a message is a GIF: said by its kind of file, or, for one sent from
+// here and not yet heard back from Messenger, by the name of its file.
+func isGif(m store.Message) bool {
+	return m.MediaKind == "image" && (m.MediaMime == "image/gif" || strings.EqualFold(filepath.Ext(m.MediaName), ".gif"))
+}
 
 // gifSeen is a GIF being drawn at a size: it is kept moving from now on.
 func gifSeen(m store.Message, w, h int32) {

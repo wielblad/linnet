@@ -115,6 +115,9 @@ func (b *backend) sendFile(thread store.Thread, path string) bool {
 		if result.MessageID != "" {
 			sent := store.Message{ID: result.MessageID, ThreadID: thread.ID, SenderID: c.AccountID(),
 				Timestamp: at, MediaKind: fileKind(path), MediaName: filepath.Base(path)}
+			if strings.EqualFold(filepath.Ext(path), ".gif") {
+				sent.MediaMime = "image/gif" // so that it moves here like any other GIF
+			}
 			if sent.MediaKind == "image" { // keep a copy, so that the conversation shows the picture at once
 				if data, err := os.ReadFile(path); err == nil {
 					dst := mediaPath(sent)

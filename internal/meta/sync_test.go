@@ -373,3 +373,15 @@ func TestMediaFromAttachmentKinds(t *testing.T) {
 		}
 	}
 }
+
+// Messenger keeps a GIF of a chat that is not encrypted as a film: a picture whose file is
+// a film must be taken for a film, or nothing can draw it.
+func TestAnimatedImageKeptAsFilm(t *testing.T) {
+	kind, url, mime, _, _ := mediaFromAttachment(table.AttachmentTypeAnimatedImage, "https://cdn.example/a.mp4", "", "", "", "video/mp4", "", "", "", "gif", 0)
+	if kind != "video" || url == "" || mime != "video/mp4" {
+		t.Errorf("got %q %q %q, want a film", kind, url, mime)
+	}
+	if kind, _, _, _, _ := mediaFromAttachment(table.AttachmentTypeAnimatedImage, "https://cdn.example/a.gif", "", "", "", "image/gif", "", "", "", "gif", 0); kind != "image" {
+		t.Errorf("a GIF that is a GIF became %q", kind)
+	}
+}
