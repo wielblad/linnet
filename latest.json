@@ -1,8 +1,8 @@
 {
-  "version": "0.9.17",
-  "url": "https://raw.githubusercontent.com/wielblad/linnet/a7ecbea137afd476aabce7b625a6805156fc20a7/release/Linnet-Setup.exe",
-  "size": 30122496,
-  "sha256": "bb7f708a28063718592b255ded94fd8a2ba7394e03a2437a8e531c95b60d9d15",
-  "signature": "900PvHuXxwbMKcHCPuKsb9dJI0ADyrWwmymlhuPbJ2IOW2ubZUkKYxYLIQe+z53z/a4C178vayPp9c1I5K6TCg==",
-  "notes": "Podgląd zdjęcia ma przycisk Kopiuj i menu pod prawym przyciskiem myszy. Wyszukiwanie w rozmowie: pole stoi w miejscu, wyniki mają strony. Aktualizacje nie mylą już instalatora z innym wydaniem."
+  "version": "0.9.18",
+  "url": "https://raw.githubusercontent.com/wielblad/linnet/bb171c394adeb3d624b6de9de94431e1224ec5ee/release/Linnet-Setup.exe",
+  "size": 30124032,
+  "sha256": "6de7e4696e13a311866f6ec0f12f933d4e9066d62aab82a72bc0c311ab45e0d0",
+  "signature": "z1gy6H6YCyErS6ta0cWTzSFL1rCJHKBMDrKIQFYjNiZclKoJHKVSCtlfde+HS4iqkfLhCoFZzgpGmJzDSFd1CQ==",
+  "notes": "Komunikat o nieudanej aktualizacji mówi zwykłymi słowami, co się stało, i nie pokazuje adresu serwera."
 }
