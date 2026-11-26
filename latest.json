@@ -1,8 +1,8 @@
 {
-  "version": "0.9.3",
+  "version": "0.9.4",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29832704,
-  "sha256": "7cffe340f71a5ac87c7d5f2785294eecbdd2a453a027dead47dee4a84dbe234b",
-  "signature": "ci942R2Y2/ShteOV+B1svoHazZdvs2XxnwbCT1Lj2oKB4th+YVDTJVYyigQYcEdCYF2wKG4yR7fLmMPwb/25CA==",
-  "notes": "Przycisk emotki rozmowy: gdy pole jest puste, wysyła kciuk albo emotkę ustawioną w Messengerze. Przytrzymany rośnie przez trzy rozmiary. W czatach szyfrowanych emotka idzie jako zwykła wiadomość."
+  "size": 29840896,
+  "sha256": "b65399eb8435c50d998772bdd4842e31047e00c25f953f218469e22cde09f1a2",
+  "signature": "ZDHrsojUmH3iOYopNIhOm/sV3gErY1YE8ZmOfmkBzDpFE2BgpAbE+yS6oCXfsTD6X0IPklyAgZA3D93QPGSMDw==",
+  "notes": "Przytrzymana emotka rozmowy rośnie teraz wyraźnie w rogu rozmowy, także w czatach szyfrowanych. Prawy przycisk myszy na emotce pozwala wybrać inną emotkę dla rozmowy."
 }
