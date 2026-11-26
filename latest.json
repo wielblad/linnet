@@ -1,8 +1,8 @@
 {
-  "version": "0.9.8",
+  "version": "0.9.9",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29872640,
-  "sha256": "1aebdf32c281e2ee905070e083e1760ded5303e0bfd905842d8c086d21d3112b",
-  "signature": "/0v4y4gxD5ANhAf52S/Y7JRv4oWzUPoA/2B3zfSt1Fdymjd1pn4xcDsY3ap0Htsh5qT6PGi/bqJ9+a+JFVwZAw==",
-  "notes": "Nagrania głosowe i pliki w czatach nieszyfrowanych (m.in. w grupach) nie giną już — wcześniej taka wiadomość przychodziła pusta."
+  "size": 29945344,
+  "sha256": "3abba38a0372390ceb69f4191ff337d9468b433a72df954bdf361a52c369cf92",
+  "signature": "PlQIkSQqftGVFAEttyZt+8h+ayu4CMUIiDAxKYFlTVyVnw13gd9iHxlHJIbTOz6P+8yeCUq931ZJgKv0XlyDCA==",
+  "notes": "Film wysłany w rozmowie ma miniaturę ze znakiem odtwarzania i otwiera się w odtwarzaczu Linneta. Krótkie filmy pobierają się same, dłuższe po kliknięciu."
 }
