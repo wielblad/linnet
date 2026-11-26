@@ -84,7 +84,8 @@ try {
   Start-Sleep -Milliseconds 1800; Shot "gif-1-okno"
   $g = (All "MliteGif")[0]
   if ($g) {
-    [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00DC0064) | Out-Null; Start-Sleep -Milliseconds 400; Shot "gif-2-wskazany"
+    [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00A00064) | Out-Null; Start-Sleep -Milliseconds 500; Shot "gif-2-wskazany"
+    Start-Sleep -Milliseconds 1100; Shot "gif-2b-rusza-sie"   # the one under the pointer has moved on
     [ET]::PostMessage($g, 0x0202, [IntPtr]::Zero, [IntPtr]0x0018010E) | Out-Null   # the tab of stickers
     Start-Sleep -Milliseconds 1200
     [ET]::PostMessage($g, 0x0200, [IntPtr]::Zero, [IntPtr]0x00A000C8) | Out-Null; Start-Sleep -Milliseconds 400; Shot "gif-3-naklejki"

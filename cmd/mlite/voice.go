@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	cmVoice = 10 // the field is given over to a recording being made
-	idMic   = 333
+	cmVoice = 10  // the field is given over to a recording being made
+	idMic   = 337 // 333 to 336 are the buttons of the conversation's header
 )
 
 var hMic uintptr

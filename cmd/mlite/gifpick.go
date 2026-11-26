@@ -29,8 +29,9 @@ const (
 	wmAppGif     = wmApp + 20 // an answer has come; wp is the question it answers
 	wmAppGifPic  = wmApp + 21 // a small picture has come
 	timerGifType = 33         // the words have stopped changing: search for them
-	idGif        = 334
-	idGifEdit    = 335
+	idGif        = 338
+	idGifEdit    = 339
+	timerGifMove = 34 // the GIF under the pointer moves
 
 	tabGifs     = 0
 	tabStickers = 1
@@ -63,6 +64,15 @@ var (
 		mu         sync.Mutex
 		answers    map[int]pickAnswer
 		sem        chan struct{}
+		move       struct { // the GIF under the pointer, moving
+			key    string
+			src    uintptr
+			delays []time.Duration
+			idx    int
+			due    time.Time
+			img    uintptr
+			w, h   int32
+		}
 	}
 )
 
@@ -133,6 +143,7 @@ func gifOpen(x, y int32) {
 // gifShowTab turns the window to one of its leaves and asks for what belongs on it.
 func gifShowTab(tab int) {
 	gifTab = tab
+	gifMoveStop()
 	gp.cells, gp.scroll, gp.total, gp.hot = nil, 0, 0, -1
 	show(gp.edit, tab == tabGifs)
 	if tab == tabGifs {
@@ -152,6 +163,7 @@ func gifClose() {
 	if gp.hwnd == 0 {
 		return
 	}
+	gifMoveStop()
 	h := gp.hwnd
 	gp.hwnd, gp.edit = 0, 0
 	gp.seq++ // answers still on their way are for nobody
@@ -253,6 +265,7 @@ func pickArrived(seq int) {
 			gp.status = "Ta paczka jest pusta."
 		}
 	}
+	gifMoveStop()
 	gp.scroll, gp.hot = 0, -1
 	gifLay()
 	invalidate(gp.hwnd)
@@ -300,6 +313,96 @@ func gifStillURL(g meta.GIF) string {
 		return u.String()
 	}
 	return g.URL
+}
+
+// gifMovingURL is the address of a small moving copy of a GIF, where its service has one.
+func gifMovingURL(g meta.GIF) string {
+	u, err := url.Parse(g.URL)
+	if err == nil && strings.HasSuffix(u.Hostname(), ".giphy.com") && strings.HasSuffix(u.Path, "/giphy.gif") {
+		u.Path = strings.TrimSuffix(u.Path, "giphy.gif") + "200w.gif"
+		return u.String()
+	}
+	return g.URL
+}
+
+// gifMoveStop lets the moving GIF go.
+func gifMoveStop() {
+	m := &gp.move
+	if m.src != 0 {
+		pGdipDisposeImage.Call(m.src)
+	}
+	if m.img != 0 {
+		pGdipDisposeImage.Call(m.img)
+	}
+	m.key, m.src, m.img, m.delays = "", 0, 0, nil
+	if gp.hwnd != 0 {
+		pKillTimer.Call(gp.hwnd, timerGifMove)
+	}
+}
+
+// gifMoveTo makes the GIF under the pointer move: its small moving copy is fetched, once,
+// and then shown frame by frame in its place. Stickers and the GIF left behind stand still.
+func gifMoveTo(i int) {
+	if gifTab != tabGifs || i < 0 || i >= len(gp.gifs) || i >= len(gp.cells) {
+		gifMoveStop()
+		return
+	}
+	g, cell := gp.gifs[i], gp.cells[i]
+	key := "g" + g.ID
+	if gp.move.key == key && gp.move.src != 0 {
+		return
+	}
+	gifMoveStop()
+	gp.move.key, gp.move.w, gp.move.h = key, cell.right-cell.left, cell.bottom-cell.top
+	path := pickPath("gifa", g.URL)
+	if _, err := os.Stat(path); err != nil {
+		if !gp.asked["a"+key] {
+			gp.asked["a"+key] = true
+			win, from := gp.hwnd, gifMovingURL(g)
+			go func() {
+				gp.sem <- struct{}{}
+				err := fetchTo(from, path, 12<<20)
+				<-gp.sem
+				if err == nil {
+					postMsg(win, wmAppGifPic, 1, 0) // 1: a moving copy has come
+				}
+			}()
+		}
+		return
+	}
+	var src uintptr
+	if st, _, _ := pGdipLoadImageFromFile.Call(uintptr(unsafe.Pointer(u16(path))), uintptr(unsafe.Pointer(&src))); st != 0 || src == 0 {
+		return
+	}
+	var n uint32
+	pGdipImageGetFrameCount.Call(src, uintptr(unsafe.Pointer(&gifTimeDimension)), uintptr(unsafe.Pointer(&n)))
+	if n < 2 {
+		pGdipDisposeImage.Call(src)
+		return
+	}
+	gp.move.src, gp.move.delays, gp.move.idx = src, gifDelays(src, int(n)), 0
+	gp.move.due = time.Now().Add(gp.move.delays[0])
+	gp.move.img = thumbFrom(src, gp.move.w, gp.move.h, dp(8), true, 6)
+	pSetTimer.Call(gp.hwnd, timerGifMove, 20, 0)
+	invalidate(gp.hwnd)
+}
+
+// gifMoveTick shows the next frame of the moving GIF when it is due.
+func gifMoveTick() {
+	m := &gp.move
+	if m.src == 0 || time.Now().Before(m.due) {
+		return
+	}
+	m.idx = (m.idx + 1) % len(m.delays)
+	m.due = time.Now().Add(m.delays[m.idx])
+	pGdipImageSelectActiveFrame.Call(m.src, uintptr(unsafe.Pointer(&gifTimeDimension)), uintptr(m.idx))
+	if img := thumbFrom(m.src, m.w, m.h, dp(8), true, 6); img != 0 {
+		if m.img != 0 {
+			pGdipDisposeImage.Call(m.img)
+		}
+		m.img = img
+		invalidate(gp.hwnd)
+	}
 }
 
 // pickPath is where the small picture kept under a name lives on the disk.
@@ -433,27 +536,38 @@ func gifProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmTimer:
-		if wp == timerGifType {
+		switch wp {
+		case timerGifType:
 			pKillTimer.Call(hwnd, timerGifType)
 			if gifTab == tabGifs {
 				pickAsk("gifs", getText(gp.edit))
 			}
+		case timerGifMove:
+			gifMoveTick()
 		}
 		return 0
 	case wmAppGif:
 		pickArrived(int(wp))
 		return 0
 	case wmAppGifPic:
+		if wp == 1 { // the moving copy of the one under the pointer may be here now
+			gifMoveTo(gp.hot)
+		}
 		invalidate(hwnd)
 		return 0
 	case wmMouseWheel:
 		gp.scroll -= int32(int16(wp>>16)) * dp(90) / 120
 		gifClamp()
+		gp.hot = -1 // what was under the pointer has moved away
+		gifMoveStop()
 		invalidate(hwnd)
 		return 0
 	case wmMouseMove:
 		x, y := lpPoint(lp)
 		if hot, top := gifAt(x, y), gifTopAt(x, y); hot != gp.hot || top != gp.hotTop {
+			if hot != gp.hot {
+				gifMoveTo(hot)
+			}
 			gp.hot, gp.hotTop = hot, top
 			invalidate(hwnd)
 		}
@@ -515,6 +629,9 @@ func gifPaint(hdc uintptr) {
 		if gifTab == tabGifs && i < len(gp.gifs) {
 			gif := gp.gifs[i]
 			img = pickPicture("g"+gif.ID, pickPath("gifp", gif.URL), gifStillURL(gif), w, h, dp(8), true)
+			if gp.move.key == "g"+gif.ID && gp.move.img != 0 { // the one under the pointer, moving
+				img = gp.move.img
+			}
 		} else if gifTab == tabStickers && i < len(gp.stickers) {
 			st := gp.stickers[i]
 			id := strconv.FormatInt(st.ID, 10)
