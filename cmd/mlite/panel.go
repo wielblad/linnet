@@ -38,6 +38,14 @@ const (
 	phEntryLast
 	phPhotoGoto // the words "page 4 of 12": a click lets the number be typed
 	phEntryGoto
+	phResFirst // the pages of what a search found
+	phResNewer
+	phResOlder
+	phResLast
+	phResGoto
+	phField // the search field and what stands with it: it stays in place, and nothing under it is hit
+
+	panelResultPage = 10 // messages found on a page
 
 	idPanelPage = 361
 	esNumber    = 0x2000
@@ -90,7 +98,9 @@ var pn struct {
 	entryAll    int
 	pageEdit    uintptr // the small field a page number is typed into
 	pageOld     uintptr
-	pageFor     int      // the section whose page is being typed: 0 none, 1 pictures, 2 files and links
+	pageFor     int      // the section whose page is being typed: 0 none, 1 pictures, 2 files and links, 3 what a search found
+	resPage     int      // the page of found messages shown; 0 holds the newest
+	barH        int32    // how much of the top stays in place: the bar, and in a search its field too
 	pull        struct { // older history being fetched from Messenger for the panel
 		thread int64
 		left   int
@@ -334,6 +344,11 @@ func panelGoto(section, page int) {
 			pn.photoPage = page
 			panelDropThumbs()
 		}
+	} else if section == 3 {
+		pn.resPage = min(max(page, 0), panelPages(len(pn.results), panelResultPage)-1)
+		pn.scroll = 0 // a new page of what was found is read from its top
+		invalidate(pn.hwnd)
+		return
 	} else {
 		pn.entryPage = min(max(page, 0), panelPages(pn.entryAll, panelEntryPage)-1)
 	}
@@ -441,10 +456,13 @@ func panelSearch() {
 	if len([]rune(q)) < 2 {
 		return
 	}
-	for i := len(pn.all) - 1; i >= 0 && len(pn.results) < 200; i-- {
+	for i := len(pn.all) - 1; i >= 0; i-- {
 		if m := pn.all[i]; !m.Unsent && strings.Contains(strings.ToLower(m.Text), q) {
 			pn.results = append(pn.results, i)
 		}
+	}
+	if last := panelPages(len(pn.results), panelResultPage) - 1; pn.resPage > last {
+		pn.resPage = last
 	}
 }
 
@@ -487,7 +505,17 @@ func paintPanel(target uintptr) {
 		buf.flush(0, 0)
 		return
 	}
-	bar, pad := panelBar(), dp(12)
+	head, pad := panelBar(), dp(12)
+	// In a search the field and the count under it stay in place with the bar; only what
+	// was found scrolls.
+	bar, fieldH, noteH := head, lay.editH+dp(12), sp(18)
+	if pn.search {
+		if len(pn.results) == 0 {
+			noteH = sp(56)
+		}
+		bar = head + dp(4) + fieldH + dp(8) + noteH + dp(6)
+	}
+	pn.barH = bar
 	cw := pn.w - 2*pad
 	pn.hits = pn.hits[:0]
 	hit := func(r rect, kind, arg int) int {
@@ -526,7 +554,8 @@ func paintPanel(target uintptr) {
 			}
 			return
 		}
-		kinds := [][5]int{{}, {phPhotoFirst, phPhotoNewer, phPhotoOlder, phPhotoLast, phPhotoGoto}, {phEntryFirst, phEntryNewer, phEntryOlder, phEntryLast, phEntryGoto}}[section]
+		kinds := [][5]int{{}, {phPhotoFirst, phPhotoNewer, phPhotoOlder, phPhotoLast, phPhotoGoto}, {phEntryFirst, phEntryNewer, phEntryOlder, phEntryLast, phEntryGoto},
+			{phResFirst, phResNewer, phResOlder, phResLast, phResGoto}}[section]
 		card(y, pagerH, false)
 		bw := dp(38)
 		btn := func(x int32, kind int, sign string, on bool) {
@@ -577,33 +606,13 @@ func paintPanel(target uintptr) {
 	y := bar - pn.scroll
 
 	if pn.search {
-		// the field
-		fh := lay.editH + dp(12)
-		fy := y + dp(4)
-		g.round(pad, fy, cw, fh, dp(8), dp(8), dp(8), dp(8), pal.accent)
-		g.round(pad+2, fy+2, cw-4, fh-4, dp(6), dp(6), dp(6), dp(6), pal.card)
-		text(fnt.icon, gSearch, rect{pad + dp(8), fy, pad + dp(30), fy + fh}, pal.fg2, dtSingleLine|dtVCenter)
-		moveTo(pn.edit, rect{pad + dp(32), fy + (fh-lay.editH)/2, pad + cw - dp(8), fy + (fh-lay.editH)/2 + lay.editH})
-		y = fy + fh + dp(10)
-		note := ""
-		switch {
-		case len([]rune(strings.TrimSpace(pn.query))) < 2:
-			note = "Wpisz co najmniej dwa znaki. Szukanie obejmuje wiadomości tej rozmowy pobrane na ten komputer."
-		case len(pn.results) == 0:
-			note = "Nic nie znaleziono w wiadomościach pobranych na ten komputer."
-		default:
-			note = fmt.Sprintf("Znalezione wiadomości: %d", len(pn.results))
-		}
-		nh := sp(18)
-		if len(pn.results) == 0 {
-			nh = sp(56)
-		}
-		text(fnt.small, note, rect{pad + dp(4), y, pad + cw - dp(4), y + nh}, pal.fg2, dtWordBreak)
-		y += nh + dp(6)
+		y += dp(2)
 		rh := dp(16) + sp(18) + 2*fnt.lineH
-		for k, idx := range pn.results {
+		pages := panelPages(len(pn.results), panelResultPage)
+		from := pn.resPage * panelResultPage
+		for k := from; k < len(pn.results) && k < from+panelResultPage; k++ {
 			if y+rh >= 0 && y < pn.h {
-				m := pn.all[idx]
+				m := pn.all[pn.results[k]]
 				hi := hit(rect{pad, y, pad + cw, y + rh}, phResult, k)
 				card(y, rh, pn.hot == hi)
 				who := senderName(m)
@@ -615,6 +624,11 @@ func paintPanel(target uintptr) {
 				text(fnt.prev, snippet(emojify(m.Text), pn.query), rect{pad + dp(12), y + dp(8) + sp(18), pad + cw - dp(12), y + rh - dp(8)}, pal.fg2, dtWordBreak|dtEndEllipsis)
 			}
 			y += rh + dp(4)
+		}
+		if pages > 1 {
+			y += dp(4)
+			pager(y, 3, pn.resPage, pages)
+			y += pagerH
 		}
 	} else {
 		show(pn.edit, false)
@@ -775,9 +789,12 @@ func paintPanel(target uintptr) {
 
 	// the bar on top stays in place
 	g.round(0, 0, pn.w, bar, 0, 0, 0, 0, pal.mica)
-	closeR := rect{pn.w - dp(8) - dp(36), (bar - dp(36)) / 2, pn.w - dp(8), (bar + dp(36)) / 2}
-	backR := rect{dp(6), (bar - dp(36)) / 2, dp(6) + dp(36), (bar + dp(36)) / 2}
+	closeR := rect{pn.w - dp(8) - dp(36), (head - dp(36)) / 2, pn.w - dp(8), (head + dp(36)) / 2}
+	backR := rect{dp(6), (head - dp(36)) / 2, dp(6) + dp(36), (head + dp(36)) / 2}
 	// hits of the bar go last and win over what scrolled under it
+	if pn.search {
+		hit(rect{0, head, pn.w, bar}, phField, 0)
+	}
 	ci := hit(closeR, phClose, 0)
 	if pn.hot == ci {
 		g.round(closeR.left, closeR.top, dp(36), dp(36), dp(4), dp(4), dp(4), dp(4), mix(pal.fg, pal.mica, 10))
@@ -804,6 +821,27 @@ func paintPanel(target uintptr) {
 	}
 	// the bar's own ground again over text that scrolled into it, then its labels
 	c.fill(rect{1, 0, pn.w, bar}, pal.mica)
+	if pn.search { // the field and the count of what was found, in their fixed place
+		fy := head + dp(4)
+		fg := newGfx(buf.hdc)
+		fg.round(pad, fy, cw, fieldH, dp(8), dp(8), dp(8), dp(8), pal.accent)
+		fg.round(pad+2, fy+2, cw-4, fieldH-4, dp(6), dp(6), dp(6), dp(6), pal.card)
+		fg.free()
+		c.font(fnt.icon)
+		c.text(gSearch, rect{pad + dp(8), fy, pad + dp(30), fy + fieldH}, pal.fg2, dtSingleLine|dtVCenter)
+		moveTo(pn.edit, rect{pad + dp(32), fy + (fieldH-lay.editH)/2, pad + cw - dp(8), fy + (fieldH-lay.editH)/2 + lay.editH})
+		note := ""
+		switch {
+		case len([]rune(strings.TrimSpace(pn.query))) < 2:
+			note = "Wpisz co najmniej dwa znaki. Szukanie obejmuje wiadomości tej rozmowy pobrane na ten komputer."
+		case len(pn.results) == 0:
+			note = "Nic nie znaleziono w wiadomościach pobranych na ten komputer."
+		default:
+			note = fmt.Sprintf("Znalezione wiadomości: %d", len(pn.results))
+		}
+		c.font(fnt.small)
+		c.text(note, rect{pad + dp(4), fy + fieldH + dp(8), pad + cw - dp(4), fy + fieldH + dp(8) + noteH}, pal.fg2, dtWordBreak)
+	}
 	title := "Informacje"
 	if pn.search {
 		title = "Szukaj w rozmowie"
@@ -824,7 +862,7 @@ func paintPanel(target uintptr) {
 		}
 	}
 	c.font(fnt.name)
-	c.text(title, rect{titleX, 0, closeR.left - dp(8), bar}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.text(title, rect{titleX, 0, closeR.left - dp(8), head}, pal.fg, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.iconSm)
 	c.text(gClose, closeR, pal.fg, dtCenter|dtVCenter|dtSingleLine)
 	if pn.kbd && pn.focus >= 0 && pn.focus < len(pn.hits) {
@@ -852,7 +890,7 @@ func panelHitAt(x, y int32) int {
 	for i := len(pn.hits) - 1; i >= 0; i-- {
 		h := pn.hits[i]
 		if x >= h.r.left && x < h.r.right && y >= h.r.top && y < h.r.bottom {
-			if h.kind != phClose && h.kind != phBack && y < panelBar() {
+			if h.kind != phClose && h.kind != phBack && h.kind != phField && y < pn.barH {
 				continue // scrolled under the bar
 			}
 			return i
@@ -903,11 +941,17 @@ func panelClick(i int) {
 	case phEntryNewer, phEntryOlder, phEntryFirst, phEntryLast:
 		last := panelPages(pn.entryAll, panelEntryPage) - 1
 		panelGoto(2, map[int]int{phEntryNewer: pn.entryPage - 1, phEntryOlder: pn.entryPage + 1, phEntryFirst: 0, phEntryLast: last}[h.kind])
-	case phPhotoGoto, phEntryGoto: // the number of the page is typed into a small field
+	case phResNewer, phResOlder, phResFirst, phResLast:
+		last := panelPages(len(pn.results), panelResultPage) - 1
+		panelGoto(3, map[int]int{phResNewer: pn.resPage - 1, phResOlder: pn.resPage + 1, phResFirst: 0, phResLast: last}[h.kind])
+	case phPhotoGoto, phEntryGoto, phResGoto: // the number of the page is typed into a small field
 		page := pn.photoPage
 		pn.pageFor = 1
-		if h.kind == phEntryGoto {
+		switch h.kind {
+		case phEntryGoto:
 			pn.pageFor, page = 2, pn.entryPage
+		case phResGoto:
+			pn.pageFor, page = 3, pn.resPage
 		}
 		setText(pn.pageEdit, strconv.Itoa(page+1))
 		invalidate(pn.hwnd)
@@ -972,7 +1016,7 @@ func panelProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmCommand:
 		if lp == pn.edit && wp>>16 == 0x0300 { // the text of the field changed
 			pn.query = getText(pn.edit)
-			pn.scroll = 0
+			pn.scroll, pn.resPage = 0, 0
 			panelSearch()
 			invalidate(hwnd)
 		}
