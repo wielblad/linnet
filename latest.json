@@ -1,8 +1,8 @@
 {
-  "version": "0.9.16",
-  "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 30112768,
-  "sha256": "e67aab71b862c1d3bcb1a3965520df1eeecf5fb2cd992eed1a1999bc4edc8e1c",
-  "signature": "fLwEErDO11fUyHvQWoN3pfn7OZ0S6E6BXUJ/Y+8S9wWdnj4vWkZLSVJgmzy4kDV3/Fi9tXCuK8gPkmefzRsZCw==",
-  "notes": "Naprawa: wpisany numer strony w Informacjach zatwierdza się Enterem albo kliknięciem obok; Esc anuluje."
+  "version": "0.9.17",
+  "url": "https://raw.githubusercontent.com/wielblad/linnet/a7ecbea137afd476aabce7b625a6805156fc20a7/release/Linnet-Setup.exe",
+  "size": 30122496,
+  "sha256": "bb7f708a28063718592b255ded94fd8a2ba7394e03a2437a8e531c95b60d9d15",
+  "signature": "900PvHuXxwbMKcHCPuKsb9dJI0ADyrWwmymlhuPbJ2IOW2ubZUkKYxYLIQe+z53z/a4C178vayPp9c1I5K6TCg==",
+  "notes": "Podgląd zdjęcia ma przycisk Kopiuj i menu pod prawym przyciskiem myszy. Wyszukiwanie w rozmowie: pole stoi w miejscu, wyniki mają strony. Aktualizacje nie mylą już instalatora z innym wydaniem."
 }
