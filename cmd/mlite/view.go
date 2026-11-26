@@ -510,10 +510,10 @@ func layoutView() {
 			if w := c.width(it.chip) + dp(28); w > contentW {
 				contentW = w
 			}
-			if isAudio(m) && contentW < dp(250) { // room for the wave and the time
-				contentW = min(dp(250), inner)
+			if isAudio(m) && contentW < dp(260) { // room for the button, the wave and the time
+				contentW = min(dp(260), inner)
 			}
-			contentH += fnt.lineH + dp(6)
+			contentH += chipHeight(m) + dp(6)
 		}
 		if it.rx != "" { // drawn on the edge of the bubble, so the bubble keeps its size
 			c.font(fnt.small)
@@ -873,56 +873,12 @@ func paintView(target uintptr) {
 				if it.me {
 					chipCol = pal.ownAccent
 				}
-				c.font(fnt.icon)
-				icon := it.chipIcon
-				if isAudio(it.m) { // play or pause, as it is at this moment
-					icon = attachmentIcon(it.m)
-				}
-				c.text(icon, rect{x0, ty, x0 + dp(20), ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
-				c.font(fnt.prev)
-				it.audL, it.audR = 0, 0
-				var wave []uint8
-				if isAudio(it.m) {
-					if p, ok := mediaFile(it.m); ok { // measured once the file is here
-						waveKick(it.m.ID, p)
-					}
-					wave = waveOf(it.m.ID)
-				}
-				if wave != nil { // the recording as a wave, and how far it has played along it
-					times, played := clock(it.m.MediaDurationMs), int64(-1)
-					if audioActive(it.m) {
-						times = audioTimes()
-						if audio.dur > 0 {
-							played = min(audio.pos, audio.dur) * 1000 / audio.dur
-						}
-					}
-					tw := c.width(times)
-					c.text(times, rect{x1 - tw, ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
-					it.audL, it.audR = x0+dp(28), x1-tw-dp(10)
-					under := pal.bubble
-					if it.me {
-						under = pal.own
-					}
-					paintWave(c, wave, rect{it.audL, ty, it.audR, ty + fnt.lineH}, chipCol, mix(chipCol, under, 38), played)
-				} else if audioActive(it.m) { // no wave for this file: a bar that fills, and the time
-					times := audioTimes()
-					tw := c.width(times)
-					c.text(times, rect{x1 - tw, ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
-					it.audL, it.audR = x0+dp(28), x1-tw-dp(10)
-					if w := it.audR - it.audL; w > dp(20) {
-						mid := ty + fnt.lineH/2
-						track := mix(chipCol, pal.bubble, 30)
-						if it.me {
-							track = mix(chipCol, pal.own, 30)
-						}
-						c.fill(rect{it.audL, mid - dp(2), it.audR, mid + dp(2)}, track)
-						if audio.dur > 0 {
-							done := int32(int64(w) * min(audio.pos, audio.dur) / audio.dur)
-							c.fill(rect{it.audL, mid - dp(2), it.audL + done, mid + dp(2)}, chipCol)
-							c.fill(rect{it.audL + done - dp(2), mid - dp(5), it.audL + done + dp(2), mid + dp(5)}, chipCol)
-						}
-					}
+				if isAudio(it.m) { // a recording: its button, its wave, its time
+					paintAudioRow(c, it, x0, x1, ty, chipCol)
 				} else {
+					c.font(fnt.icon)
+					c.text(it.chipIcon, rect{x0, ty, x0 + dp(20), ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
+					c.font(fnt.prev)
 					c.text(it.chip, rect{x0 + dp(24), ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter|dtEndEllipsis)
 				}
 			}
@@ -1094,7 +1050,7 @@ func viewClick(x, y int32) {
 		}
 		if it.kind == itMsg && it.chip != "" {
 			cy := it.y + it.top + it.chipTop
-			if x >= it.bx && x < it.bx+it.bw && y >= cy && y < cy+fnt.lineH {
+			if x >= it.bx && x < it.bx+it.bw && y >= cy && y < cy+chipHeight(it.m) {
 				if audioActive(it.m) && it.audR > it.audL && x >= it.audL-dp(4) && x <= it.audR+dp(4) {
 					audioSeek(int64(x-it.audL) * 1000 / int64(it.audR-it.audL)) // on the bar: to that place
 					return

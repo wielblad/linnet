@@ -149,17 +149,92 @@ func audioRedraw() {
 	})
 }
 
+// chipHeight is the height of the line that stands for an attachment: a recording has a
+// taller one, for its button and its wave.
+func chipHeight(m store.Message) int32 {
+	if isAudio(m) {
+		return dp(36)
+	}
+	return fnt.lineH
+}
+
+// paintAudioRow draws a recording in its bubble, from x0 to x1 with its top at ty: a round
+// button to play or pause it, its wave with the slider, and its time. col is the colour of
+// links on that bubble. The button is drawn, not written with a sign of a font, so that
+// play and pause have the same weight and sit in its middle.
+func paintAudioRow(c canvas, it *vitem, x0, x1, ty int32, col uint32) {
+	h := chipHeight(it.m)
+	under, face, sign := pal.bubble, pal.accent, pal.onAccent
+	if it.me { // on one's own bubble, which is the accent itself: the button is light
+		under, face, sign = pal.own, pal.ownFg, pal.own
+	}
+	d := dp(32)
+	bx, by := x0, ty+(h-d)/2
+	g := newGfx(c.hdc)
+	g.ellipse(bx, by, d, d, face)
+	cx, cy := bx+d/2, by+d/2
+	if audioActive(it.m) && audio.playing { // pause: two bars with round ends
+		bw, bh, gap := dp(4), dp(12), dp(4)
+		g.round(cx-gap/2-bw, cy-bh/2, bw, bh, bw/2, bw/2, bw/2, bw/2, sign)
+		g.round(cx+gap/2, cy-bh/2, bw, bh, bw/2, bw/2, bw/2, bw/2, sign)
+	} else { // play: a triangle, a little to the right so that it looks centred
+		g.poly([]point{{cx - dp(4), cy - dp(7)}, {cx - dp(4), cy + dp(7)}, {cx + dp(7), cy}}, sign)
+	}
+	g.free()
+
+	it.audL, it.audR = 0, 0
+	if p, ok := mediaFile(it.m); ok { // measured once the file is here
+		waveKick(it.m.ID, p)
+	}
+	wave := waveOf(it.m.ID)
+	active := audioActive(it.m)
+	times, played := clock(it.m.MediaDurationMs), int64(-1)
+	if active {
+		times = audioTimes()
+		if audio.dur > 0 {
+			played = min(audio.pos, audio.dur) * 1000 / audio.dur
+		}
+	}
+	c.font(fnt.prev)
+	left := x0 + d + dp(10)
+	if wave == nil && !active { // nothing to draw of it yet: said in words
+		c.text(it.chip, rect{left, ty, x1, ty + h}, col, dtSingleLine|dtVCenter|dtEndEllipsis)
+		return
+	}
+	tw := c.width(times)
+	c.text(times, rect{x1 - tw, ty, x1, ty + h}, col, dtSingleLine|dtVCenter)
+	it.audL, it.audR = left, x1-tw-dp(10)
+	pale := mix(col, under, 38)
+	if wave != nil {
+		paintWave(c, wave, rect{it.audL, ty + dp(4), it.audR, ty + h - dp(4)}, col, pale, played)
+		return
+	}
+	// a file whose wave could not be measured: a bar that fills
+	if w := it.audR - it.audL; w > dp(20) {
+		mid := ty + h/2
+		g := newGfx(c.hdc)
+		g.pill(it.audL, mid-dp(2), w, dp(4), pale)
+		if played > 0 {
+			g.pill(it.audL, mid-dp(2), max(int32(int64(w)*played/1000), dp(4)), dp(4), col)
+		}
+		g.free()
+	}
+}
+
 // paintWave draws a recording as bars of its loudness in a place of the conversation. What
 // has played is in the full colour, the rest paler, and a slider stands where it is now.
 // played is in thousandths of the length, or less than 0 for a recording that is not loaded.
 func paintWave(c canvas, wave []uint8, r rect, full, pale uint32, played int64) {
-	bar, step := dp(3), dp(5)
+	bar, step := dp(4), dp(6)
 	w, h := r.right-r.left, r.bottom-r.top
 	n := int(w / step)
 	if n < 4 || len(wave) == 0 {
 		return
 	}
 	mid, top := r.top+h/2, h-dp(2)
+	g := newGfx(c.hdc) // bars with round ends
+	defer g.free()
+	rad := bar / 2
 	at := int32(-1)
 	if played >= 0 {
 		at = r.left + int32(int64(w)*played/1000)
@@ -176,18 +251,18 @@ func paintWave(c canvas, wave []uint8, r rect, full, pale uint32, played int64) 
 			}
 		}
 		bh := top * int32(v) / 255
-		if bh < dp(2) {
-			bh = dp(2)
+		if bh < bar { // the quietest is a dot
+			bh = bar
 		}
 		x := r.left + int32(i)*step
 		col := pale
 		if x+bar <= at {
 			col = full
 		}
-		c.fill(rect{x, mid - bh/2, x + bar, mid - bh/2 + bh}, col)
+		g.round(x, mid-bh/2, bar, bh, rad, rad, rad, rad, col)
 	}
 	if at >= 0 { // the slider
-		c.fill(rect{at - 1, r.top, at + 1, r.bottom}, full)
+		g.round(at-1, r.top, dp(2), h, 1, 1, 1, 1, full)
 	}
 }
 
