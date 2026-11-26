@@ -1,8 +1,8 @@
 {
-  "version": "0.9.13",
+  "version": "0.9.14",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 30096384,
-  "sha256": "3d3a08ab7d5a914fe1843d3f5f4c5f61109b0edcf66fca8b07eacc086735a913",
-  "signature": "snVf+Yr1atAT4bCnMK3oQjeDazii0+cuf+hBatkyAtLB/mcRcOxIVpqs3cLvOMrutV/px414NMrAmrSEb7MHAQ==",
-  "notes": "Naprawa: przyciski mikrofonu i GIF w dużym oknie robią to, co powinny (otwierały Szukaj i Informacje). GIF pod wskaźnikiem się rusza. Informacje pokazują starsze zdjęcia, pliki i linki po stronie."
+  "size": 30106112,
+  "sha256": "793d5f1839e7f96a9a788eb559fd9e0f84912c23705394a8404d8f266c14b3a3",
+  "signature": "Lm5aYs3VMTXNC3rh5jak1XtEjVdl7B2/cTbt6/+ulA6cZoQuQmom9cRZKzSAfAlh9sN8XnLk0ZAZ74nUR3hmDA==",
+  "notes": "Wysłany GIF rusza się w rozmowie. Informacje mają strony ze zdjęciami, plikami i linkami oraz przycisk doczytujący starszą historię rozmowy z Messengera."
 }
