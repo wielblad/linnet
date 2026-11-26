@@ -63,6 +63,7 @@ type vitem struct {
 	chip       string        // line that opens an attachment or the link
 	chipIcon   string
 	chipAct    int
+	audL, audR int32 // the bar of a playing recording, in view coordinates
 	chipTop    int32
 	links      []linkSpan // web addresses in the text
 	metaW      int32
@@ -500,6 +501,9 @@ func layoutView() {
 			if w := c.width(it.chip) + dp(28); w > contentW {
 				contentW = w
 			}
+			if isAudio(m) && contentW < dp(220) { // room for the bar and the time while it plays
+				contentW = min(dp(220), inner)
+			}
 			contentH += fnt.lineH + dp(6)
 		}
 		if it.rx != "" { // drawn on the edge of the bubble, so the bubble keeps its size
@@ -861,9 +865,34 @@ func paintView(target uintptr) {
 					chipCol = pal.ownAccent
 				}
 				c.font(fnt.icon)
-				c.text(it.chipIcon, rect{x0, ty, x0 + dp(20), ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
+				icon := it.chipIcon
+				if isAudio(it.m) { // play or pause, as it is at this moment
+					icon = attachmentIcon(it.m)
+				}
+				c.text(icon, rect{x0, ty, x0 + dp(20), ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
 				c.font(fnt.prev)
-				c.text(it.chip, rect{x0 + dp(24), ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter|dtEndEllipsis)
+				it.audL, it.audR = 0, 0
+				if audioActive(it.m) { // a bar that fills, and the time
+					times := audioTimes()
+					tw := c.width(times)
+					c.text(times, rect{x1 - tw, ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
+					it.audL, it.audR = x0+dp(28), x1-tw-dp(10)
+					if w := it.audR - it.audL; w > dp(20) {
+						mid := ty + fnt.lineH/2
+						track := mix(chipCol, pal.bubble, 30)
+						if it.me {
+							track = mix(chipCol, pal.own, 30)
+						}
+						c.fill(rect{it.audL, mid - dp(2), it.audR, mid + dp(2)}, track)
+						if audio.dur > 0 {
+							done := int32(int64(w) * min(audio.pos, audio.dur) / audio.dur)
+							c.fill(rect{it.audL, mid - dp(2), it.audL + done, mid + dp(2)}, chipCol)
+							c.fill(rect{it.audL + done - dp(2), mid - dp(5), it.audL + done + dp(2), mid + dp(5)}, chipCol)
+						}
+					}
+				} else {
+					c.text(it.chip, rect{x0 + dp(24), ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter|dtEndEllipsis)
+				}
 			}
 			if it.rx != "" {
 				c.font(fnt.small)
@@ -1034,6 +1063,10 @@ func viewClick(x, y int32) {
 		if it.kind == itMsg && it.chip != "" {
 			cy := it.y + it.top + it.chipTop
 			if x >= it.bx && x < it.bx+it.bw && y >= cy && y < cy+fnt.lineH {
+				if audioActive(it.m) && it.audR > it.audL && x >= it.audL-dp(4) && x <= it.audR+dp(4) {
+					audioSeek(int64(x-it.audL) * 1000 / int64(it.audR-it.audL)) // on the bar: to that place
+					return
+				}
 				switch it.chipAct {
 				case chipFile:
 					openAttachment(it.m)

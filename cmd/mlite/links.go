@@ -237,7 +237,10 @@ func attachmentIcon(m store.Message) string {
 	case "video":
 		return gVideo
 	case "audio", "voice":
-		return gMic
+		if audioActive(m) && audio.playing {
+			return gPause
+		}
+		return gPlay // played here, in the conversation
 	}
 	return gDoc
 }
@@ -258,6 +261,10 @@ func attachmentLabel(m store.Message) string {
 // openAttachment opens a file of the conversation, fetching it first when needed.
 func openAttachment(m store.Message) {
 	if p, ok := mediaFile(m); ok {
+		if isAudio(m) {
+			audioToggle(m, p)
+			return
+		}
 		safeOpen(p)
 		return
 	}

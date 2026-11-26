@@ -1513,6 +1513,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		switch wp {
 		case timerHot:
 			hotTick()
+		case timerAudio:
+			audioTick()
 		case timerHeadDots:
 			headPhase++
 			typingSync()
