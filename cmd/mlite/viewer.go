@@ -50,7 +50,13 @@ const (
 	vbPrev
 	vbNext
 	vbFull
+	vbCopy
 	vbCount
+
+	// the menu of a picture, under the other button of the mouse
+	idPicCopy = 1
+	idPicSave = 2
+	idPicOpen = 3
 )
 
 var (
@@ -369,7 +375,7 @@ func viewerLayout(c canvas) {
 	for _, b := range []struct {
 		id    int
 		label string
-	}{{vbOpen, "Otwórz w Windows"}, {vbSave, "Pobierz"}} {
+	}{{vbOpen, "Otwórz w Windows"}, {vbSave, "Pobierz"}, {vbCopy, "Kopiuj"}} {
 		w := dp(14) + dp(20) + dp(6) + c.width(b.label) + dp(14)
 		if narrow {
 			w = s
@@ -427,7 +433,7 @@ func viewerHas(id int) bool {
 		return vw.idx > 0 || viewerMayHaveOlder()
 	case vbNext:
 		return vw.idx < len(vw.list)-1
-	case vbSave, vbOpen:
+	case vbSave, vbOpen, vbCopy:
 		return vw.path != ""
 	}
 	return true
@@ -493,7 +499,7 @@ func paintViewer(target uintptr) {
 	if len(vw.list) > 1 {
 		when += fmt.Sprintf("  ·  %d z %d", vw.idx+1, len(vw.list))
 	}
-	textRight := vw.btn[vbSave].left - dp(16)
+	textRight := vw.btn[vbCopy].left - dp(16)
 	if !(vw.full && vw.idle) {
 		c.font(fnt.bodySemi)
 		c.text(who, rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
@@ -525,8 +531,11 @@ func paintViewer(target uintptr) {
 			c.text(glyph, r, viewerInk, dtCenter|dtVCenter|dtSingleLine)
 		default:
 			glyph, label := gDownload, "Pobierz"
-			if id == vbOpen {
+			switch id {
+			case vbOpen:
 				glyph, label = gOpenOut, "Otwórz w Windows"
+			case vbCopy:
+				glyph, label = gCopy, "Kopiuj"
 			}
 			c.font(fnt.icon)
 			if r.right-r.left <= dp(36) { // no room for the word
@@ -581,6 +590,58 @@ func viewerAct(id int) {
 		}
 	case vbSave:
 		viewerSave()
+	case vbCopy:
+		viewerCopy()
+	}
+}
+
+// viewerCopy puts the picture shown on the clipboard: asked for by the person, with the
+// button or from the menu.
+func viewerCopy() {
+	if vw.video != "" || vw.idx >= len(vw.list) {
+		return
+	}
+	p, ok := mediaFile(vw.list[vw.idx])
+	if !ok {
+		return
+	}
+	if copyPicture(p) {
+		vw.note = "Skopiowano zdjęcie"
+	} else {
+		vw.note = "Nie udało się skopiować: schowek jest zajęty przez inny program."
+	}
+	invalidate(vw.hwnd)
+}
+
+// viewerMenu opens the menu of the picture shown at a point of the viewer.
+func viewerMenu(x, y int32) {
+	if vw.video != "" || vw.idx >= len(vw.list) || vw.path == "" {
+		return
+	}
+	menu, _, _ := pCreatePopupMenu.Call()
+	add := func(flags, id uintptr, label string) {
+		pAppendMenuW.Call(menu, flags, id, uintptr(unsafe.Pointer(u16(label))))
+	}
+	add(mfString, idPicCopy, "Kopiuj zdjęcie")
+	add(mfString, idPicSave, "Zapisz jako…")
+	add(mfSeparator, 0, "")
+	add(mfString, idPicOpen, "Otwórz w Windows")
+	pt := point{x, y}
+	pClientToScreen.Call(vw.hwnd, uintptr(unsafe.Pointer(&pt)))
+	host := vw.host
+	if vw.full || host == 0 {
+		host = vw.hwnd
+	}
+	pSetForegroundWindow.Call(host)
+	cmd, _, _ := pTrackPopupMenu.Call(menu, tpmRightBtn|tpmReturnCmd|tpmNoNotify, uintptr(pt.x), uintptr(pt.y), 0, host, 0)
+	pDestroyMenu.Call(menu)
+	switch cmd {
+	case idPicCopy:
+		viewerCopy()
+	case idPicSave:
+		viewerSave()
+	case idPicOpen:
+		viewerAct(vbOpen)
 	}
 }
 
@@ -696,6 +757,12 @@ func viewerProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 	case wmLButtonDown:
 		pSetFocus.Call(hwnd)
+		return 0
+	case wmRButtonUp: // the other button on the picture: its menu
+		x, y := lpPoint(lp)
+		if p := vw.pic; x >= p.left && x < p.right && y >= p.top && y < p.bottom {
+			viewerMenu(x, y)
+		}
 		return 0
 	case wmLButtonUp:
 		x, y := lpPoint(lp)
