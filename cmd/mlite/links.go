@@ -265,6 +265,10 @@ func openAttachment(m store.Message) {
 			audioToggle(m, p)
 			return
 		}
+		if isFilm(m) {
+			openFilm(m, p)
+			return
+		}
 		safeOpen(p)
 		return
 	}

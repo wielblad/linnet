@@ -57,27 +57,29 @@ var (
 	pGetSaveFileNameW = comdlg32.NewProc("GetSaveFileNameW")
 
 	vw struct {
-		hwnd   uintptr
-		list   []store.Message // the pictures of the conversation, oldest first
-		idx    int
-		path   string // file drawn (a PNG copy for WebP)
-		iw, ih int32  // its size in pixels
-		scaled uintptr
-		sw, sh int32
-		hot    int
-		w, h   int32
-		note   string
-		btn    [vbCount]rect
-		pic    rect
-		host   uintptr   // the window it covers: the program's, or a pane
-		full   bool      // the picture has the whole screen
-		idle   bool      // nothing moved for a while: only the picture is shown
-		older  bool      // older messages were asked for, to find older pictures
-		last   time.Time // the last click on the picture, to tell two in a row
-		bank   *viewBank // the view it was opened from
-		video  string    // address played in the embedded browser; "" while pictures are shown
-		web    *webview.View
-		webMsg string // what the player area says until the browser covers it
+		hwnd      uintptr
+		list      []store.Message // the pictures of the conversation, oldest first
+		idx       int
+		path      string // file drawn (a PNG copy for WebP)
+		iw, ih    int32  // its size in pixels
+		scaled    uintptr
+		sw, sh    int32
+		hot       int
+		w, h      int32
+		note      string
+		btn       [vbCount]rect
+		pic       rect
+		host      uintptr   // the window it covers: the program's, or a pane
+		full      bool      // the picture has the whole screen
+		idle      bool      // nothing moved for a while: only the picture is shown
+		older     bool      // older messages were asked for, to find older pictures
+		last      time.Time // the last click on the picture, to tell two in a row
+		bank      *viewBank // the view it was opened from
+		video     string    // address played in the embedded browser; "" while pictures are shown
+		film      string    // the file being played when the film is one sent in the conversation
+		filmTitle string    // what stands in the bar above such a film
+		web       *webview.View
+		webMsg    string // what the player area says until the browser covers it
 	}
 )
 
@@ -268,7 +270,7 @@ func closeViewer() {
 		vw.web = nil
 	}
 	playerStop()
-	vw.video = ""
+	vw.video, vw.film = "", ""
 	h := vw.hwnd
 	vw.hwnd = 0
 	viewerDrop()
@@ -567,7 +569,10 @@ func viewerAct(id int) {
 	case vbFull:
 		viewerFull(!vw.full)
 	case vbOpen:
-		if vw.video != "" {
+		if vw.film != "" {
+			viewerFull(false) // the other program would open behind the film
+			safeOpen(vw.film)
+		} else if vw.video != "" {
 			viewerFull(false) // the browser would open behind the film
 			openURL(vw.video)
 		} else if p, ok := mediaFile(vw.list[vw.idx]); ok {
@@ -845,6 +850,9 @@ func paintVideo(target uintptr) {
 	x -= s + dp(8)
 	c.font(fnt.body)
 	label := openInLabel(vw.video)
+	if vw.film != "" {
+		label = "Otwórz plik"
+	}
 	w := dp(14) + dp(20) + dp(6) + c.width(label) + dp(14)
 	vw.btn[vbOpen] = rect{x - w, (bar - s) / 2, x, (bar + s) / 2}
 	hotFill := mix(viewerInk, viewerGround, 16)
@@ -865,9 +873,13 @@ func paintVideo(target uintptr) {
 	g.free()
 	textRight := r.left - dp(16)
 	c.font(fnt.bodySemi)
-	c.text("Wideo · "+linkHost(vw.video), rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
+	head, sub := "Wideo · "+linkHost(vw.video), strings.TrimPrefix(vw.video, "https://")
+	if vw.film != "" {
+		head, sub = vw.filmTitle, "Film z rozmowy"
+	}
+	c.text(head, rect{dp(20), dp(9), textRight, dp(9) + sp(20)}, viewerInk, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.small)
-	c.text(strings.TrimPrefix(vw.video, "https://"), rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.text(sub, rect{dp(20), dp(9) + sp(20), textRight, dp(9) + sp(38)}, viewerInk2, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(fnt.icon)
 	c.text(gCloseBig, vw.btn[vbClose], viewerInk, dtCenter|dtVCenter|dtSingleLine)
 	if vw.full {

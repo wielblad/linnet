@@ -64,6 +64,7 @@ type vitem struct {
 	chipIcon   string
 	chipAct    int
 	audL, audR int32 // the bar of a playing recording, in view coordinates
+	film       bool  // the picture is of a film sent in the conversation, played from its file
 	chipTop    int32
 	links      []linkSpan // web addresses in the text
 	metaW      int32
@@ -289,6 +290,7 @@ func loadView(force bool) {
 }
 
 func layoutView() {
+	filmCollect() // pictures of films made since the last time
 	mv.hover, mv.hotAct = -1, -1
 	hdc, _, _ := pGetDC.Call(mv.hwnd)
 	defer pReleaseDC.Call(mv.hwnd, hdc)
@@ -390,6 +392,20 @@ func layoutView() {
 			it.imgW, it.imgH, it.imgReady = mediaBox(m, inner)
 		} else if hasAttachment(m) { // video, recording, file: a line that fetches and opens it
 			it.chip, it.chipIcon, it.chipAct, it.media = attachmentLabel(m), attachmentIcon(m), chipFile, ""
+			if isFilm(m) { // its picture with a play sign, once Windows has made one of its file
+				if filmHave(m) {
+					it.imgMsg = filmPicture(m)
+					it.imgW, it.imgH, it.imgReady = mediaBox(it.imgMsg, inner)
+					if max := dp(260); it.imgH > max {
+						it.imgW, it.imgH = it.imgW*max/it.imgH, max
+					}
+					if it.imgReady {
+						it.img, it.preview, it.play, it.film = true, true, true, true
+					}
+				} else {
+					filmKick(m)
+				}
+			}
 		} else if u := linkOf(m); u != "" && !m.Unsent {
 			// A link: the picture Messenger attached to it (for YouTube the video's own
 			// preview picture when there is none), and a line with the title that opens it.
@@ -1036,11 +1052,17 @@ func viewClick(x, y int32) {
 		if it.kind == itMsg && it.img {
 			ix, iy := it.bx+dp(12), it.y+it.top+it.imgTop
 			if r := outRect(it); hasOut(it) && x >= r.left && x < r.right && y >= r.top && y < r.bottom {
-				playExternal(it.link) // the corner of the picture: the film where it lives, not in the player
+				if p, ok := mediaFile(it.m); it.film && ok {
+					safeOpen(p) // the corner of the picture: the film in the program Windows has for it
+				} else if !it.film {
+					playExternal(it.link) // the film where it lives, not in the player
+				}
 				return
 			}
 			if x >= ix && x < ix+it.imgW && y >= iy && y < iy+it.imgH {
-				if it.preview {
+				if it.film {
+					openAttachment(it.m) // played here, from its file
+				} else if it.preview {
 					openLink(it.link) // the picture of a video plays it here; of a page, opens the browser
 				} else {
 					openViewer(it.imgMsg)
