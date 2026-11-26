@@ -26,11 +26,15 @@ const (
 	phPhoto
 	phEntry
 	phResult
-	phMorePhotos  // the row under the pictures that shows the next ones
-	phMoreEntries // and the one under the files and links
+	phPhotoNewer // the row under the pictures that turns their pages
+	phPhotoOlder
+	phEntryNewer // and the one under the files and links
+	phEntryOlder
+	phPull // fetch older history of the conversation from Messenger
 
-	panelPhotoPage = 18 // pictures shown at first, and added by each "show more"
-	panelEntryPage = 20
+	panelPhotoPage = 18 // pictures on a page
+	panelEntryPage = 10 // files and links on a page
+	panelPullPages = 25 // pages of older history fetched for one press
 
 	idFind      = 333
 	idInfo      = 334
@@ -69,17 +73,22 @@ var pn struct {
 	thumbSide   int32
 	photos      []store.Message
 	entries     []panelEntry
-	photoMax    int // how many pictures are shown at most now; grows by a page at a time
-	entryMax    int
+	photoPage   int // the page of pictures shown; 0 is the newest
+	entryPage   int
 	photoAll    int // how many there are in all, on this computer
 	entryAll    int
-	query       string
-	all         []store.Message // every message of the conversation kept on this computer
-	results     []int           // indexes into all, newest first
-	forThread   int64
-	host        uintptr   // the window the panel is in: the program's, or a pane beside a head
-	bank        *viewBank // the view of the conversation it tells about
-	forCount    int
+	pull        struct { // older history being fetched from Messenger for the panel
+		thread int64
+		left   int
+		note   string
+	}
+	query     string
+	all       []store.Message // every message of the conversation kept on this computer
+	results   []int           // indexes into all, newest first
+	forThread int64
+	host      uintptr   // the window the panel is in: the program's, or a pane beside a head
+	bank      *viewBank // the view of the conversation it tells about
+	forCount  int
 }
 
 var hFind, hInfo, hClose uintptr // the buttons at the right end of the conversation header
@@ -244,10 +253,17 @@ func panelDropThumbs() {
 func panelCollect() {
 	pn.photos, pn.entries = pn.photos[:0], pn.entries[:0]
 	pn.all, _ = be.db.ListMessages(be.ctx, mv.thread.ID)
-	if pn.forThread != mv.thread.ID || pn.photoMax == 0 { // another conversation: from the first page again
-		pn.photoMax, pn.entryMax = panelPhotoPage, panelEntryPage
+	if pn.forThread != mv.thread.ID { // another conversation: from the first page again
+		pn.photoPage, pn.entryPage = 0, 0
+		pn.pull.note = ""
 	}
 	pn.photoAll, pn.entryAll = 0, 0
+	onPhotoPage := func() bool {
+		return pn.photoAll > pn.photoPage*panelPhotoPage && pn.photoAll <= (pn.photoPage+1)*panelPhotoPage
+	}
+	onEntryPage := func() bool {
+		return pn.entryAll > pn.entryPage*panelEntryPage && pn.entryAll <= (pn.entryPage+1)*panelEntryPage
+	}
 	pn.forThread, pn.forCount = mv.thread.ID, len(mv.msgs)
 	for i := len(pn.all) - 1; i >= 0; i-- {
 		m := pn.all[i]
@@ -257,12 +273,12 @@ func panelCollect() {
 		switch {
 		case showsInline(m):
 			pn.photoAll++
-			if len(pn.photos) < pn.photoMax {
+			if onPhotoPage() {
 				pn.photos = append(pn.photos, m)
 			}
 		case hasAttachment(m):
 			pn.entryAll++
-			if len(pn.entries) < pn.entryMax {
+			if onEntryPage() {
 				pn.entries = append(pn.entries, panelEntry{icon: attachmentIcon(m), label: mediaLabel(m), when: shortDate(m), m: m})
 			}
 		default:
@@ -270,7 +286,7 @@ func panelCollect() {
 			if u != "" {
 				pn.entryAll++
 			}
-			if u != "" && len(pn.entries) < pn.entryMax {
+			if u != "" && onEntryPage() {
 				label := oneLine(m.LinkTitle, 80)
 				if label == "" {
 					label = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
@@ -279,7 +295,71 @@ func panelCollect() {
 			}
 		}
 	}
+	// a page past the end, after messages went away: back to the last one there is
+	if last := panelPages(pn.photoAll, panelPhotoPage) - 1; pn.photoPage > last {
+		pn.photoPage = last
+		panelCollect()
+		return
+	}
+	if last := panelPages(pn.entryAll, panelEntryPage) - 1; pn.entryPage > last {
+		pn.entryPage = last
+		panelCollect()
+		return
+	}
 	panelSearch()
+}
+
+// panelPages is how many pages a section of n things has; one at least.
+func panelPages(n, per int) int {
+	if n <= per {
+		return 1
+	}
+	return (n + per - 1) / per
+}
+
+// panelPull fetches older history of the panel's conversation from Messenger, a number
+// of pages for one press, so that its older pictures, files and links can be listed.
+func panelPull() {
+	if pn.pull.left > 0 || older.busy != 0 {
+		return
+	}
+	if be.current() == nil || av.offline {
+		pn.pull.note = "Brak połączenia z Messengerem."
+		return
+	}
+	pn.pull.thread, pn.pull.left, pn.pull.note = mv.thread.ID, panelPullPages, ""
+	if be.fetchOlder(mv.thread) {
+		older.busy = mv.thread.ID
+	} else {
+		pn.pull.left = 0
+	}
+}
+
+// panelOlderArrived is a page of older history stored, or the end of it; it runs with the
+// bank of the panel's conversation entered.
+func panelOlderArrived(thread int64, res uintptr) {
+	if pn.pull.left == 0 || pn.pull.thread != thread {
+		return
+	}
+	switch res {
+	case 1:
+		pn.pull.left--
+		if pn.pull.left > 0 && pn.open && mv.thread.ID == thread && be.fetchOlder(mv.thread) {
+			older.busy = thread
+		} else {
+			pn.pull.left = 0
+		}
+	case 0:
+		pn.pull.left, pn.pull.note = 0, "To już początek rozmowy."
+	case 3:
+		pn.pull.left, pn.pull.note = 0, "Starsze wiadomości są w kopii zapasowej, która czeka na PIN."
+	default:
+		pn.pull.left, pn.pull.note = 0, "Nie udało się pobrać starszych wiadomości. Spróbuj ponownie."
+	}
+	if pn.open && pn.forThread == thread {
+		panelCollect()
+		invalidate(pn.hwnd)
+	}
 }
 
 func shortDate(m store.Message) string { return m.Timestamp.Format("2.01.2006") }
@@ -364,16 +444,31 @@ func paintPanel(target uintptr) {
 		g.round(pad, y, cw, h, dp(8), dp(8), dp(8), dp(8), edge)
 		g.round(pad+1, y+1, cw-2, h-2, dp(7), dp(7), dp(7), dp(7), fill)
 	}
-	// more is the row that shows the next page of a section and says how many are left.
-	moreH := dp(40)
-	more := func(y int32, kind int, label string, left int) {
-		if y+moreH < 0 || y > pn.h {
+	// pager is the row that turns the pages of a section: to the newer ones on its left,
+	// to the older ones on its right, and which page of how many between them.
+	pagerH := dp(40)
+	pager := func(y int32, newer, olderKind, page, pages int) {
+		if y+pagerH < 0 || y > pn.h {
 			return
 		}
-		hi := hit(rect{pad, y, pad + cw, y + moreH}, kind, 0)
-		card(y, moreH, pn.hot == hi)
-		text(fnt.bodySemi, label, rect{pad + dp(12), y, pad + cw - dp(90), y + moreH}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
-		text(fnt.small, fmt.Sprintf("jeszcze %d", left), rect{pad + cw - dp(90), y, pad + cw - dp(12), y + moreH}, pal.fg2, dtRight|dtSingleLine|dtVCenter)
+		bw := dp(104)
+		side := func(x int32, kind int, label string, on bool, flags uint32) {
+			r := rect{x, y, x + bw, y + pagerH}
+			ink := mix(pal.fg2, pal.mica, 45)
+			if on {
+				hi := hit(r, kind, 0)
+				card(y, pagerH, false)
+				ink = pal.accentText
+				if pn.hot == hi {
+					g.round(r.left, r.top, bw, pagerH, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.card, 8))
+				}
+			}
+			text(fnt.bodySemi, label, rect{r.left + dp(12), r.top, r.right - dp(12), r.bottom}, ink, flags|dtSingleLine|dtVCenter)
+		}
+		card(y, pagerH, false)
+		side(pad, newer, "‹  Nowsze", page > 0, 0)
+		side(pad+cw-bw, olderKind, "Starsze  ›", page < pages-1, dtRight)
+		text(fnt.small, fmt.Sprintf("Strona %d z %d", page+1, pages), rect{pad + bw, y, pad + cw - bw, y + pagerH}, pal.fg2, dtCenter|dtSingleLine|dtVCenter)
 	}
 	toggle := func(y, h int32, on bool) {
 		tx, ty := pad+cw-dp(14)-dp(40), y+(h-dp(20))/2
@@ -523,10 +618,10 @@ func paintPanel(target uintptr) {
 			}
 			rows := int32((len(pn.photos) + 2) / 3)
 			y += rows*(side+gap) - gap
-			if left := pn.photoAll - len(pn.photos); left > 0 {
+			if pages := panelPages(pn.photoAll, panelPhotoPage); pages > 1 {
 				y += dp(8)
-				more(y, phMorePhotos, "Pokaż starsze zdjęcia", left)
-				y += moreH
+				pager(y, phPhotoNewer, phPhotoOlder, pn.photoPage, pages)
+				y += pagerH
 			}
 		}
 		// files and links
@@ -545,11 +640,32 @@ func paintPanel(target uintptr) {
 				}
 				y += rh + dp(4)
 			}
-			if left := pn.entryAll - len(pn.entries); left > 0 {
+			if pages := panelPages(pn.entryAll, panelEntryPage); pages > 1 {
 				y += dp(4)
-				more(y, phMoreEntries, "Pokaż starsze pliki i linki", left)
-				y += moreH
+				pager(y, phEntryNewer, phEntryOlder, pn.entryPage, pages)
+				y += pagerH
 			}
+		}
+		// how far back what is listed goes, and the way to reach further
+		if len(pn.all) > 0 {
+			y += dp(18)
+			rh := dp(16) + sp(20) + sp(34)
+			title, desc := "Doczytaj starszą historię", "Na tym komputerze rozmowa jest od "+shortDate(pn.all[0])+". Starsze zdjęcia, pliki i linki pojawią się po pobraniu wiadomości z Messengera."
+			switch {
+			case pn.pull.left > 0 && pn.pull.thread == mv.thread.ID:
+				title = fmt.Sprintf("Doczytuję starszą historię… (%d z %d)", panelPullPages-pn.pull.left+1, panelPullPages)
+			case older.done[mv.thread.ID]:
+				title, desc = "To już cała rozmowa", "Na tym komputerze jest wszystko od "+shortDate(pn.all[0])+"."
+			case pn.pull.note != "":
+				desc = pn.pull.note
+			}
+			if y+rh >= 0 && y < pn.h {
+				hi := hit(rect{pad, y, pad + cw, y + rh}, phPull, 0)
+				card(y, rh, pn.hot == hi && !older.done[mv.thread.ID])
+				text(fnt.bodySemi, title, rect{pad + dp(12), y + dp(8), pad + cw - dp(12), y + dp(8) + sp(20)}, pal.accentText, dtSingleLine|dtVCenter|dtEndEllipsis)
+				text(fnt.small, desc, rect{pad + dp(12), y + dp(8) + sp(20), pad + cw - dp(12), y + rh - dp(6)}, pal.fg2, dtWordBreak)
+			}
+			y += rh
 		}
 		if len(pn.photos) == 0 && len(pn.entries) == 0 {
 			y += dp(18)
@@ -683,14 +799,23 @@ func panelClick(i int) {
 		if h.arg < len(pn.photos) {
 			openViewer(pn.photos[h.arg])
 		}
-	case phMorePhotos: // the next page of pictures, under the ones already shown
-		pn.photoMax += panelPhotoPage
+	case phPhotoNewer, phPhotoOlder, phEntryNewer, phEntryOlder: // another page takes the place of the one shown
+		step := map[int]int{phPhotoNewer: -1, phPhotoOlder: 1, phEntryNewer: -1, phEntryOlder: 1}[h.kind]
+		if h.kind == phPhotoNewer || h.kind == phPhotoOlder {
+			if next := pn.photoPage + step; next >= 0 && next < panelPages(pn.photoAll, panelPhotoPage) {
+				pn.photoPage = next
+				panelDropThumbs()
+			}
+		} else if next := pn.entryPage + step; next >= 0 && next < panelPages(pn.entryAll, panelEntryPage) {
+			pn.entryPage = next
+		}
 		panelCollect()
 		invalidate(pn.hwnd)
-	case phMoreEntries:
-		pn.entryMax += panelEntryPage
-		panelCollect()
-		invalidate(pn.hwnd)
+	case phPull:
+		if !older.done[t.ID] {
+			panelPull()
+			invalidate(pn.hwnd)
+		}
 	case phEntry:
 		if h.arg < len(pn.entries) {
 			if e := pn.entries[h.arg]; e.link != "" {

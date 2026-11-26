@@ -1,5 +1,5 @@
 # The pages of the Information panel: opens the first conversation in the ordinary window,
-# opens Information, and presses the rows that show older pictures and older files and links.
+# opens Information, and turns a page of its files and links.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File tools\info_test.ps1 -Exe build\linnet.exe -DataDir .local\data-ui-test -OutDir .local\shots [-Mode cols|dock|one|tabs] [-Theme light|dark] [-Back FFFFFF]
 param([string]$Exe, [string]$DataDir, [string]$OutDir, [string]$Mode = "cols", [string]$Theme = "light", [string]$Back = "FFFFFF", [long]$Open = 102, [long]$Other = 101)
 $ErrorActionPreference = "Stop"
@@ -61,10 +61,8 @@ try {
   for ($i = 0; $i -lt 8; $i++) { [ET]::PostMessage($panel, 0x020A, [IntPtr](-120 * 65536 * 3), [IntPtr]::Zero) | Out-Null }
   Start-Sleep -Milliseconds 900; Shot "info-1-pierwsza-strona"
   $pr = Rect $panel
-  Click $panel 300 (($pr.B - $pr.T) - 40)      # the row that shows older files and links
-  Start-Sleep -Milliseconds 700
-  for ($i = 0; $i -lt 8; $i++) { [ET]::PostMessage($panel, 0x020A, [IntPtr](-120 * 65536 * 3), [IntPtr]::Zero) | Out-Null }
-  Start-Sleep -Milliseconds 900; Shot "info-2-po-pokaz-starsze"
+  Click $panel (($pr.R - $pr.L) - 60) (($pr.B - $pr.T) - 135)   # "Starsze" of the files and links
+  Start-Sleep -Milliseconds 900; Shot "info-2-druga-strona"
   "okno listy: {0}, przycisk: {1}, panel: {2}" -f ($list -ne [IntPtr]::Zero), ($info -ne [IntPtr]::Zero), ($panel -ne [IntPtr]::Zero)
   $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
 } finally {

@@ -125,4 +125,11 @@ func olderArrived(thread int64, res uintptr) {
 	}
 	panesOlder(thread)
 	viewerOlderArrived(thread, false)
+	if pn.open && pn.bank != nil && pn.bank != curBank { // the panel listens in its own conversation
+		leave := enterBank(pn.bank)
+		panelOlderArrived(thread, res)
+		leave()
+	} else {
+		panelOlderArrived(thread, res)
+	}
 }
