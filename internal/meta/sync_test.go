@@ -352,3 +352,24 @@ func TestEmojiOnly(t *testing.T) {
 		}
 	}
 }
+
+// A voice recording and a file of a chat that is not encrypted are attachments like a
+// picture: they must not be dropped for being neither a picture nor a film.
+func TestMediaFromAttachmentKinds(t *testing.T) {
+	for att, want := range map[table.AttachmentType]string{
+		table.AttachmentTypeAudio:     "audio",
+		table.AttachmentTypeSoundBite: "audio",
+		table.AttachmentTypeFile:      "file",
+		table.AttachmentTypeVideo:     "video",
+		table.AttachmentTypeImage:     "image",
+		table.AttachmentTypeXMA:       "",
+	} {
+		kind, url, mime, _, dur := mediaFromAttachment(att, "https://cdn.example/a", "", "", "", "audio/mp4", "", "", "", "a.m4a", 6000)
+		if kind != want {
+			t.Errorf("attachment type %d: kind %q, want %q", att, kind, want)
+		}
+		if want != "" && (url == "" || mime != "audio/mp4" || dur != 6000) {
+			t.Errorf("attachment type %d: lost its address, kind of file or length: %q %q %d", att, url, mime, dur)
+		}
+	}
+}

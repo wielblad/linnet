@@ -90,6 +90,10 @@ func mediaKind(attType table.AttachmentType) string {
 		return "image"
 	case table.AttachmentTypeVideo, table.AttachmentTypeEphemeralVideo:
 		return "video"
+	case table.AttachmentTypeAudio, table.AttachmentTypeSoundBite: // a voice recording
+		return "audio"
+	case table.AttachmentTypeFile:
+		return "file"
 	default:
 		return ""
 	}
