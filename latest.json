@@ -1,8 +1,8 @@
 {
-  "version": "0.9.15",
+  "version": "0.9.16",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
   "size": 30112768,
-  "sha256": "a309b01d4751777449e46dbaa7c5cb81036f8b38cd339d59a0bf31916da33a5a",
-  "signature": "IwGL2rUjK9nS12hKEIUObqMHU6kjmkmKRble4ejvX+5sF9vG06S6WqfKd64gQK0aGLA29mI/NEeZxYLi6+8qDw==",
-  "notes": "Informacje nie zasłaniają już otwartego zdjęcia — zdjęcie otwiera się obok nich. Pasek stron ma skok na początek i koniec oraz wpisanie numeru strony."
+  "sha256": "e67aab71b862c1d3bcb1a3965520df1eeecf5fb2cd992eed1a1999bc4edc8e1c",
+  "signature": "fLwEErDO11fUyHvQWoN3pfn7OZ0S6E6BXUJ/Y+8S9wWdnj4vWkZLSVJgmzy4kDV3/Fi9tXCuK8gPkmefzRsZCw==",
+  "notes": "Naprawa: wpisany numer strony w Informacjach zatwierdza się Enterem albo kliknięciem obok; Esc anuluje."
 }
