@@ -1,8 +1,8 @@
 {
-  "version": "0.9.4",
+  "version": "0.9.5",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29840896,
-  "sha256": "b65399eb8435c50d998772bdd4842e31047e00c25f953f218469e22cde09f1a2",
-  "signature": "ZDHrsojUmH3iOYopNIhOm/sV3gErY1YE8ZmOfmkBzDpFE2BgpAbE+yS6oCXfsTD6X0IPklyAgZA3D93QPGSMDw==",
-  "notes": "Przytrzymana emotka rozmowy rośnie teraz wyraźnie w rogu rozmowy, także w czatach szyfrowanych. Prawy przycisk myszy na emotce pozwala wybrać inną emotkę dla rozmowy."
+  "size": 29850624,
+  "sha256": "89e793669dccdf89468aca110c0a5c16a6837fb6aa108495437b9c6c005929d1",
+  "signature": "UIhLUJWMiP4e702hi3CnLCKq8OVOyFpQrnmBAz4hh0IZVOM4rvFezo69RM1zRbd77sEtmUjqXzm0zGpC0THjDA==",
+  "notes": "Naprawa: zwykły tekst nie jest już pokazywany ogromną czcionką, duże są tylko same emotki. Emotka rozmowy jest teraz poprawnie odczytywana z Messengera. Wybór innej emotki ma własne okienko zamiast systemowego menu."
 }
