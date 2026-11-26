@@ -42,6 +42,7 @@ type pane struct {
 	closeR, minR      rect
 	sendR, fieldR     rect
 	attachR, barR     rect
+	micR              rect
 	appR, findR       rect  // the buttons to the ordinary window of the program, and to the search
 	side              int32 // where its row stands: 1 to the right of the heads, -1 to the left
 	last              bool  // the one furthest from the heads: its outer edge changes the size
@@ -55,6 +56,7 @@ const (
 	pbtClose
 	pbtMin
 	pbtAttach
+	pbtMic
 	pbtSend
 	pbtBarClose
 	pbtApp
@@ -598,8 +600,9 @@ func paneLayout(p *pane) {
 	show(p.input, true)
 	moveTo(p.view, rect{paneEdge(), hh + 1, p.w - paneEdge(), p.h - p.compH - 1})
 	p.attachR = rect{dp(10), p.h - dp(10) - dp(36), dp(46), p.h - dp(10)}
+	p.micR = rect{dp(46), p.h - dp(10) - dp(36), dp(82), p.h - dp(10)}
 	p.sendR = rect{p.w - dp(12) - dp(36), p.h - dp(10) - dp(36), p.w - dp(12), p.h - dp(10)}
-	p.fieldR = rect{dp(12) + dp(40), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
+	p.fieldR = rect{dp(12) + dp(40) + dp(36), p.h - dp(10) - fieldH, p.w - dp(12) - dp(36) - dp(8), p.h - dp(10)}
 	it := p.fieldR.top + (fieldH-inH)/2
 	moveTo(p.input, rect{p.fieldR.left + dp(10), it, p.fieldR.right - dp(8), it + inH})
 }
@@ -610,7 +613,7 @@ func paneOpenBody(p *pane) bool {
 }
 
 func paneCanSend(p *pane) bool {
-	return !p.empty || p.bank.compose.mode == cmFile
+	return !p.empty || p.bank.compose.mode == cmFile || p.bank.compose.mode == cmVoice
 }
 
 func panePaint(p *pane, target uintptr) {
@@ -667,6 +670,9 @@ func panePaint(p *pane, target uintptr) {
 		g.round(s.left, s.top, s.right-s.left, s.bottom-s.top, rr, rr, rr, rr, fill)
 		if p.hot == pbtAttach {
 			hotBack(p.attachR)
+		}
+		if p.hot == pbtMic {
+			hotBack(p.micR)
 		}
 		if compose.mode != cmNone {
 			b := p.barR
@@ -730,6 +736,14 @@ func panePaint(p *pane, target uintptr) {
 			ink = pal.fg
 		}
 		c.text(gAttach, p.attachR, ink, dtCenter|dtVCenter|dtSingleLine)
+		ink = pal.fg2
+		switch {
+		case compose.mode == cmVoice: // being recorded: the microphone in the colour of a warning
+			ink = pal.signal
+		case p.hot == pbtMic:
+			ink = pal.fg
+		}
+		c.text(gMic, p.micR, ink, dtCenter|dtVCenter|dtSingleLine)
 		if compose.mode != cmNone {
 			b := p.barR
 			title, excerpt := composeLabels()
@@ -776,6 +790,8 @@ func paneHit(p *pane, x, y int32) int {
 		return pbtNone
 	case in(p.attachR):
 		return pbtAttach
+	case in(p.micR):
+		return pbtMic
 	case in(p.sendR):
 		return pbtSend
 	case p.bank.compose.mode != cmNone && in(p.bank.compose.closeHit):
@@ -933,6 +949,8 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			}
 		case hit == pbtAttach:
 			pickFile()
+		case hit == pbtMic:
+			voiceStart()
 		case hit == pbtSend:
 			paneSend(p)
 		case hit == pbtBarClose:

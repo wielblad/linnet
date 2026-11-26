@@ -240,6 +240,9 @@ func setCompose(mode int, m store.Message) {
 	if compose.mode == cmFile {
 		dropPasted(compose.file)
 	}
+	if compose.mode == cmVoice {
+		recCancel()
+	}
 	compose.mode, compose.msg = mode, m
 	if mode == cmEdit {
 		text := strings.ReplaceAll(strings.ReplaceAll(m.Text, "\r\n", "\n"), "\n", "\r\n")
@@ -263,6 +266,9 @@ func cancelCompose() {
 	if compose.mode == cmFile {
 		dropPasted(compose.file)
 	}
+	if compose.mode == cmVoice {
+		recCancel()
+	}
 	compose.mode = cmNone
 	hostInputChanged()
 	hostLayout()
@@ -270,6 +276,9 @@ func cancelCompose() {
 
 // composeLabels returns the two lines of the bar above the text field.
 func composeLabels() (title, excerpt string) {
+	if compose.mode == cmVoice {
+		return voiceLabels()
+	}
 	if compose.mode == cmFile {
 		name := filepath.Base(compose.file)
 		if size := fileSizeLabel(compose.file); size != "" {

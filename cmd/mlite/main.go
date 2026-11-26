@@ -438,6 +438,7 @@ func createMainWindow(visible bool) {
 	hInput = createWindow(0, "EDIT", "", wsChild|wsTabStop|esMultiline|esAutoVScroll|esWantReturn, hMain, idInput)
 	hSend = createWindow(0, "BUTTON", "Wyślij", wsChild|wsTabStop|bsOwnerDraw, hMain, idSend)
 	hAttach = createWindow(0, "BUTTON", "Dołącz plik", wsChild|wsTabStop|bsOwnerDraw, hMain, idAttach)
+	hMic = createWindow(0, "BUTTON", "Nagraj wiadomość głosową", wsChild|wsTabStop|bsOwnerDraw, hMain, idMic)
 	// the two buttons of the conversation header are real buttons: Tab reaches them
 	hFind = createWindow(0, "BUTTON", "Szukaj w rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idFind)
 	hInfo = createWindow(0, "BUTTON", "Informacje o rozmowie", wsChild|wsTabStop|bsOwnerDraw, hMain, idInfo)
@@ -450,7 +451,7 @@ func createMainWindow(visible bool) {
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
 	initPanel()
-	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hFind, hInfo, hClose, hApp} {
+	for _, h := range []uintptr{hNav[0], hNav[1], hNav[2], hSend, hAttach, hMic, hFind, hInfo, hClose, hApp} {
 		oldBtnProc = subclass(h, btnProc)
 	}
 	applyTheme()
@@ -562,14 +563,14 @@ func layout() {
 	w, h := rc.right, rc.bottom
 	lay.w, lay.h = w, h
 	if dlg.hwnd != 0 && dlg.host == hMain { // a question covers everything; the window as it was is drawn dimmed behind it
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet, pn.hwnd, lg.hwnd} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hMic, hFind, hInfo, hClose, hApp, hSet, pn.hwnd, lg.hwnd} {
 			show(c, false)
 		}
 		moveTo(dlg.hwnd, rect{0, 0, w, h})
 		return
 	}
 	if lg.active { // the sign-in screen covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hMic, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
 		moveTo(lg.hwnd, rect{0, 0, w, h})
@@ -579,7 +580,7 @@ func layout() {
 	}
 	show(lg.hwnd, false)
 	if vw.hwnd != 0 && vw.host == hMain && !vw.full { // a picture shown large covers everything else
-		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hFind, hInfo, hClose, hApp, hSet} {
+		for _, c := range []uintptr{hNav[0], hNav[1], hNav[2], hSearch, hList, hView, hInput, hSend, hAttach, hMic, hFind, hInfo, hClose, hApp, hSet} {
 			show(c, false)
 		}
 		moveTo(viewerInner(), rect{0, 0, w, h})
@@ -699,7 +700,7 @@ func layout() {
 		lay.hx, lay.back = dp(34), rect{0, lay.top, dp(46), lay.top + hdrH}
 	}
 	lay.comp = rect{cx, h - compH, w, h}
-	lay.input = rect{cx + dp(12) + dp(40), h - dp(10) - fieldH, w - dp(12) - dp(36) - dp(8), h - dp(10)}
+	lay.input = rect{cx + dp(12) + dp(40) + dp(36), h - dp(10) - fieldH, w - dp(12) - dp(36) - dp(8), h - dp(10)}
 
 	if narrow {
 		third := w / 3
@@ -726,6 +727,7 @@ func layout() {
 	moveTo(hInput, rect{lay.input.left + dp(10), it, lay.input.right - dp(8), it + inH})
 	moveTo(hSend, rect{w - dp(12) - dp(36), h - dp(10) - dp(36), w - dp(12), h - dp(10)})
 	moveTo(hAttach, rect{cx + dp(10), h - dp(10) - dp(36), cx + dp(46), h - dp(10)})
+	moveTo(hMic, rect{cx + dp(46), h - dp(10) - dp(36), cx + dp(82), h - dp(10)})
 	moveTo(hFind, lay.hbSearch)
 	moveTo(hInfo, lay.hbInfo)
 	moveTo(hClose, lay.hbInfo)
@@ -747,6 +749,7 @@ func layout() {
 	show(hInput, showContent && hasSel && !pn.cover)
 	show(hSend, showContent && hasSel && !pn.cover)
 	show(hAttach, showContent && hasSel && !pn.cover)
+	show(hMic, showContent && hasSel && !pn.cover)
 	show(hFind, showContent && hasSel && !pn.cover && !compact.on)
 	show(hInfo, showContent && hasSel && !pn.cover && !compact.on)
 	show(hClose, showContent && hasSel && compact.on)
@@ -1320,7 +1323,7 @@ func inputChanged() {
 		invalidate(hSend) // the send sign, or the emoji of the conversation
 	}
 	sendOn := uintptr(1) // with nothing written the button sends the emoji of the conversation
-	if empty && compose.mode != cmNone && compose.mode != cmFile {
+	if empty && compose.mode != cmNone && compose.mode != cmFile && compose.mode != cmVoice {
 		sendOn = 0
 	}
 	pEnableWindow.Call(hSend, sendOn)
@@ -1440,7 +1443,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			drawNav(d, int(d.ctlID-idNavChats))
 		case d.ctlID == idSend:
 			drawSend(d)
-		case d.ctlID == idAttach:
+		case d.ctlID == idAttach || d.ctlID == idMic:
 			drawAttach(d)
 		case d.ctlID == idFind || d.ctlID == idInfo || d.ctlID == idClose || d.ctlID == idApp:
 			drawHeaderBtn(d)
@@ -1455,7 +1458,7 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmCtlColorLB:
 		return brMica
 	case 0x0135: // WM_CTLCOLORBTN: what a button is erased with before it is drawn
-		if lp == hSend || lp == hAttach || lp == hFind || lp == hInfo || lp == hClose || lp == hApp {
+		if lp == hSend || lp == hAttach || lp == hMic || lp == hFind || lp == hInfo || lp == hClose || lp == hApp {
 			return brCard
 		}
 		return brMica
@@ -1482,6 +1485,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			openInApp(selectedID, "")
 		case id == idAttach && code == 0:
 			pickFile()
+		case id == idMic && code == 0:
+			voiceStart()
 		case id == idSend && code == 0:
 			if emojiMode() {
 				sendHot(max(hot.let, 1)) // from the keyboard: the smallest
@@ -1515,6 +1520,9 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			hotTick()
 		case timerAudio:
 			audioTick()
+		case timerRec:
+			recTick()
+			voiceWatch()
 		case timerGif:
 			gifTick()
 		case timerHeadDots:
@@ -1921,10 +1929,23 @@ func selectThread(t store.Thread, focusInput bool) {
 func doSend() {
 	text := strings.TrimSpace(strings.ReplaceAll(getText(hostInput()), "\r\n", "\n"))
 	t, ok := threadByID(hostThreadID())
-	if !ok || (text == "" && compose.mode != cmFile) {
+	if !ok || (text == "" && compose.mode != cmFile && compose.mode != cmVoice) {
 		return
 	}
 	switch compose.mode {
+	case cmVoice:
+		if be.current() == nil { // kept, to be sent when the connection is back
+			viewToast("Brak połączenia. Nagranie czeka — spróbuj ponownie.")
+			recPause()
+			return
+		}
+		if !voiceSend(t) {
+			cancelCompose()
+			return
+		}
+		if text != "" && !be.send(t, text, store.Message{}) {
+			return
+		}
 	case cmFile:
 		if !be.sendFile(t, compose.file) {
 			return

@@ -143,7 +143,14 @@ func drawAttach(d *drawItem) {
 		ink = pal.fg
 	}
 	c.font(fnt.icon)
-	c.text(gAttach, rect{0, 0, w, h}, ink, dtCenter|dtVCenter|dtSingleLine)
+	glyph := gAttach
+	if d.ctlID == idMic {
+		glyph = gMic
+		if compose.mode == cmVoice { // being recorded: the microphone in the colour of a warning
+			ink = pal.signal
+		}
+	}
+	c.text(glyph, rect{0, 0, w, h}, ink, dtCenter|dtVCenter|dtSingleLine)
 	if focusCue(d) {
 		fr := rect{3, 3, w - 3, h - 3}
 		drawFocus(buf.hdc, &fr)
