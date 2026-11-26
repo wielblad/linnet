@@ -1,8 +1,8 @@
 {
-  "version": "0.9.10",
+  "version": "0.9.11",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29982720,
-  "sha256": "cf6d02a6654dd723fb5b9111e2971a6a2885ba0bb13bb39f4b8095ad74fcf199",
-  "signature": "thuO6yMPlOB6hJz5aGviUm905WeITjCz2bdStqJZbb4XGz2XVJ4wGE8bK0BiAFUfvogYfAzjrDXa+uATxxRWDg==",
-  "notes": "Nagrania głosowe z Messengera (format Ogg Opus) odtwarzają się w Linnecie zamiast otwierać katalog. GIF z czatu szyfrowanego jest ruchomym obrazkiem, a nie nieotwieralnym wideo."
+  "size": 30014464,
+  "sha256": "9e473e13aa2267e81d2e745956353ee6f089e96dc40287e71bbb4f7117c54171",
+  "signature": "tLklXleFefya+qKPUKZy61YxuLfOzjmOgBUH9oPne4ucj3Su9evgfudBXqgc11JAr+E1GHJjHwEfZoPxsQdPBg==",
+  "notes": "Nagrywanie i wysyłanie wiadomości głosowych: przycisk mikrofonu obok spinacza, pasek nagrywania z czasem, wysyłka strzałką albo odrzucenie krzyżykiem."
 }
