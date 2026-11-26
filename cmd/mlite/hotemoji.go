@@ -300,9 +300,9 @@ func epickPaint(hdc uintptr) {
 	}
 	g.free()
 	c.font(fnt.smallSemi)
-	c.text("Emotka rozmowy", rect{epickPad() + dp(4), dp(12), epick.w - epickPad(), dp(12) + sp(18)}, pal.fg, dtSingleLine|dtVCenter)
+	c.text("Emotka tej rozmowy", rect{epickPad() + dp(4), dp(12), epick.w - epickPad(), dp(12) + sp(18)}, pal.fg, dtSingleLine|dtVCenter)
 	c.font(fnt.small)
-	c.text("Zmienia się u wszystkich", rect{epickPad() + dp(4), dp(12) + sp(18), epick.w - epickPad(), dp(12) + sp(18) + sp(16)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
+	c.text("Zapisywana w Messengerze", rect{epickPad() + dp(4), dp(12) + sp(18), epick.w - epickPad(), dp(12) + sp(18) + sp(16)}, pal.fg2, dtSingleLine|dtVCenter|dtEndEllipsis)
 	c.font(hotFont(dp(26)))
 	for i, e := range emojiChoices {
 		x, y := at(i)
