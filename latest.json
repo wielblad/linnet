@@ -1,8 +1,8 @@
 {
-  "version": "0.9.6",
+  "version": "0.9.7",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29851648,
-  "sha256": "f181a3af2379bc5e7ca064580b45ff5844d913ebc4438fb66a9f281d1372750b",
-  "signature": "sVBmPM2ZDnn2TYni8/XCfsockk+XIPXAvjyGTT1Ag7VZrGxI+gcC3hD4yY2AopQb4uV+c7B3q1dlmRYERd3NBA==",
-  "notes": "Emotka na przycisku zmienia się od razu po przełączeniu rozmowy. Okienko wyboru emotki ma jaśniejszy opis."
+  "size": 29872640,
+  "sha256": "8ff572b3c1f1108b883d8d0660846113aaf4d558fec0ed25f17327ecd328f7f3",
+  "signature": "0puQONuwp3ZVsvNtIpWFuDG1TsoCgeMNf/c16J17tpPEPgMqOwHtEVy1vSDPw8Hy/X01MecIqOep5AGjyajsBw==",
+  "notes": "Nagrania głosowe odtwarzają się w rozmowie: okrągły przycisk odtwarzania i pauzy, fala dźwięku z suwakiem, czas. Odpowiedź na nagranie pokazuje cytat."
 }
