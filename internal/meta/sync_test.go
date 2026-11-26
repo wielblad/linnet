@@ -322,3 +322,33 @@ func TestApplyTableMuteState(t *testing.T) {
 		}
 	}
 }
+
+func TestThreadEmojiOf(t *testing.T) {
+	for _, c := range []struct{ emoji, picture, want string }{
+		{"\U0001F44C", "https://static.example/1f44c.png", "\U0001F44C"}, // the row as the library knows it
+		{"", "\U0001F4AA", "\U0001F4AA"},                                 // the row moved one place on
+		{"", "https://static.example/1f4aa.png", ""},
+		{"", "", ""},
+	} {
+		if got := *threadEmojiOf(c.emoji, c.picture); got != c.want {
+			t.Errorf("threadEmojiOf(%q, %q) = %q, want %q", c.emoji, c.picture, got, c.want)
+		}
+	}
+}
+
+func TestEmojiOnly(t *testing.T) {
+	for text, want := range map[string]bool{
+		"\U0001F44D":                       true,
+		"❤️":                               true,
+		"\U0001F468‍\U0001F469‍\U0001F467": true,
+		"\U0001F44D\U0001F3FD":             true,
+		"Ehh":                              false,
+		"ok \U0001F44D":                    false,
+		"":                                 false,
+		"12":                               false,
+	} {
+		if got := EmojiOnly(text); got != want {
+			t.Errorf("EmojiOnly(%q) = %v, want %v", text, got, want)
+		}
+	}
+}

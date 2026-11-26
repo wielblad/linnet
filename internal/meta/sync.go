@@ -2,6 +2,7 @@ package meta
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.mau.fi/mautrix-meta/pkg/messagix/table"
@@ -193,6 +194,17 @@ func resolveThreadKey(ctx context.Context, s *store.Store, key int64) (int64, er
 	return key, nil
 }
 
+// threadEmojiOf picks the emoji of a conversation out of a thread row. Messenger has moved
+// the fields of some rows one place on from where the library reads them: there the emoji
+// arrives in the place of its picture's address, and the address is lost. Whatever is in
+// that place and is not an address is the emoji.
+func threadEmojiOf(emoji, picture string) *string {
+	if emoji == "" && picture != "" && !strings.HasPrefix(picture, "http") {
+		emoji = picture
+	}
+	return &emoji
+}
+
 func upsertThread(ctx context.Context, s *store.Store, thread table.ThreadInfo) error {
 	if thread == nil {
 		return nil
@@ -223,13 +235,13 @@ func upsertThread(ctx context.Context, s *store.Store, thread table.ThreadInfo) 
 		preview = t.Snippet
 		threadType = int64(t.ThreadType)
 		muteUntil = &t.MuteExpireTimeMs
-		emoji = &t.CustomEmoji
+		emoji = threadEmojiOf(t.CustomEmoji, t.CustomEmojiImageUrl)
 	case *table.LSUpdateOrInsertThread:
 		updatedAt = time.UnixMilli(t.LastActivityTimestampMs)
 		preview = t.Snippet
 		threadType = int64(t.ThreadType)
 		muteUntil = &t.MuteExpireTimeMs
-		emoji = &t.CustomEmoji
+		emoji = threadEmojiOf(t.CustomEmoji, t.CustomEmojiImageUrl)
 	default:
 		threadType = int64(thread.GetThreadType())
 	}
@@ -309,6 +321,9 @@ func upsertWrapped(ctx context.Context, s *store.Store, msg *table.WrappedMessag
 		text = link.URL // a share without words is still shown
 	}
 	size := min(max(msg.HotEmojiSize, 0), 3)
+	if !EmojiOnly(text) {
+		size = 0
+	}
 	if thumb := thumbSize(msg.StickerId); thumb != 0 {
 		// The thumb of the button is sent as a sticker of three sizes. It is kept as what
 		// it means, an emoji of that size, the way encrypted chats carry it.

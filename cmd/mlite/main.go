@@ -196,6 +196,7 @@ func main() {
 	registerClass("MliteDialog", dialogProc)
 	registerClass("MliteList", listWndProc)
 	registerClass("MliteReact", pickerProc)
+	registerClass("MliteEmoji", epickProc)
 	registerClass("MliteLogin", loginProc)
 	registerClass("MliteSettings", settingsProc)
 	registerClass("MliteHead", headProc)
@@ -1246,9 +1247,9 @@ func btnProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			}
 		case wmRButtonUp: // another emoji for the conversation
 			if emojiMode() {
-				var pt point
-				pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
-				emojiMenu(pt.x, pt.y)
+				var r rect
+				pGetWindowRect.Call(hSend, uintptr(unsafe.Pointer(&r)))
+				emojiMenu(r.right, r.top) // above the button
 				return 0
 			}
 		}

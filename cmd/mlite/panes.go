@@ -870,8 +870,8 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmRButtonUp: // on the emoji of the conversation: the choice of another
 		if x, y := lpPoint(lp); paneHit(p, x, y) == pbtSend && emojiMode() {
-			var pt point
-			pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+			pt := point{p.sendR.right, p.sendR.top} // above the button, not wherever the pointer is
+			pClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
 			emojiMenu(pt.x, pt.y)
 		}
 		return 0

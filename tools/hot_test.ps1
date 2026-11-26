@@ -85,6 +85,10 @@ try {
   Start-Sleep -Milliseconds 700; Shot "emotka-trzymana-3"
   [ET]::PostMessage($pane, 0x0202, [IntPtr]::Zero, [IntPtr]0x00C800C8) | Out-Null   # let go inside the conversation: not sent
   Start-Sleep -Milliseconds 400; Shot "emotka-trzymana-4-puszczona"
+  [ET]::PostMessage($pane, 0x0205, [IntPtr]::Zero, $at) | Out-Null   # the other button: the choice of another emoji
+  Start-Sleep -Milliseconds 600; Shot "emotka-wybor"
+  $pick = (All "MliteEmoji")[0]
+  if ($pick) { [ET]::PostMessage($pick, 0x0200, [IntPtr]::Zero, [IntPtr]0x00780040) | Out-Null; Start-Sleep -Milliseconds 300; Shot "emotka-wybor-wskazana" }
   $p.Refresh(); "program dziala: {0}" -f (-not $p.HasExited)
 } finally {
   if ($sheet) { $sheet.Close(); $sheet.Dispose() }

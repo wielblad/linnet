@@ -45,7 +45,7 @@ func encryptedContent(message any, paths map[string]string) (encryptedBody, bool
 			text = att.Caption // the attachment itself is shown, not a placeholder word
 		}
 		size := int64(0)
-		if !hasMedia {
+		if !hasMedia && EmojiOnly(text) {
 			size = min(max(int64(typed.GetMetadata().GetSpecialTextSize()), 0), 3)
 		}
 		return encryptedBody{Text: text, Size: size, Att: att, Link: consumerLink(typed, paths)}, true
