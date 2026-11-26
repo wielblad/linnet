@@ -1,8 +1,8 @@
 {
-  "version": "0.9.14",
+  "version": "0.9.15",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 30106112,
-  "sha256": "793d5f1839e7f96a9a788eb559fd9e0f84912c23705394a8404d8f266c14b3a3",
-  "signature": "Lm5aYs3VMTXNC3rh5jak1XtEjVdl7B2/cTbt6/+ulA6cZoQuQmom9cRZKzSAfAlh9sN8XnLk0ZAZ74nUR3hmDA==",
-  "notes": "Wysłany GIF rusza się w rozmowie. Informacje mają strony ze zdjęciami, plikami i linkami oraz przycisk doczytujący starszą historię rozmowy z Messengera."
+  "size": 30112768,
+  "sha256": "a309b01d4751777449e46dbaa7c5cb81036f8b38cd339d59a0bf31916da33a5a",
+  "signature": "IwGL2rUjK9nS12hKEIUObqMHU6kjmkmKRble4ejvX+5sF9vG06S6WqfKd64gQK0aGLA29mI/NEeZxYLi6+8qDw==",
+  "notes": "Informacje nie zasłaniają już otwartego zdjęcia — zdjęcie otwiera się obok nich. Pasek stron ma skok na początek i koniec oraz wpisanie numeru strony."
 }
