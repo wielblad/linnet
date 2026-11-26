@@ -10,7 +10,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,7 +192,7 @@ func updateCheck(quiet bool) {
 	case err != nil:
 		log.Warn().Err(err).Msg("check for updates")
 		if !quiet {
-			updateSet(upFailed, "Nie udało się sprawdzić: "+err.Error())
+			updateSet(upFailed, "Nie udało się sprawdzić. "+updateWhy(err))
 		}
 	case update.Newer(m.Version, appVersion):
 		upd.mu.Lock()
@@ -221,7 +224,8 @@ func updateFetch() {
 	updateSet(upFetching, "")
 	dst := filepath.Join(dataDir, "update", "Linnet-Setup.exe")
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		updateSet(upFailed, "Nie udało się pobrać: "+err.Error())
+		log.Warn().Err(err).Msg("fetch update: folder")
+		updateSet(upFailed, "Nie udało się pobrać. Nie można zapisać pliku na tym komputerze.")
 		return
 	}
 	last := time.Now()
@@ -239,7 +243,7 @@ func updateFetch() {
 	if err != nil {
 		log.Warn().Err(err).Msg("fetch update")
 		os.Remove(dst)
-		updateSet(upFailed, "Nie udało się pobrać: "+err.Error())
+		updateSet(upFailed, "Nie udało się pobrać. "+updateWhy(err))
 		return
 	}
 	updateSet(upInstall, "")
@@ -387,4 +391,20 @@ func bandClick(x, y int32) {
 	default:
 		goToUpdates()
 	}
+}
+
+// updateWhy says in plain words why an update could not be checked or fetched. It never
+// shows the error itself: that names the address the releases come from, and belongs in
+// the log only.
+func updateWhy(err error) string {
+	var dns *net.DNSError
+	var op *net.OpError
+	var ue *url.Error
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ue) && ue.Timeout()):
+		return "Serwer nie odpowiedział na czas. Spróbuj ponownie za chwilę."
+	case errors.As(err, &dns), errors.As(err, &op), errors.As(err, &ue):
+		return "Sprawdź połączenie z internetem i spróbuj ponownie."
+	}
+	return "Serwer aktualizacji odpowiedział nieprawidłowo. Spróbuj ponownie za kilka minut."
 }
