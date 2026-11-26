@@ -501,8 +501,8 @@ func layoutView() {
 			if w := c.width(it.chip) + dp(28); w > contentW {
 				contentW = w
 			}
-			if isAudio(m) && contentW < dp(220) { // room for the bar and the time while it plays
-				contentW = min(dp(220), inner)
+			if isAudio(m) && contentW < dp(250) { // room for the wave and the time
+				contentW = min(dp(250), inner)
 			}
 			contentH += fnt.lineH + dp(6)
 		}
@@ -872,7 +872,30 @@ func paintView(target uintptr) {
 				c.text(icon, rect{x0, ty, x0 + dp(20), ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
 				c.font(fnt.prev)
 				it.audL, it.audR = 0, 0
-				if audioActive(it.m) { // a bar that fills, and the time
+				var wave []uint8
+				if isAudio(it.m) {
+					if p, ok := mediaFile(it.m); ok { // measured once the file is here
+						waveKick(it.m.ID, p)
+					}
+					wave = waveOf(it.m.ID)
+				}
+				if wave != nil { // the recording as a wave, and how far it has played along it
+					times, played := clock(it.m.MediaDurationMs), int64(-1)
+					if audioActive(it.m) {
+						times = audioTimes()
+						if audio.dur > 0 {
+							played = min(audio.pos, audio.dur) * 1000 / audio.dur
+						}
+					}
+					tw := c.width(times)
+					c.text(times, rect{x1 - tw, ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)
+					it.audL, it.audR = x0+dp(28), x1-tw-dp(10)
+					under := pal.bubble
+					if it.me {
+						under = pal.own
+					}
+					paintWave(c, wave, rect{it.audL, ty, it.audR, ty + fnt.lineH}, chipCol, mix(chipCol, under, 38), played)
+				} else if audioActive(it.m) { // no wave for this file: a bar that fills, and the time
 					times := audioTimes()
 					tw := c.width(times)
 					c.text(times, rect{x1 - tw, ty, x1, ty + fnt.lineH}, chipCol, dtSingleLine|dtVCenter)

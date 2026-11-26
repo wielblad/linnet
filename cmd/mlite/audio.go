@@ -149,6 +149,48 @@ func audioRedraw() {
 	})
 }
 
+// paintWave draws a recording as bars of its loudness in a place of the conversation. What
+// has played is in the full colour, the rest paler, and a slider stands where it is now.
+// played is in thousandths of the length, or less than 0 for a recording that is not loaded.
+func paintWave(c canvas, wave []uint8, r rect, full, pale uint32, played int64) {
+	bar, step := dp(3), dp(5)
+	w, h := r.right-r.left, r.bottom-r.top
+	n := int(w / step)
+	if n < 4 || len(wave) == 0 {
+		return
+	}
+	mid, top := r.top+h/2, h-dp(2)
+	at := int32(-1)
+	if played >= 0 {
+		at = r.left + int32(int64(w)*played/1000)
+	}
+	for i := 0; i < n; i++ {
+		from, to := i*len(wave)/n, (i+1)*len(wave)/n
+		if to <= from {
+			to = from + 1
+		}
+		v := uint8(0)
+		for _, s := range wave[from:min(to, len(wave))] {
+			if s > v {
+				v = s
+			}
+		}
+		bh := top * int32(v) / 255
+		if bh < dp(2) {
+			bh = dp(2)
+		}
+		x := r.left + int32(i)*step
+		col := pale
+		if x+bar <= at {
+			col = full
+		}
+		c.fill(rect{x, mid - bh/2, x + bar, mid - bh/2 + bh}, col)
+	}
+	if at >= 0 { // the slider
+		c.fill(rect{at - 1, r.top, at + 1, r.bottom}, full)
+	}
+}
+
 func clock(ms int64) string {
 	s := ms / 1000
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
