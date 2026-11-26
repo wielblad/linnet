@@ -186,6 +186,7 @@ func pickFace(hwnd uintptr, faces ...string) string {
 
 func loadFonts(hwnd uintptr) {
 	dwForgetFonts()
+	hotForgetFonts()
 	for _, h := range []uintptr{fnt.body, fnt.bodyIt, fnt.bodySemi, fnt.small, fnt.smallSemi, fnt.prev, fnt.name, fnt.nameBold, fnt.title, fnt.head, fnt.icon, fnt.iconSm, fnt.iconLg, fnt.av, fnt.avSm, fnt.emoji} {
 		if h != 0 {
 			pDeleteObject.Call(h)

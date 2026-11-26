@@ -654,6 +654,11 @@ func panePaint(p *pane, target uintptr) {
 		g.round(f.left+inset, f.top+inset, f.right-f.left-2*inset, f.bottom-f.top-2*inset, rr-inset, rr-inset, rr-inset, rr-inset, pal.card)
 		s, fill := p.sendR, pal.accent
 		switch {
+		case emojiMode(): // the emoji of the conversation stands there by itself
+			fill = pal.card
+			if p.hot == pbtSend || (hot.on && hot.host == p.hwnd) {
+				fill = mix(pal.fg, pal.card, 9)
+			}
 		case !paneCanSend(p):
 			fill = mix(pal.fg, pal.card, 8)
 		case p.hot == pbtSend:
@@ -713,8 +718,13 @@ func panePaint(p *pane, target uintptr) {
 		if !paneCanSend(p) {
 			ink = pal.fg2
 		}
+		if emojiMode() {
+			drawHotButton(c, p.sendR, p.hwnd, p.thread)
+		} else {
+			c.font(fnt.icon)
+			c.text(gSend, p.sendR, ink, dtCenter|dtVCenter|dtSingleLine)
+		}
 		c.font(fnt.icon)
-		c.text(gSend, p.sendR, ink, dtCenter|dtVCenter|dtSingleLine)
 		ink = pal.fg2
 		if p.hot == pbtAttach {
 			ink = pal.fg
@@ -844,12 +854,19 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		}
 		return 0
 	case wmLButtonDown: // on the empty part of the header: the head is taken hold of
-		if x, y := lpPoint(lp); y < paneHeaderH() && paneHit(p, x, y) == pbtNone {
+		x, y := lpPoint(lp)
+		if y < paneHeaderH() && paneHit(p, x, y) == pbtNone {
 			hdrDragStart(hwnd, p.id)
+		} else if paneHit(p, x, y) == pbtSend && emojiMode() && be.current() != nil {
+			hotStart(hwnd, p.thread) // held, the emoji of the conversation grows
+			pSetCapture.Call(hwnd)
 		}
 		return 0
 	case wmCaptureChanged:
 		hdrDragLost(hwnd)
+		if hot.on && hot.host == hwnd && lp != hwnd {
+			hotEnd()
+		}
 		return 0
 	case wmSetCursor:
 		if lp&0xFFFF == 1 {
@@ -883,6 +900,14 @@ func paneProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 			return 0 // it was carried, not clicked
 		}
 		x, y := lpPoint(lp)
+		if hot.on && hot.host == hwnd { // the emoji let go: sent as large as it grew
+			size := hotEnd()
+			pReleaseCapture.Call()
+			if paneHit(p, x, y) == pbtSend {
+				sendHot(size)
+			}
+			return 0
+		}
 		switch hit := paneHit(p, x, y); {
 		case hit == pbtClose:
 			paneClose(p)

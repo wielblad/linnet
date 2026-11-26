@@ -38,6 +38,56 @@ func (c *Client) SendText(ctx context.Context, thread store.Thread, text string,
 	return c.sendLightspeedText(ctx, thread.ID, text, replyTo)
 }
 
+// ThumbEmoji is the emoji of a conversation's button until its people choose another.
+const ThumbEmoji = "\U0001F44D"
+
+// The thumb is not sent as text: Messenger has three stickers for it, one for each size.
+var thumbStickers = [3]int64{369239263222822, 369239343222814, 369239383222810}
+
+// thumbSize tells which size of the thumb a sticker is, 0 when it is some other sticker.
+func thumbSize(sticker int64) int64 {
+	for i, id := range thumbStickers {
+		if id == sticker {
+			return int64(i + 1)
+		}
+	}
+	return 0
+}
+
+// HotSizes reports whether an emoji sent with the button can be given a size in this
+// conversation. Encrypted chats carry it as plain text: their messages have no place for
+// a size.
+func HotSizes(thread store.Thread) bool {
+	return !table.ThreadType(thread.ThreadType).IsWhatsApp()
+}
+
+// SendEmoji sends the emoji of the conversation's button in one of three sizes, 1 to 3.
+func (c *Client) SendEmoji(ctx context.Context, thread store.Thread, emoji string, size int64) (SendResult, error) {
+	if err := c.waitReady(ctx); err != nil {
+		return SendResult{}, err
+	}
+	if emoji == "" {
+		emoji = ThumbEmoji
+	}
+	size = min(max(size, 1), 3)
+	if !HotSizes(thread) {
+		return c.sendE2EEText(ctx, thread, emoji, store.Message{})
+	}
+	if emoji == ThumbEmoji {
+		return c.sendLightspeed(ctx, &socket.SendMessageTask{
+			ThreadId:  thread.ID,
+			SendType:  table.STICKER,
+			StickerId: thumbStickers[size-1],
+		})
+	}
+	return c.sendLightspeed(ctx, &socket.SendMessageTask{
+		ThreadId:     thread.ID,
+		SendType:     table.TEXT,
+		Text:         emoji,
+		HotEmojiSize: int32(size),
+	})
+}
+
 func (c *Client) sendLightspeedText(ctx context.Context, threadID int64, text string, replyTo store.Message) (SendResult, error) {
 	task := &socket.SendMessageTask{
 		ThreadId: threadID,

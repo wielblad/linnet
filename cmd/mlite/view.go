@@ -452,7 +452,7 @@ func layoutView() {
 		if me && it.state != stFailed {
 			it.metaW += dp(18)
 		}
-		c.font(bodyFont(m.Unsent))
+		c.font(msgFont(m))
 		it.textW, it.textH = c.measure(it.body, inner)
 		it.links = findLinks(&it)
 		contentW := it.textW
@@ -675,6 +675,7 @@ func paintView(target uintptr) {
 		case itMsg:
 			by := y + it.top
 			fill := pal.bubble
+			bare := hotMsg(it.m) // an emoji of the button stands by itself, without a bubble
 			tl, tr, br, bl := R, R, R, R
 			if it.me {
 				fill = pal.own
@@ -701,6 +702,8 @@ func paintView(target uintptr) {
 				fill = pal.layer
 				g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, mix(pal.fg2, pal.layer, 42))
 				g.round(it.bx+1, by+1, it.bw-2, it.bh-2, inner1(tl), inner1(tr), inner1(br), inner1(bl), fill)
+			} else if bare {
+				fill = pal.layer
 			} else {
 				g.round(it.bx, by+1, it.bw, it.bh, tl, tr, br, bl, shadow)
 				g.round(it.bx, by, it.bw, it.bh, tl, tr, br, bl, fill)
@@ -792,7 +795,7 @@ func paintView(target uintptr) {
 			x0 := it.bx + padL
 			x1 := it.bx + it.bw - padR
 			ink, ink2 := pal.fg, pal.fg2
-			if it.me {
+			if it.me && !hotMsg(it.m) {
 				ink, ink2 = pal.ownFg, pal.ownMeta
 			}
 			cy := by + padT
@@ -845,7 +848,7 @@ func paintView(target uintptr) {
 			if it.m.Unsent {
 				col = mix(pal.fg2, pal.layer, 78)
 			}
-			c.font(bodyFont(it.m.Unsent))
+			c.font(msgFont(it.m))
 			c.text(it.body, rect{x0, cy, x0 + it.textW + 1, cy + it.textH}, col, dtWordBreak|dtEditControl)
 			if it.chip != "" {
 				ty := cy
@@ -875,9 +878,11 @@ func paintView(target uintptr) {
 			mx := x1 - it.metaW
 			c.font(fnt.small)
 			tw := c.width(it.timeS)
-			meta := pal.fg2
-			if it.me {
+			meta, readCol := pal.fg2, pal.ownAccent
+			if it.me && !hotMsg(it.m) {
 				meta = pal.ownMeta
+			} else if it.me { // no bubble under it: the colours of the page
+				readCol = pal.accentText
 			}
 			c.text(it.timeS, rect{mx, my, mx + tw, my + sp(16)}, meta, dtSingleLine|dtVCenter)
 			if it.me && it.state != stFailed {
@@ -886,7 +891,7 @@ func paintView(target uintptr) {
 				case stPending:
 					glyph = gClock
 				case stRead:
-					gc = pal.ownAccent
+					gc = readCol
 				}
 				c.font(fnt.iconSm)
 				c.text(glyph, rect{mx + tw + dp(4), my, x1 + dp(2), my + sp(16)}, gc, dtSingleLine|dtVCenter)

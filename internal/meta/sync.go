@@ -216,17 +216,20 @@ func upsertThread(ctx context.Context, s *store.Store, thread table.ThreadInfo) 
 	var preview string
 	var threadType int64
 	var muteUntil *int64
+	var emoji *string
 	switch t := thread.(type) {
 	case *table.LSDeleteThenInsertThread:
 		updatedAt = time.UnixMilli(t.LastActivityTimestampMs)
 		preview = t.Snippet
 		threadType = int64(t.ThreadType)
 		muteUntil = &t.MuteExpireTimeMs
+		emoji = &t.CustomEmoji
 	case *table.LSUpdateOrInsertThread:
 		updatedAt = time.UnixMilli(t.LastActivityTimestampMs)
 		preview = t.Snippet
 		threadType = int64(t.ThreadType)
 		muteUntil = &t.MuteExpireTimeMs
+		emoji = &t.CustomEmoji
 	default:
 		threadType = int64(thread.GetThreadType())
 	}
@@ -238,6 +241,11 @@ func upsertThread(ctx context.Context, s *store.Store, thread table.ThreadInfo) 
 		UpdatedAt:   updatedAt,
 	}); err != nil {
 		return err
+	}
+	if emoji != nil {
+		if err := s.SetThreadEmoji(ctx, key, *emoji); err != nil {
+			return err
+		}
 	}
 	if muteUntil != nil {
 		if err := s.SetMute(ctx, key, *muteUntil); err != nil {
@@ -300,7 +308,15 @@ func upsertWrapped(ctx context.Context, s *store.Store, msg *table.WrappedMessag
 	if text == "" {
 		text = link.URL // a share without words is still shown
 	}
+	size := min(max(msg.HotEmojiSize, 0), 3)
+	if thumb := thumbSize(msg.StickerId); thumb != 0 {
+		// The thumb of the button is sent as a sticker of three sizes. It is kept as what
+		// it means, an emoji of that size, the way encrypted chats carry it.
+		text, size = ThumbEmoji, thumb
+		kind, url, mime, name, durationMs = "", "", "", "", 0
+	}
 	return s.UpsertMessage(ctx, store.Message{
+		EmojiSize:       size,
 		ID:              msg.MessageId,
 		ThreadID:        key,
 		SenderID:        msg.SenderId,

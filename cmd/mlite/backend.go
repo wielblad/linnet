@@ -514,6 +514,22 @@ func (b *backend) openPerson(p meta.Person) {
 // send queues a text message; it reports false when nothing was sent or stored.
 // replyTo is the message being answered; its zero value means a plain message.
 func (b *backend) send(thread store.Thread, text string, replyTo store.Message) bool {
+	return b.sendSized(thread, text, replyTo, 0)
+}
+
+// sendEmoji sends the emoji of the conversation's button, in the size it was held to.
+func (b *backend) sendEmoji(thread store.Thread, size int64) bool {
+	emoji := thread.Emoji
+	if emoji == "" {
+		emoji = meta.ThumbEmoji
+	}
+	if !meta.HotSizes(thread) { // plain text there, and shown here as it will be seen
+		return b.send(thread, emoji, store.Message{})
+	}
+	return b.sendSized(thread, emoji, store.Message{}, size)
+}
+
+func (b *backend) sendSized(thread store.Thread, text string, replyTo store.Message, size int64) bool {
 	client := b.current()
 	if client == nil {
 		b.notice("Brak połączenia. Wiadomość nie została wysłana.")
@@ -526,6 +542,7 @@ func (b *backend) send(thread store.Thread, text string, replyTo store.Message) 
 		Text:      text,
 		Timestamp: time.Now(),
 		Pending:   true,
+		EmojiSize: size,
 
 		ReplyToID:     replyTo.ID,
 		ReplyText:     replyTo.Text,
@@ -537,7 +554,13 @@ func (b *backend) send(thread store.Thread, text string, replyTo store.Message) 
 	}
 	b.requestRefresh()
 	go func() {
-		result, err := client.SendText(b.ctx, thread, text, replyTo)
+		var result meta.SendResult
+		var err error
+		if size > 0 {
+			result, err = client.SendEmoji(b.ctx, thread, text, size)
+		} else {
+			result, err = client.SendText(b.ctx, thread, text, replyTo)
+		}
 		if err != nil {
 			pending.Pending = false
 			pending.Error = err.Error()

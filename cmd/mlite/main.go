@@ -446,7 +446,6 @@ func createMainWindow(visible bool) {
 	initLogin()
 	sv.hwnd = hSet
 	sendMsg(hInput, emSetLimitText, 20000, 0)
-	pEnableWindow.Call(hSend, 0)
 	oldInputProc = subclass(hInput, inputProc)
 	initList()
 	initPanel()
@@ -1015,6 +1014,20 @@ func drawSend(d *drawItem) {
 	buf := newBuffer(d.hDC, w, h)
 	c := canvas{buf.hdc}
 	c.fill(rect{0, 0, w, h}, pal.card)
+	if t, ok := threadByID(selectedID); ok && d.itemState&odsDisabled == 0 && emojiMode() {
+		if hotBtn == d.hwndItem || d.itemState&odsSelected != 0 {
+			g := newGfx(buf.hdc)
+			g.round(0, 0, w, h, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.card, 9))
+			g.free()
+		}
+		drawHotButton(c, rect{0, 0, w, h}, d.hwndItem, t)
+		if focusCue(d) {
+			fr := rect{3, 3, w - 3, h - 3}
+			drawFocus(buf.hdc, &fr)
+		}
+		buf.flush(0, 0)
+		return
+	}
 	fill, ink := pal.accent, pal.onAccent
 	switch {
 	case d.itemState&odsDisabled != 0:
@@ -1216,6 +1229,23 @@ func btnProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	case wmLButtonDblClk:
 		msg = wmLButtonDown
 	}
+	if hwnd == hSend {
+		switch msg {
+		case wmLButtonDown: // held, the emoji of the conversation grows
+			hot.let = 0
+			if t, ok := threadByID(selectedID); ok && emojiMode() {
+				hotStart(hSend, t)
+			}
+		case wmLButtonUp: // the button itself decides whether this was a click on it
+			if hot.on && hot.host == hSend {
+				hot.let = hotEnd()
+			}
+		case wmCaptureChanged: // taken away without being let go: nothing is sent
+			if hot.on && hot.host == hSend {
+				hotEnd()
+			}
+		}
+	}
 	r, _, _ := pCallWindowProcW.Call(oldBtnProc, hwnd, uintptr(msg), wp, lp)
 	return r
 }
@@ -1278,16 +1308,12 @@ func inputChanged() {
 	empty := n == 0
 	if empty != inputEmpty {
 		inputEmpty = empty
-		on := uintptr(1)
-		if empty {
-			on = 0
-		}
-		pEnableWindow.Call(hSend, on)
 		pInvalidateRect.Call(hInput, 0, 1)
+		invalidate(hSend) // the send sign, or the emoji of the conversation
 	}
-	sendOn := uintptr(0)
-	if !empty || compose.mode == cmFile {
-		sendOn = 1
+	sendOn := uintptr(1) // with nothing written the button sends the emoji of the conversation
+	if empty && compose.mode != cmNone && compose.mode != cmFile {
+		sendOn = 0
 	}
 	pEnableWindow.Call(hSend, sendOn)
 	lines := int(sendMsg(hInput, emGetLineCount, 0, 0))
@@ -1449,7 +1475,12 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		case id == idAttach && code == 0:
 			pickFile()
 		case id == idSend && code == 0:
-			doSend()
+			if emojiMode() {
+				sendHot(max(hot.let, 1)) // from the keyboard: the smallest
+			} else {
+				doSend()
+			}
+			hot.let = 0
 			pSetFocus.Call(hInput)
 		case id == idSearch && code == enChange:
 			if q := getText(hSearch); q != query {
@@ -1472,6 +1503,8 @@ func wndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 		return 0
 	case wmTimer:
 		switch wp {
+		case timerHot:
+			hotTick()
 		case timerHeadDots:
 			headPhase++
 			typingSync()

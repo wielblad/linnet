@@ -22,6 +22,9 @@ type Thread struct {
 	UpdatedAt   time.Time
 	LastRead    time.Time
 	MuteUntilMs int64
+	// Emoji is the one the people of the conversation chose for its button beside the
+	// field; empty means the thumb everyone starts with.
+	Emoji string
 }
 
 func (t Thread) Unread() bool {
@@ -63,7 +66,10 @@ type Message struct {
 	ReplySenderName string
 	Edited          bool
 	Unsent          bool
-	Reactions       []Reaction
+	// EmojiSize is 1, 2 or 3 for an emoji sent with the button of the conversation: the
+	// longer it was held, the larger it is shown. 0 is an ordinary message.
+	EmojiSize int64
+	Reactions []Reaction
 }
 
 type Reaction struct {
@@ -186,6 +192,7 @@ CREATE INDEX IF NOT EXISTS messages_thread_ts ON messages(thread_id, timestamp_m
 		`ALTER TABLE threads ADD COLUMN thread_type INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE threads ADD COLUMN last_read_ms INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE threads ADD COLUMN mute_until_ms INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE threads ADD COLUMN emoji TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.q.ExecContext(ctx, stmt); err != nil {
 			if !isDuplicateColumn(err) {
@@ -209,6 +216,7 @@ CREATE INDEX IF NOT EXISTS messages_thread_ts ON messages(thread_id, timestamp_m
 		`ALTER TABLE messages ADD COLUMN link_title TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE messages ADD COLUMN link_image TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE messages ADD COLUMN link_ref TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN emoji_size INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.q.ExecContext(ctx, stmt); err != nil {
 			if !isDuplicateColumn(err) {
@@ -339,9 +347,9 @@ INSERT INTO messages (
 	id, thread_id, sender_id, text, timestamp_ms, pending, error,
 	media_kind, media_url, media_mime, media_name, media_duration_ms,
 	reply_to_id, reply_text, reply_sender_id, edited, unsent, media_ref,
-	link_url, link_title, link_image, link_ref
+	link_url, link_title, link_image, link_ref, emoji_size
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
 	thread_id=excluded.thread_id,
 	sender_id=excluded.sender_id,
@@ -363,11 +371,12 @@ ON CONFLICT(id) DO UPDATE SET
 	link_url=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_url = '' THEN messages.link_url ELSE excluded.link_url END,
 	link_title=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_title = '' THEN messages.link_title ELSE excluded.link_title END,
 	link_image=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_image = '' THEN messages.link_image ELSE excluded.link_image END,
-	link_ref=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_ref = '' THEN messages.link_ref ELSE excluded.link_ref END
+	link_ref=CASE WHEN messages.unsent = 1 OR excluded.unsent = 1 THEN '' WHEN excluded.link_ref = '' THEN messages.link_ref ELSE excluded.link_ref END,
+	emoji_size=MAX(messages.emoji_size, excluded.emoji_size)
 `, m.ID, m.ThreadID, m.SenderID, m.Text, m.Timestamp.UnixMilli(), boolInt(m.Pending), m.Error,
 		m.MediaKind, m.MediaURL, m.MediaMime, m.MediaName, m.MediaDurationMs,
 		m.ReplyToID, m.ReplyText, m.ReplySenderID, boolInt(m.Edited), boolInt(m.Unsent), m.MediaRef,
-		m.LinkURL, m.LinkTitle, m.LinkImage, m.LinkRef)
+		m.LinkURL, m.LinkTitle, m.LinkImage, m.LinkRef, m.EmojiSize)
 	if err != nil {
 		return fmt.Errorf("upsert message: %w", err)
 	}
@@ -378,7 +387,7 @@ func (s *Store) ListThreads(ctx context.Context) ([]Thread, error) {
 	rows, err := s.q.QueryContext(ctx, `
 SELECT t.id,
 	CASE WHEN t.title != '' THEN t.title ELSE COALESCE(c.name, '') END,
-	t.last_preview, t.thread_type, t.updated_at_ms, t.last_read_ms, t.mute_until_ms
+	t.last_preview, t.thread_type, t.updated_at_ms, t.last_read_ms, t.mute_until_ms, t.emoji
 FROM threads t
 LEFT JOIN contacts c ON c.id = t.id
 ORDER BY t.updated_at_ms DESC, t.id DESC
@@ -391,7 +400,7 @@ ORDER BY t.updated_at_ms DESC, t.id DESC
 	for rows.Next() {
 		var t Thread
 		var ms, readMS int64
-		if err := rows.Scan(&t.ID, &t.Title, &t.LastPreview, &t.ThreadType, &ms, &readMS, &t.MuteUntilMs); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.LastPreview, &t.ThreadType, &ms, &readMS, &t.MuteUntilMs, &t.Emoji); err != nil {
 			return nil, fmt.Errorf("scan thread: %w", err)
 		}
 		t.UpdatedAt = time.UnixMilli(ms)
@@ -407,11 +416,11 @@ func (s *Store) GetThread(ctx context.Context, id int64) (Thread, error) {
 	err := s.q.QueryRowContext(ctx, `
 SELECT t.id,
 	CASE WHEN t.title != '' THEN t.title ELSE COALESCE(c.name, '') END,
-	t.last_preview, t.thread_type, t.updated_at_ms, t.last_read_ms, t.mute_until_ms
+	t.last_preview, t.thread_type, t.updated_at_ms, t.last_read_ms, t.mute_until_ms, t.emoji
 FROM threads t
 LEFT JOIN contacts c ON c.id = t.id
 WHERE t.id = ?
-`, id).Scan(&t.ID, &t.Title, &t.LastPreview, &t.ThreadType, &ms, &readMS, &t.MuteUntilMs)
+`, id).Scan(&t.ID, &t.Title, &t.LastPreview, &t.ThreadType, &ms, &readMS, &t.MuteUntilMs, &t.Emoji)
 	if err != nil {
 		return Thread{}, fmt.Errorf("get thread: %w", err)
 	}
@@ -460,7 +469,7 @@ SELECT m.id, m.thread_id, m.sender_id, COALESCE(c.name, ''), m.text, m.timestamp
 	CASE WHEN m.reply_text != '' THEN m.reply_text ELSE COALESCE(r.text, '') END,
 	CASE WHEN m.reply_sender_id != 0 THEN m.reply_sender_id ELSE COALESCE(r.sender_id, 0) END,
 	COALESCE(rc.name, ''), m.edited, m.unsent, m.media_ref,
-	m.link_url, m.link_title, m.link_image, m.link_ref
+	m.link_url, m.link_title, m.link_image, m.link_ref, m.emoji_size
 FROM messages m
 LEFT JOIN contacts c ON c.id = m.sender_id
 LEFT JOIN messages r ON m.reply_to_id != '' AND r.id = m.reply_to_id
@@ -481,7 +490,7 @@ ORDER BY m.timestamp_ms ASC, m.id ASC
 			&m.ID, &m.ThreadID, &m.SenderID, &m.SenderName, &m.Text, &ms, &pending, &m.Error,
 			&m.MediaKind, &m.MediaURL, &m.MediaMime, &m.MediaName, &m.MediaDurationMs,
 			&m.ReplyToID, &m.ReplyText, &m.ReplySenderID, &m.ReplySenderName, &m.Edited, &m.Unsent, &m.MediaRef,
-			&m.LinkURL, &m.LinkTitle, &m.LinkImage, &m.LinkRef,
+			&m.LinkURL, &m.LinkTitle, &m.LinkImage, &m.LinkRef, &m.EmojiSize,
 		); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
@@ -606,6 +615,15 @@ func (s *Store) ThreadCount(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count threads: %w", err)
 	}
 	return n, nil
+}
+
+// SetThreadEmoji records the emoji of the conversation's button as Messenger tells it.
+func (s *Store) SetThreadEmoji(ctx context.Context, threadID int64, emoji string) error {
+	_, err := s.q.ExecContext(ctx, `UPDATE threads SET emoji = ? WHERE id = ? AND emoji != ?`, emoji, threadID, emoji)
+	if err != nil {
+		return fmt.Errorf("set thread emoji: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) SetMute(ctx context.Context, threadID, untilMs int64) error {
