@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -104,8 +105,12 @@ func sign(args []string) {
 	if err := os.MkdirAll(filepath.Dir(exeOut), 0o755); err != nil {
 		fail(err.Error())
 	}
-	if err := os.WriteFile(exeOut, data, 0o755); err != nil {
-		fail(err.Error())
+	// The installer already in its place is left alone: writing the same bytes again gains
+	// nothing, and fails while another program (a virus scanner) has the file open.
+	if old, err := os.ReadFile(exeOut); err != nil || !bytes.Equal(old, data) {
+		if err := os.WriteFile(exeOut, data, 0o755); err != nil {
+			fail(err.Error())
+		}
 	}
 	raw, _ := json.MarshalIndent(m, "", "  ")
 	if err := os.WriteFile(filepath.Join(*out, "latest.json"), append(raw, '\n'), 0o644); err != nil {
