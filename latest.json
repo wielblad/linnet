@@ -1,8 +1,8 @@
 {
-  "version": "0.9.2",
+  "version": "0.9.3",
   "url": "https://raw.githubusercontent.com/wielblad/linnet/main/release/Linnet-Setup.exe",
-  "size": 29809664,
-  "sha256": "6c40f8d45130b5540520c0fb453a055c7e1ad0a71df5eef3d1159ae38743a7d0",
-  "signature": "Ohnt1EqoM6vVzTzkJA6KGb7qxsN2kWsqlXegfDkYuZQjKha679mFFPTe76PJQtKB7sfRzL9uGE0ntNth8vfeCA==",
-  "notes": "Okno rozmowy ma wyraźną krawędź, więc nie ginie już na białym tle. W Kolumnach okno rysuje ją samo."
+  "size": 29832704,
+  "sha256": "7cffe340f71a5ac87c7d5f2785294eecbdd2a453a027dead47dee4a84dbe234b",
+  "signature": "ci942R2Y2/ShteOV+B1svoHazZdvs2XxnwbCT1Lj2oKB4th+YVDTJVYyigQYcEdCYF2wKG4yR7fLmMPwb/25CA==",
+  "notes": "Przycisk emotki rozmowy: gdy pole jest puste, wysyła kciuk albo emotkę ustawioną w Messengerze. Przytrzymany rośnie przez trzy rozmiary. W czatach szyfrowanych emotka idzie jako zwykła wiadomość."
 }
