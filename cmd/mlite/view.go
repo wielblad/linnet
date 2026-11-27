@@ -95,15 +95,17 @@ type viewState struct {
 	hasNew    bool
 	focus     bool
 	sc        scroller
-	hover     int    // index of the message under the pointer, -1 when none
-	flash     string // message marked for a moment after a jump from the search
-	toast     string // short confirmation shown over the bottom of the view
-	limit     int    // how many of the newest messages are loaded
-	limitFor  int64  // the thread that limit belongs to
-	localMore bool   // the store holds older messages than the loaded ones
-	spin      int    // step of the fetching mark
-	hotJump   bool   // the pointer is on the button that returns to the newest message
-	hotAct    int    // which of its actions is under the pointer
+	hover     int      // index of the message under the pointer, -1 when none
+	flash     string   // message marked for a moment after a jump from the search
+	toast     string   // short confirmation shown over the bottom of the view
+	limit     int      // how many of the newest messages are loaded
+	limitFor  int64    // the thread that limit belongs to
+	localMore bool     // the store holds older messages than the loaded ones
+	spin      int      // step of the fetching mark
+	hotJump   bool     // the pointer is on the button that returns to the newest message
+	hotAct    int      // which of its actions is under the pointer
+	hotRx     int      // index of the message whose reactions are under the pointer, -1 when none
+	rxTip     []string // who gave them: a line for each emoji
 }
 
 // viewBank holds the state of one view together with its selection. The code of the view
@@ -251,7 +253,11 @@ func loadView(force bool) {
 		fmt.Fprintf(hash, "%d:%d:%d,", r.ContactID, r.Read.UnixMilli(), r.Delivered.UnixMilli())
 	}
 	for _, m := range msgs {
-		fmt.Fprintf(hash, "%s|%s|%v|%s|%v|%v|%d;", m.ID, m.Text, m.Pending, m.Error, m.Unsent, m.Edited, len(m.Reactions))
+		fmt.Fprintf(hash, "%s|%s|%v|%s|%v|%v|", m.ID, m.Text, m.Pending, m.Error, m.Unsent, m.Edited)
+		for _, r := range m.Reactions { // a reaction changed for another counts as well
+			fmt.Fprintf(hash, "%d%s,", r.ActorID, r.Emoji)
+		}
+		hash.Write([]byte{';'})
 	}
 	key := hash.Sum64()
 	if key == mv.key && !force {
@@ -295,6 +301,7 @@ func loadView(force bool) {
 func layoutView() {
 	filmCollect() // pictures of films made since the last time
 	mv.hover, mv.hotAct = -1, -1
+	mv.hotRx, mv.rxTip = -1, nil
 	hdc, _, _ := pGetDC.Call(mv.hwnd)
 	defer pReleaseDC.Call(mv.hwnd, hdc)
 	c := canvas{hdc}
@@ -973,8 +980,10 @@ func paintView(target uintptr) {
 		bar.pill(toast.left, toast.top+1, toast.right-toast.left, toast.bottom-toast.top, shadow)
 		bar.pill(toast.left, toast.top, toast.right-toast.left, toast.bottom-toast.top, mix(pal.fg, pal.layer, 92))
 	}
+	paintRxTip(bar, c, true)
 	bar.free()
 	paintActions(0, c, false)
+	paintRxTip(0, c, false)
 	if showJump {
 		c.font(fnt.icon)
 		c.text(gDown, jump, pal.fg, dtCenter|dtVCenter|dtSingleLine)

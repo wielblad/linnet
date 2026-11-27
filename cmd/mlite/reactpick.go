@@ -6,6 +6,7 @@ package main
 // small bar of reactions that opens from the first of them.
 
 import (
+	"strings"
 	"unsafe"
 
 	"lazyfmess/internal/store"
@@ -84,9 +85,98 @@ func viewHover(x, y int32) {
 			break
 		}
 	}
+	rx := -1
+	if x >= 0 && pick.hwnd == 0 {
+		for i := range mv.items {
+			if r, ok := rxRect(&mv.items[i]); ok && x >= r.left && x < r.right && y >= r.top && y < r.bottom {
+				rx = i
+				break
+			}
+		}
+	}
+	if rx != mv.hotRx {
+		mv.hotRx, mv.rxTip = rx, nil
+		if rx >= 0 {
+			mv.rxTip = rxLines(mv.items[rx].m.Reactions, reactorName)
+		}
+		invalidate(mv.hwnd)
+	}
 	if item != mv.hover || act != mv.hotAct {
 		mv.hover, mv.hotAct = item, act
 		invalidate(mv.hwnd)
+	}
+}
+
+// rxRect is where the reactions of a message are drawn, in view coordinates.
+func rxRect(it *vitem) (rect, bool) {
+	if it.rx == "" {
+		return rect{}, false
+	}
+	x, y := it.bx+it.bw-it.rxW-dp(6), it.y+it.top+it.bh-dp(6)-mv.scroll
+	return rect{x, y, x + it.rxW, y + dp(22)}, true
+}
+
+// reactorName is the name a person who reacted is shown under.
+func reactorName(id int64) string {
+	if id == mv.self && mv.self != 0 {
+		return "Ty"
+	}
+	if n := mv.nicks[id]; n != "" {
+		return n
+	}
+	if n, _ := be.db.ContactName(be.ctx, id); n != "" {
+		return n
+	}
+	return "Ktoś"
+}
+
+// rxLines says who gave each reaction: a line for each emoji, in the order they came.
+func rxLines(rs []store.Reaction, name func(int64) string) []string {
+	var order []string
+	who := map[string][]string{}
+	for _, r := range rs {
+		if _, ok := who[r.Emoji]; !ok {
+			order = append(order, r.Emoji)
+		}
+		who[r.Emoji] = append(who[r.Emoji], name(r.ActorID))
+	}
+	lines := make([]string, 0, len(order))
+	for _, e := range order {
+		lines = append(lines, e+"  "+strings.Join(who[e], ", "))
+	}
+	return lines
+}
+
+// paintRxTip draws who gave the reactions under the pointer, over the messages: above the
+// reactions, or under them where there is no room above.
+func paintRxTip(g gfx, c canvas, shapes bool) {
+	if mv.hotRx < 0 || mv.hotRx >= len(mv.items) || len(mv.rxTip) == 0 {
+		return
+	}
+	at, ok := rxRect(&mv.items[mv.hotRx])
+	if !ok {
+		return
+	}
+	c.font(fnt.small)
+	lineH, w := sp(20), int32(0)
+	for _, l := range mv.rxTip {
+		w = max(w, c.width(l))
+	}
+	w = min(w+dp(24), mv.w-dp(16))
+	h := lineH*int32(len(mv.rxTip)) + dp(12)
+	x := min(max((at.left+at.right-w)/2, dp(8)), mv.w-dp(8)-w)
+	y := at.top - h - dp(6)
+	if y < dp(4) {
+		y = at.bottom + dp(6)
+	}
+	if shapes {
+		g.round(x, y+1, w, h, dp(8), dp(8), dp(8), dp(8), mix(0x000000, pal.layer, 12))
+		g.round(x, y, w, h, dp(8), dp(8), dp(8), dp(8), mix(pal.fg, pal.layer, 92))
+		return
+	}
+	for i, l := range mv.rxTip {
+		ty := y + dp(6) + int32(i)*lineH
+		c.text(l, rect{x + dp(12), ty, x + w - dp(12), ty + lineH}, pal.layer, dtSingleLine|dtVCenter|dtEndEllipsis)
 	}
 }
 
